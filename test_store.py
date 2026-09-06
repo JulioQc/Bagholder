@@ -836,6 +836,60 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(secs[0]["name"], "Charbone Corporation")
         self.assertEqual(secs[0]["primaryMic"], "XTSV")
 
+    def test_fetch_securities_batches_ids(self):
+        calls = []
+
+        def fake_graphql(sess, operation, variables, query=None):
+            calls.append((operation, list(variables.get("ids") or [])))
+            rows = []
+            for sid in variables["ids"]:
+                if sid == "sec-s-missing":
+                    rows.append(None)
+                elif sid.startswith("sec-o-"):
+                    rows.append({"id": sid, "currency": "USD", "stock": {"symbol": "LUNR", "name": ""},
+                                 "optionDetails": {"underlyingSecurity": {"id": "sec-s-under", "currency": "USD"}}})
+                else:
+                    rows.append({"id": sid, "currency": "CAD", "stock": {"symbol": "NSAV", "name": "Ninepoint", "primaryExchange": "TSX", "primaryMic": "XTSE"}, "optionDetails": None})
+            return {"securities": rows}
+
+        ids = ["sec-s-%d" % i for i in range(60)] + ["sec-o-1", "sec-s-missing", "sec-s-1"]
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql):
+            recs = bagholder.fetch_securities({"access_token": "t"}, ids)
+        self.assertEqual([c[0] for c in calls], ["FetchSecurities", "FetchSecurities"])
+        self.assertEqual(len(calls[0][1]), 50)
+        self.assertEqual(len(calls[1][1]), 12)
+        self.assertEqual(len(recs), 61)
+        opt = next(r for r in recs if r["id"] == "sec-o-1")
+        self.assertEqual(opt["underlyingId"], "sec-s-under")
+        self.assertEqual(recs[0]["primaryExchange"], "TSX")
+
+    def test_fill_listings_uses_batches_and_follows_underlyings(self):
+        store.merge_local_rows([
+            {"transactionDate": "2026-01-02", "symbol": "LUNR 15JAN27 12.00 CALL", "quantity": 1, "unitPrice": 1,
+             "netCashAmount": -100, "category": "trade", "activityType": "OPTIONS_BUY", "activitySubType": "BUYTOOPEN",
+             "currency": "USD", "securityId": "sec-o-1", "source": "csv"},
+        ])
+        store.set_meta("security_id_backfill_done", "1")
+        calls = []
+
+        def fake_graphql(sess, operation, variables, query=None):
+            calls.append(list(variables.get("ids") or []))
+            rows = []
+            for sid in variables["ids"]:
+                if sid == "sec-o-1":
+                    rows.append({"id": sid, "currency": "USD", "stock": {"symbol": "LUNR"},
+                                 "optionDetails": {"underlyingSecurity": {"id": "sec-s-under", "currency": "USD"}}})
+                else:
+                    rows.append({"id": sid, "currency": "USD", "stock": {"symbol": "LUNR", "name": "Intuitive Machines", "primaryExchange": "NASDAQ"}})
+            return {"securities": rows}
+
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql):
+            self.assertTrue(bagholder.fill_listings({"access_token": "t"}))
+        self.assertEqual(calls, [["sec-o-1"], ["sec-s-under"]])
+        by_id = {s["id"]: s for s in store.list_securities()}
+        self.assertEqual(by_id["sec-o-1"]["underlyingId"], "sec-s-under")
+        self.assertEqual(by_id["sec-s-under"]["name"], "Intuitive Machines")
+
     def test_fetch_security_reads_stock_fields(self):
         def fake_graphql(sess, operation, variables, query=None):
             self.assertEqual(operation, "FetchSecurity")

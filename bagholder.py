@@ -503,7 +503,22 @@ query FetchSecurity($securityId: ID!) {
 """.strip()
 
 
+Q_FETCH_SECURITIES = """
+query FetchSecurities($ids: [ID!]!) {
+  securities(ids: $ids) {
+    id
+    currency
+    stock { name primaryExchange primaryMic symbol }
+    optionDetails { underlyingSecurity { id currency } }
+    __typename
+  }
+}
+""".strip()
+
+SECURITY_BATCH = 50
+
 QUERIES = {
+    "FetchSecurities": Q_FETCH_SECURITIES,
     "IdentityHistoricalFinancialsQuery": Q_IDENTITY_HISTORICAL_FINANCIALS,
     "FetchAccountHistoricalFinancials": Q_FETCH_ACCOUNT_HISTORICAL_FINANCIALS,
     "FetchAllAccountFinancials": Q_FETCH_ALL_ACCOUNT_FINANCIALS,
@@ -1931,7 +1946,41 @@ def fetch_security(sess, security_id):
         data = graphql(sess, "FetchSecurity", {"securityId": sid})
     except Exception:
         return None
-    sec = (data or {}).get("security") or {}
+    return _security_record((data or {}).get("security"), sid)
+
+
+def fetch_securities(sess, security_ids):
+    """One request per SECURITY_BATCH ids. Unknown ids come back null and are
+    dropped; a failed batch falls back to one request per id."""
+    ids = []
+    seen = set()
+    for raw in security_ids or []:
+        sid = _s(raw).strip()
+        if sid and sid not in seen:
+            seen.add(sid)
+            ids.append(sid)
+    out = []
+    for i in range(0, len(ids), SECURITY_BATCH):
+        chunk = ids[i : i + SECURITY_BATCH]
+        try:
+            data = graphql(sess, "FetchSecurities", {"ids": chunk})
+            rows = (data or {}).get("securities")
+            if not isinstance(rows, list):
+                raise RuntimeError("no securities list")
+        except Exception:
+            for sid in chunk:
+                rec = fetch_security(sess, sid)
+                if rec:
+                    out.append(rec)
+            continue
+        for sec in rows:
+            rec = _security_record(sec, "")
+            if rec:
+                out.append(rec)
+    return out
+
+
+def _security_record(sec, sid):
     if not isinstance(sec, dict) or not sec:
         return None
     stock = sec.get("stock") or {}
@@ -2032,30 +2081,23 @@ def fill_listings(sess, from_sync=False):
             if walk_ok:
                 store.set_meta("security_id_backfill_done", "1")
         wanted = _collect_security_ids()
-        missing = store.missing_security_ids(wanted)
+        pending = store.missing_security_ids(wanted)
         seen = set()
-        pending = list(missing)
         to_upsert = []
-        total = len(pending)
-        if pending:
-            _set_sync_step(
-                "Looking up company names, %s left" % total if total else "Looking up company names…"
-            )
+        # Options point at an underlying security; fetch those in a second round.
         while pending:
-            left = len(pending)
-            if total:
-                _set_sync_step("Looking up company names, %s left" % left)
-            sid = pending.pop(0)
-            if not sid or sid in seen:
-                continue
-            seen.add(sid)
-            rec = fetch_security(sess, sid)
-            if not rec:
-                continue
-            to_upsert.append(rec)
-            uid = _s(rec.get("underlyingId")).strip()
-            if uid and uid not in seen:
-                pending.extend(store.missing_security_ids([uid]))
+            _set_sync_step("Looking up company names, %s left" % len(pending))
+            batch = [sid for sid in pending if sid not in seen]
+            seen.update(batch)
+            pending = []
+            if not batch:
+                break
+            recs = fetch_securities(sess, batch)
+            to_upsert.extend(recs)
+            under = [_s(r.get("underlyingId")).strip() for r in recs]
+            under = [u for u in under if u and u not in seen]
+            if under:
+                pending = store.missing_security_ids(under)
         if to_upsert:
             store.upsert_securities(to_upsert)
         return True
