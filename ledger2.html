@@ -910,7 +910,7 @@ function go(page) {
   state.page = page;
   state.picker = null;
   state.menuOpen = false;
-  if (page !== "trades") state.sel = null;
+  state.sel = null;
   location.hash = page;
   render();
 }
