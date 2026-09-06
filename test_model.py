@@ -1,0 +1,808 @@
+"""Tests for the derived model (model.py), market data (market.py) and the
+store tables and routes that back the v2 UI."""
+
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+import threading
+import unittest
+from http.server import ThreadingHTTPServer
+from unittest import mock
+from urllib.request import Request, urlopen
+
+import bagholder
+import market
+import model
+import store
+
+
+def act(**o):
+    base = {
+        "id": o.get("id") or "act-%s" % id(o),
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "symbol": "LUNR 15JAN27 12.00 CALL",
+        "name": "LUNR",
+        "currency": "USD",
+        "commission": 0,
+        "category": "other",
+        "activityType": "",
+        "activitySubType": "",
+        "rawType": "",
+        "quantity": 0,
+        "unitPrice": 0,
+        "netCashAmount": 0,
+        "transactionDate": "2026-01-01",
+        "occurredAt": "",
+        "securityId": "",
+    }
+    base.update(o)
+    if not base["occurredAt"]:
+        base["occurredAt"] = base["transactionDate"] + "T15:00:00+00:00"
+    return base
+
+
+def buy(id, symbol, qty, px, day, **extra):
+    o = dict(
+        id=id,
+        category="trade",
+        activityType="Trade",
+        activitySubType="BUY",
+        rawType="DIY_BUY",
+        quantity=qty,
+        unitPrice=px,
+        netCashAmount=-qty * px,
+        transactionDate=day,
+        symbol=symbol,
+        currency="CAD",
+    )
+    o.update(extra)
+    return act(**o)
+
+
+def sell(id, symbol, qty, px, day, **extra):
+    o = dict(
+        id=id,
+        category="trade",
+        activityType="Trade",
+        activitySubType="SELL",
+        rawType="DIY_SELL",
+        quantity=-qty,
+        unitPrice=px,
+        netCashAmount=qty * px,
+        transactionDate=day,
+        symbol=symbol,
+        currency="CAD",
+    )
+    o.update(extra)
+    return act(**o)
+
+
+class FifoPortTest(unittest.TestCase):
+    """Scenarios ported one-for-one from the ledger.html engine tests."""
+
+    def test_multileg_zero_qty_closes_short(self):
+        lunr = [
+            act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN",
+                rawType="OPTIONS_SELL", quantity=-16, unitPrice=6.2225, netCashAmount=9956, transactionDate="2026-01-10"),
+            act(id="ml1", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG",
+                quantity=0, netCashAmount=-128, transactionDate="2026-03-01"),
+            act(id="ml2", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG",
+                quantity=0, netCashAmount=-2025, transactionDate="2026-03-01"),
+        ]
+        r = model.match_fifo(lunr)
+        self.assertEqual(r["open"], [])
+        self.assertEqual(len(r["closed"]), 2)
+        by_qty = sorted(r["closed"], key=lambda t: t["quantity"])
+        self.assertEqual(by_qty[0]["quantity"], 1)
+        self.assertAlmostEqual(by_qty[0]["exitPrice"], 1.28)
+        self.assertEqual(by_qty[1]["quantity"], 15)
+        self.assertAlmostEqual(by_qty[1]["exitPrice"], 1.35)
+        self.assertTrue(all(t["openDirection"] == "SHORT" for t in r["closed"]))
+        want = (6.2225 - 1.28) * 1 * 100 + (6.2225 - 1.35) * 15 * 100
+        self.assertAlmostEqual(sum(t["pnl"] for t in r["closed"]), want)
+        self.assertTrue(all(t["rt"] == "rt:sto" for t in r["closed"]))
+
+    def test_short_expiry_closes_short(self):
+        r = model.match_fifo([
+            act(id="sto2", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN",
+                rawType="OPTIONS_SELL", quantity=-5, unitPrice=2, netCashAmount=1000, transactionDate="2026-01-10",
+                symbol="ABC 15JAN27 10.00 CALL"),
+            act(id="exp", activityType="OPTIONS_SHORT_EXPIRY", activitySubType="EXPIRED", rawType="OPTIONS_SHORT_EXPIRY",
+                quantity=5, transactionDate="2027-01-15", symbol="ABC 15JAN27 10.00 CALL"),
+        ])
+        self.assertEqual(r["open"], [])
+        self.assertEqual(len(r["closed"]), 1)
+        self.assertEqual(r["closed"][0]["exitPrice"], 0)
+        self.assertEqual(r["closed"][0]["quantity"], 5)
+        self.assertAlmostEqual(r["closed"][0]["pnl"], 1000)
+
+    def test_shares_round_trip(self):
+        r = model.match_fifo([buy("b", "AAA", 10, 12, "2026-01-10"), sell("s", "AAA", 10, 15, "2026-02-10")])
+        self.assertEqual(len(r["closed"]), 1)
+        self.assertEqual(r["closed"][0]["quantity"], 10)
+        self.assertAlmostEqual(r["closed"][0]["pnl"], 30)
+        self.assertEqual(r["closed"][0]["holdDays"], 31)
+        self.assertFalse(model.is_option_symbol("AAA"))
+        self.assertTrue(model.is_option_symbol("LUNR 15JAN27 12.00 CALL"))
+
+    def test_credit_multilegs_add_to_short(self):
+        r = model.match_fifo([
+            act(id="bbai-sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN",
+                rawType="OPTIONS_SELL", quantity=-3, unitPrice=1.2, netCashAmount=360, transactionDate="2026-01-05",
+                symbol="BBAI 21JAN28 10.00 CALL"),
+            act(id="bbai-cr1", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOCLOSE",
+                rawType="OPTIONS_MULTILEG", quantity=0, netCashAmount=14, transactionDate="2026-02-01",
+                symbol="BBAI 21JAN28 10.00 CALL"),
+            act(id="bbai-cr2", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG",
+                quantity=0, netCashAmount=56, transactionDate="2026-02-01", symbol="BBAI 21JAN28 10.00 CALL"),
+        ])
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["closed"], [])
+        self.assertGreaterEqual(sum(l["qty"] for l in r["open"]), 3)
+        self.assertTrue(all(l["direction"] == "SHORT" for l in r["open"]))
+
+    def test_long_expiry_and_same_day_expiry(self):
+        r = model.match_fifo([
+            act(id="lunr-bto", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOOPEN",
+                rawType="OPTIONS_BUY", quantity=2, unitPrice=0.4, netCashAmount=-80, transactionDate="2025-07-01",
+                symbol="LUNR 22AUG25 8.00 CALL"),
+            act(id="lunr-exp", category="option_event", activityType="EXPIR", activitySubType="BUY",
+                rawType="OPTIONS_EXPIRY", quantity=2, transactionDate="2025-08-22", symbol="LUNR 22AUG25 8.00 CALL"),
+        ])
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["open"], [])
+        self.assertEqual(len(r["closed"]), 1)
+        self.assertEqual(r["closed"][0]["openDirection"], "LONG")
+        self.assertAlmostEqual(r["closed"][0]["pnl"], -80)
+        r = model.match_fifo([
+            act(id="spy-bto", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOOPEN",
+                rawType="OPTIONS_BUY", quantity=1, unitPrice=1.1, netCashAmount=-110, transactionDate="2025-07-17",
+                symbol="SPY 17JUL25 624.00 PUT"),
+            act(id="spy-exp", activityType="OPTIONS_EXPIRY", activitySubType="EXPIRED", rawType="OPTIONS_EXPIRY",
+                quantity=1, transactionDate="2025-07-17", symbol="SPY 17JUL25 624.00 PUT"),
+        ])
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["open"], [])
+        self.assertEqual(len(r["closed"]), 1)
+
+    def test_debit_multileg_opens_long_and_sto_opens_short(self):
+        r = model.match_fifo([
+            act(id="put-ml", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG",
+                quantity=0, netCashAmount=-90, transactionDate="2026-01-30", symbol="BBAI 30JAN26 6.00 PUT"),
+        ])
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(len(r["open"]), 1)
+        self.assertEqual(r["open"][0]["direction"], "LONG")
+        r = model.match_fifo([
+            act(id="sto-only", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN",
+                rawType="OPTIONS_SELL", quantity=-4, unitPrice=2, netCashAmount=800, transactionDate="2026-01-01",
+                symbol="XYZ 15JAN27 5.00 CALL"),
+        ])
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(len(r["open"]), 1)
+        self.assertEqual(r["open"][0]["direction"], "SHORT")
+        self.assertEqual(r["open"][0]["qty"], 4)
+
+    def test_assignment_keeps_premium(self):
+        r = model.match_fifo([
+            act(id="asts-sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN",
+                rawType="OPTIONS_SELL", quantity=-1, unitPrice=4.7475, netCashAmount=474.75, transactionDate="2025-01-15",
+                symbol="ASTS 07MAR25 31.00 CALL"),
+            act(id="asts-asg", category="option_event", activityType="ASSIGN", activitySubType="BUYTOCLOSE",
+                rawType="OPTIONS_ASSIGN", quantity=1, unitPrice=31, netCashAmount=-3100, transactionDate="2025-03-07",
+                symbol="ASTS 07MAR25 31.00 CALL"),
+        ])
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["open"], [])
+        self.assertEqual(len(r["closed"]), 1)
+        self.assertEqual(r["closed"][0]["exitPrice"], 0)
+        self.assertAlmostEqual(r["closed"][0]["pnl"], 474.75)
+
+    def test_same_day_roll_folds_into_far_contract(self):
+        r = model.match_fifo([
+            act(id="aug-sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN",
+                rawType="OPTIONS_SELL", quantity=-1, unitPrice=3, netCashAmount=300, transactionDate="2026-01-01",
+                symbol="ZZZ 21AUG26 10.00 CALL"),
+            act(id="aug-cover", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOCLOSE",
+                rawType="OPTIONS_BUY", quantity=1, unitPrice=1, netCashAmount=-100, transactionDate="2026-08-15",
+                symbol="ZZZ 21AUG26 10.00 CALL"),
+            act(id="jan-sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN",
+                rawType="OPTIONS_SELL", quantity=-1, unitPrice=2, netCashAmount=200, transactionDate="2026-08-15",
+                symbol="ZZZ 15JAN27 12.00 CALL"),
+            act(id="jan-cover", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOCLOSE",
+                rawType="OPTIONS_BUY", quantity=1, unitPrice=0.5, netCashAmount=-50, transactionDate="2026-12-01",
+                symbol="ZZZ 15JAN27 12.00 CALL"),
+        ])
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["open"], [])
+        self.assertEqual(len(r["closed"]), 1)
+        self.assertEqual(r["closed"][0]["symbol"], "ZZZ 15JAN27 12.00 CALL")
+        self.assertAlmostEqual(r["closed"][0]["entryPrice"], 4)
+        self.assertAlmostEqual(r["closed"][0]["pnl"], 350)
+        self.assertIn("rolled", r["closed"][0]["flags"])
+
+    def test_stkdis_name_change_nets_to_zero(self):
+        r = model.match_fifo([
+            buy("b", "OLD", 100, 2, "2026-01-01"),
+            act(id="out", category="trade", activityType="STKDIS", activitySubType="SELL", rawType="CORPORATE_ACTION",
+                quantity=-100, transactionDate="2026-02-01", symbol="OLD", currency="CAD"),
+            act(id="in", category="trade", activityType="STKDIS", activitySubType="BUY", rawType="CORPORATE_ACTION",
+                quantity=100, transactionDate="2026-02-01", symbol="NEW", currency="CAD"),
+            sell("s", "NEW", 100, 3, "2026-03-01"),
+        ])
+        # Parity with ledger.html: the +N leg opens NEW at $0 and the sell
+        # closes it; the OLD lot is only reused when NEW runs out of lots.
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(len(r["closed"]), 1)
+        self.assertEqual(r["closed"][0]["symbol"], "NEW")
+        self.assertAlmostEqual(r["closed"][0]["pnl"], 300)
+        self.assertEqual([l["symbol"] for l in r["open"]], ["OLD"])
+        r = model.match_fifo([
+            buy("b", "OLD", 100, 2, "2026-01-01"),
+            act(id="out", category="trade", activityType="STKDIS", activitySubType="SELL", rawType="CODE_CHANGE",
+                quantity=-100, transactionDate="2026-02-01", symbol="OLD", currency="CAD"),
+            sell("s", "NEW", 100, 3, "2026-03-01"),
+        ])
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(len(r["closed"]), 1)
+        self.assertEqual(r["closed"][0]["symbol"], "NEW")
+        self.assertAlmostEqual(r["closed"][0]["pnl"], 100)
+        self.assertEqual(r["open"], [])
+
+
+class RoundTripTest(unittest.TestCase):
+    def _trades(self, acts, groups=None, journal=None):
+        norm = model.normalize_activities(acts)
+        fifo = model.match_fifo(norm)
+        model.apply_fx(fifo["closed"], {})
+        by_id = {a["id"]: a for a in norm}
+        return model.build_trades(fifo["closed"], fifo["open"], groups or [], by_id, model.Securities([]), journal or {})
+
+    def test_flat_to_flat_twice_is_two_trades(self):
+        trades = self._trades([
+            buy("b1", "AAA", 100, 10, "2026-01-01"),
+            sell("s1", "AAA", 100, 12, "2026-01-10"),
+            buy("b2", "AAA", 50, 11, "2026-02-01"),
+            sell("s2", "AAA", 50, 9, "2026-02-10"),
+        ])
+        self.assertEqual(len(trades), 2)
+        self.assertEqual({t["id"] for t in trades}, {"rt:b1", "rt:b2"})
+        self.assertTrue(all(t["status"] == "closed" for t in trades))
+        pnl = {t["id"]: t["pnl"] for t in trades}
+        self.assertAlmostEqual(pnl["rt:b1"], 200)
+        self.assertAlmostEqual(pnl["rt:b2"], -100)
+
+    def test_scale_in_and_out_is_one_trade_with_legs(self):
+        trades = self._trades([
+            buy("b1", "AAA", 100, 10, "2026-01-01"),
+            sell("s1", "AAA", 50, 12, "2026-01-10"),
+            buy("b2", "AAA", 100, 11, "2026-01-15"),
+            sell("s2", "AAA", 150, 13, "2026-02-01"),
+        ])
+        self.assertEqual(len(trades), 1)
+        t = trades[0]
+        self.assertEqual(t["id"], "rt:b1")
+        self.assertEqual(t["status"], "closed")
+        self.assertEqual(t["qty"], 200)
+        self.assertEqual(t["legCount"], 3)
+        self.assertEqual(t["entryDate"], "2026-01-01")
+        self.assertEqual(t["exitDate"], "2026-02-01")
+        self.assertAlmostEqual(t["pnl"], 50 * 2 + 50 * 3 + 100 * 2)
+        self.assertEqual(len(t["fills"]), 4)
+        self.assertEqual(t["opened"]["fills"], 2)
+        self.assertEqual(t["closed"]["fills"], 2)
+        self.assertEqual(t["side"], "SELL")
+
+    def test_partial_exit_is_an_open_trade_with_stable_id(self):
+        acts = [buy("b1", "AAA", 100, 10, "2026-01-01"), sell("s1", "AAA", 40, 12, "2026-01-10")]
+        trades = self._trades(acts)
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades[0]["status"], "open")
+        self.assertEqual(trades[0]["id"], "rt:b1")
+        self.assertEqual(trades[0]["qty"], 40)
+        acts.append(sell("s2", "AAA", 60, 15, "2026-02-01"))
+        trades = self._trades(acts)
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades[0]["status"], "closed")
+        self.assertEqual(trades[0]["id"], "rt:b1")
+        self.assertEqual(trades[0]["qty"], 100)
+
+    def test_saved_group_overrides_round_trip(self):
+        acts = [
+            buy("b1", "AAA", 100, 10, "2026-01-01"),
+            sell("s1", "AAA", 100, 12, "2026-01-10"),
+            buy("b2", "AAA", 50, 11, "2026-02-01"),
+            sell("s2", "AAA", 50, 9, "2026-02-10"),
+        ]
+        key1 = "b1|s1|%s" % ("%.8f" % 100)
+        key2 = "b2|s2|%s" % ("%.8f" % 50)
+        trades = self._trades(acts, groups=[{"id": "g_manual", "locked": True, "members": [key1, key2]}])
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades[0]["id"], "g_manual")
+        self.assertTrue(trades[0]["locked"])
+        self.assertEqual(trades[0]["legCount"], 2)
+
+    def test_journal_attaches_to_trade(self):
+        trades = self._trades(
+            [buy("b1", "AAA", 100, 10, "2026-01-01"), sell("s1", "AAA", 100, 12, "2026-01-10")],
+            journal={"rt:b1": {"thesis": "breakout", "tags": ["momo"], "grade": "A"}},
+        )
+        self.assertEqual(trades[0]["grade"], "A")
+        self.assertEqual(trades[0]["tags"], ["momo"])
+        self.assertEqual(trades[0]["thesis"], "breakout")
+
+    def test_short_round_trip_is_cover(self):
+        trades = self._trades([
+            act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
+                quantity=-2, unitPrice=3, netCashAmount=600, transactionDate="2026-01-01", symbol="ZZZ 21AUG26 10.00 CALL"),
+            act(id="btc", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOCLOSE", rawType="OPTIONS_BUY",
+                quantity=2, unitPrice=1, netCashAmount=-200, transactionDate="2026-02-01", symbol="ZZZ 21AUG26 10.00 CALL"),
+        ])
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades[0]["side"], "COVER")
+        self.assertEqual(trades[0]["kind"], "Options")
+        self.assertEqual(trades[0]["mult"], 100)
+        self.assertAlmostEqual(trades[0]["pnl"], 400)
+        self.assertAlmostEqual(trades[0]["pnlPct"], 400 / 600)
+
+
+class ExpiryTest(unittest.TestCase):
+    def test_option_expiry_parse(self):
+        self.assertEqual(model.option_expiry("LUNR 29AUG25 11.50 CALL"), "2025-08-29")
+        self.assertEqual(model.option_expiry("BBAI 02JAN26 5.50 PUT"), "2026-01-02")
+        self.assertEqual(model.option_expiry("AAPL"), "")
+
+    def test_open_option_past_expiry_is_closed_at_zero(self):
+        snapshot = {
+            "activities": [
+                act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
+                    quantity=-2, unitPrice=0.3, netCashAmount=60, transactionDate="2025-12-05", symbol="BBAI 02JAN26 5.50 PUT"),
+                act(id="bto", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOOPEN", rawType="OPTIONS_BUY",
+                    quantity=1, unitPrice=1.0, netCashAmount=-100, transactionDate="2026-01-05", symbol="ZZZ 17JUL26 10.00 CALL"),
+            ],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-03-01")
+        self.assertEqual(len(base["openLots"]), 1)
+        self.assertEqual(base["openLots"][0]["symbol"], "ZZZ 17JUL26 10.00 CALL")
+        self.assertEqual(len(base["trades"]), 1)
+        t = base["trades"][0]
+        self.assertEqual(t["exitDate"], "2026-01-02")
+        self.assertEqual(t["exit"], 0)
+        self.assertAlmostEqual(t["pnl"], 60)
+        self.assertIn("assumed-expiry", t["flags"])
+        self.assertEqual(t["status"], "closed")
+
+
+class CryptoTest(unittest.TestCase):
+    def test_crypto_buy_sell_and_reward(self):
+        acts = [
+            act(id="cb", activityType="CRYPTO_BUY", activitySubType="MARKET_ORDER", rawType="CRYPTO_BUY",
+                quantity=2, unitPrice=100, netCashAmount=200, transactionDate="2026-01-01", symbol="ETH", currency="CAD",
+                accountType="Ponzi"),
+            act(id="rw", activityType="CRYPTO_STAKING_REWARD", activitySubType="other", rawType="CRYPTO_STAKING_REWARD",
+                quantity=1, unitPrice=0, netCashAmount=0, transactionDate="2026-01-05", symbol="ETH", currency="CAD",
+                accountType="Ponzi"),
+            act(id="cs", activityType="CRYPTO_SELL", activitySubType="MARKET_ORDER", rawType="CRYPTO_SELL",
+                quantity=3, unitPrice=150, netCashAmount=450, transactionDate="2026-02-01", symbol="ETH", currency="CAD",
+                accountType="Ponzi"),
+        ]
+        norm = model.normalize_activities(acts)
+        self.assertEqual(norm[0]["kind"], "Crypto")
+        self.assertLess(norm[0]["netCashAmount"], 0)
+        self.assertIn("reward", norm[1]["flags"])
+        fifo = model.match_fifo(norm)
+        self.assertEqual(fifo["unmatched"], [])
+        self.assertEqual(fifo["open"], [])
+        self.assertEqual(len(fifo["closed"]), 2)
+        self.assertAlmostEqual(sum(t["pnl"] for t in fifo["closed"]), (150 - 100) * 2 + 150 * 1)
+        self.assertTrue(all(t["kind"] == "Crypto" for t in fifo["closed"]))
+
+    def test_crypto_dust_sell_is_not_unmatched(self):
+        acts = [
+            act(id="cb", activityType="CRYPTO_BUY", rawType="CRYPTO_BUY", quantity=1.0, unitPrice=100,
+                netCashAmount=100, transactionDate="2026-01-01", symbol="DOGE", currency="CAD"),
+            act(id="cs", activityType="CRYPTO_SELL", rawType="CRYPTO_SELL", quantity=1.0000004, unitPrice=120,
+                netCashAmount=120, transactionDate="2026-02-01", symbol="DOGE", currency="CAD"),
+        ]
+        fifo = model.match_fifo(model.normalize_activities(acts))
+        self.assertEqual(fifo["unmatched"], [])
+        self.assertEqual(len(fifo["closed"]), 1)
+
+    def test_pending_distribution_notice_is_not_a_lot(self):
+        acts = [
+            buy("b", "RDDY", 100, 9, "2026-01-01"),
+            act(id="stk", category="trade", activityType="STKDIS", activitySubType="BUY", rawType="DIVIDEND",
+                quantity=100, unitPrice=0, netCashAmount=0, transactionDate="2026-02-01", symbol="RDDY", currency="CAD"),
+        ]
+        fifo = model.match_fifo(model.normalize_activities(acts))
+        self.assertEqual(len(fifo["open"]), 1)
+        self.assertEqual(fifo["open"][0]["qty"], 100)
+        self.assertEqual(fifo["open"][0]["price"], 9)
+
+
+class FxTest(unittest.TestCase):
+    def test_usd_pnl_uses_rates_on_fill_dates(self):
+        fx = {"2026-01-05": 1.40, "2026-02-05": 1.30}
+        fifo = model.match_fifo([
+            buy("b", "LUNR", 100, 10, "2026-01-05", currency="USD"),
+            sell("s", "LUNR", 100, 12, "2026-02-05", currency="USD"),
+        ])
+        model.apply_fx(fifo["closed"], fx)
+        t = fifo["closed"][0]
+        self.assertAlmostEqual(t["pnl"], 200)
+        self.assertAlmostEqual(t["pnlCad"], 1200 * 1.30 - 1000 * 1.40)
+
+    def test_rate_walks_back_over_weekends_and_falls_back(self):
+        fx = {"2026-01-02": 1.40}
+        self.assertEqual(model.rate_on(fx, "2026-01-04"), 1.40)
+        self.assertEqual(model.rate_on(fx, "2025-06-01"), model.FX_FALLBACK)
+        self.assertEqual(model.to_cad(fx, 100, "CAD", "2026-01-04"), 100)
+
+
+class ViewTest(unittest.TestCase):
+    def setUp(self):
+        self.snapshot = {
+            "activities": [
+                buy("b1", "AAA", 100, 10, "2025-03-01", accountType="Trading"),
+                sell("s1", "AAA", 100, 12, "2025-03-10", accountType="Trading"),
+                buy("b2", "BBB", 10, 100, "2026-01-05", accountType="Trading"),
+                sell("s2", "BBB", 10, 90, "2026-01-20", accountType="Trading"),
+                buy("b3", "CCC", 10, 5, "2026-02-01", accountType="Retirement"),
+                sell("s3", "CCC", 10, 6, "2026-02-15", accountType="Retirement"),
+                buy("b4", "DDD", 10, 5, "2026-03-01", accountType="Trading"),
+                buy("b5", "LUNR", 10, 10, "2026-03-01", accountType="Trading", currency="USD"),
+                sell("s5", "LUNR", 10, 11, "2026-03-05", accountType="Trading", currency="USD"),
+            ],
+            "accounts": [
+                {"id": "acct-1", "nickname": "Trading", "unifiedAccountType": "TFSA", "currency": "CAD"},
+                {"id": "acct-2", "nickname": "Retirement", "unifiedAccountType": "RRSP", "currency": "CAD"},
+            ],
+            "balances": [],
+            "navHistory": [
+                {"date": "2024-12-31", "equity": 1000, "netDeposits": 1000},
+                {"date": "2025-06-30", "equity": 1500, "netDeposits": 1200},
+                {"date": "2025-12-31", "equity": 1600, "netDeposits": 1200},
+                {"date": "2026-03-31", "equity": 1400, "netDeposits": 1200},
+            ],
+            "navByAccount": {"Trading": [{"date": "2025-12-31", "equity": 800, "netDeposits": 500}, {"date": "2026-03-31", "equity": 700, "netDeposits": 500}]},
+            "syncedAt": "2026-04-01T00:00:00Z",
+            "tradeGroups": [],
+            "notes": {},
+            "securities": [],
+        }
+        self.market = {"fx": {"2026-03-01": 1.4, "2026-03-05": 1.3}, "benchmark": {"2024-12-31": 100, "2025-12-31": 120, "2026-03-31": 126}}
+        self.journal = {"rt:b1": {"thesis": "yes", "tags": ["x"], "grade": "A"}, "rt:b2": {"thesis": "", "tags": [], "grade": "F"}}
+        self.base = model.build_base(self.snapshot, self.market, self.journal, today="2026-04-01")
+
+    def test_one_list_feeds_every_tile(self):
+        v = model.build_view(self.base, None)
+        k = v["kpi"]
+        self.assertEqual(k["count"], 4)
+        self.assertEqual(len(v["trades"]), 4)
+        self.assertAlmostEqual(k["realized"], sum(t["pnlCad"] for t in v["trades"]))
+        self.assertAlmostEqual(sum(m["value"] for m in v["monthly"]), k["realized"])
+        self.assertAlmostEqual(sum(r["pnl"] for r in v["bySymbol"]), k["realized"])
+        g = v["grades"]
+        self.assertEqual(sum(b["n"] for b in g["buckets"]) + g["ungraded"], k["count"])
+        self.assertEqual(sum(r["n"] for r in v["bySymbol"]), k["count"])
+        self.assertEqual(k["wins"] + k["losses"] + k["breakeven"], k["count"])
+        self.assertEqual(len(v["queue"]), 3)
+        usd = next(t for t in v["trades"] if t["symbol"] == "LUNR")
+        self.assertAlmostEqual(usd["pnl"], 10)
+        self.assertAlmostEqual(usd["pnlCad"], 110 * 1.3 - 100 * 1.4)
+
+    def test_positions_and_options(self):
+        v = model.build_view(self.base, None)
+        self.assertEqual(len(v["positions"]), 1)
+        p = v["positions"][0]
+        self.assertEqual(p["symbol"], "DDD")
+        self.assertEqual(p["priceSource"], "fill")
+        self.assertEqual(p["alloc"], 1.0)
+        self.assertEqual(p["held"], 31)
+        self.assertEqual(v["options"]["accounts"], ["Retirement", "Trading"])
+        self.assertEqual(v["options"]["kinds"], ["Shares"])
+        self.assertEqual(v["options"]["tags"], ["x"])
+
+    def test_account_filter_narrows_everything(self):
+        v = model.build_view(self.base, {"lists": {"account": ["Retirement"]}})
+        self.assertEqual(v["kpi"]["count"], 1)
+        self.assertEqual(v["trades"][0]["symbol"], "CCC")
+        self.assertEqual(v["positions"], [])
+        self.assertEqual(v["equity"]["label"], "All accounts")
+        v = model.build_view(self.base, {"lists": {"account": ["Trading"]}})
+        self.assertEqual(v["equity"]["label"], "Trading")
+        self.assertEqual(len(v["positions"]), 1)
+
+    def test_date_filters(self):
+        v = model.build_view(self.base, {"years": ["2025"]})
+        self.assertEqual([t["symbol"] for t in v["trades"]], ["AAA"])
+        v = model.build_view(self.base, {"preset": "ytd"})
+        self.assertEqual({t["symbol"] for t in v["trades"]}, {"BBB", "CCC", "LUNR"})
+        v = model.build_view(self.base, {"from": "2026-02-01", "to": "2026-02-28"})
+        self.assertEqual([t["symbol"] for t in v["trades"]], ["CCC"])
+        v = model.build_view(self.base, {"preset": "1m"})
+        self.assertEqual([t["symbol"] for t in v["trades"]], ["LUNR"])
+
+    def test_list_and_range_filters(self):
+        v = model.build_view(self.base, {"lists": {"grade": ["A"]}})
+        self.assertEqual([t["symbol"] for t in v["trades"]], ["AAA"])
+        v = model.build_view(self.base, {"lists": {"grade": ["Ungraded"]}})
+        self.assertEqual({t["symbol"] for t in v["trades"]}, {"CCC", "LUNR"})
+        v = model.build_view(self.base, {"lists": {"result": ["Losers"]}})
+        self.assertEqual([t["symbol"] for t in v["trades"]], ["BBB"])
+        v = model.build_view(self.base, {"ranges": {"price": {"op": ">", "v": 50}}})
+        self.assertEqual([t["symbol"] for t in v["trades"]], ["BBB"])
+        v = model.build_view(self.base, {"search": "aa"})
+        self.assertEqual([t["symbol"] for t in v["trades"]], ["AAA"])
+        v = model.build_view(self.base, {"lists": {"tag": ["untagged"]}})
+        self.assertEqual(v["kpi"]["count"], 3)
+
+    def test_returns_and_drawdown(self):
+        v = model.build_view(self.base, None)
+        years = {y["year"]: y for y in v["years"]}
+        self.assertAlmostEqual(years["2025"]["r"], (1500 - 1000 - 200) / 1000 * 1 + 0.0, places=6) if False else None
+        # 2025: two steps, (1500-1000-200)/1000 then (1600-1500)/1500
+        self.assertAlmostEqual(years["2025"]["r"], (1 + 0.3) * (1 + 100 / 1500) - 1)
+        self.assertAlmostEqual(years["2025"]["spR"], 0.2)
+        self.assertAlmostEqual(years["2025"]["flow"], 200)
+        self.assertAlmostEqual(years["2026"]["r"], (1400 - 1600) / 1600)
+        self.assertAlmostEqual(years["2026"]["spR"], 0.05)
+        dd = v["equity"]["drawdown"]
+        self.assertAlmostEqual(dd["pct"], (1400 - 1600) / 1600)
+        self.assertEqual(dd["at"], "2026-03-31")
+        self.assertIsNotNone(v["equity"]["annualized"]["rate"])
+
+    def test_negligible_years_are_skipped(self):
+        series = model.equity_series([
+            {"date": "2020-12-22", "equity": 0, "netDeposits": 0},
+            {"date": "2020-12-23", "equity": 100, "netDeposits": 100},
+            {"date": "2020-12-31", "equity": 101, "netDeposits": 100},
+            {"date": "2023-12-31", "equity": 50000, "netDeposits": 40000},
+            {"date": "2024-12-31", "equity": 60000, "netDeposits": 40000},
+        ])
+        years = [y["year"] for y in model.yearly_returns(series, {}, "2025-01-01")]
+        self.assertEqual(years, ["2023", "2024"])
+
+    def test_filters_are_cleaned(self):
+        f = model.clean_filters({"lists": {"account": ["A", 3, ""]}, "ranges": {"hold": {"op": "<", "v": "7"}}, "preset": "bogus", "years": [2025, "abcd"], "from": "2026-1-1", "to": "2026-02-01"})
+        self.assertEqual(f["lists"]["account"], ["A", "3"])
+        self.assertEqual(f["ranges"]["hold"], {"op": "<", "v": 7.0})
+        self.assertEqual(f["preset"], "all")
+        self.assertEqual(f["years"], ["2025"])
+        self.assertEqual(f["from"], "")
+        self.assertEqual(f["to"], "2026-02-01")
+
+
+class CashflowTest(unittest.TestCase):
+    def test_yield_on_cost_from_declared_rate(self):
+        div = lambda i, day, qty, per: act(
+            id="d%d" % i, category="dividend", activityType="Dividend", activitySubType="dividend", rawType="DIVIDEND",
+            quantity=qty, unitPrice=per, netCashAmount=qty * per, transactionDate=day, symbol="RDDY", currency="CAD",
+            accountType="Cashflow",
+        )
+        snapshot = {
+            "activities": [
+                buy("b1", "RDDY", 20000, 7.13, "2026-01-05", accountType="Cashflow"),
+                div(1, "2026-07-06", 19000, 0.2),
+                div(2, "2026-08-06", 19000, 0.2),
+                act(id="int", category="interest", activityType="Interest", rawType="INTEREST", netCashAmount=4.5,
+                    transactionDate="2026-08-01", symbol="", accountType="Cash"),
+                act(id="wht", activityType="WITHHOLDING_TAX", rawType="WITHHOLDING_TAX", netCashAmount=-40,
+                    transactionDate="2026-08-07", symbol="", accountType="Cashflow"),
+            ],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-09-06")
+        self.assertEqual(len(base["cashflow"]), 4)
+        v = model.build_view(base, None)
+        cf = v["cashflow"]
+        self.assertEqual(cf["count"], 2)
+        self.assertEqual([r["kind"] for r in cf["rows"]], ["Dividend", "Dividend"])
+        self.assertEqual({r["kind"] for r in cf["other"]}, {"Interest", "Withholding tax"})
+        self.assertAlmostEqual(cf["total"], 7600)
+        self.assertEqual([m["key"] for m in cf["months"]], ["2026-07", "2026-08"])
+        h = cf["holdings"][0]
+        self.assertEqual(h["symbol"], "RDDY")
+        self.assertEqual(h["freq"], 12)
+        self.assertAlmostEqual(h["yoc"], 2.4 / 7.13)
+        self.assertAlmostEqual(h["yob"], 0.2 * 20000)
+        self.assertAlmostEqual(h["ytd"], 7600)
+        tiles = {t["label"]: t for t in cf["tiles"]}
+        self.assertAlmostEqual(tiles["2026 YTD"]["total"], 7600)
+        self.assertAlmostEqual(tiles["2026 YTD"]["perMonth"], 3800)
+        self.assertAlmostEqual(tiles["Yield on cost"]["yield"], (2.4 * 20000) / (20000 * 7.13))
+        v = model.build_view(base, {"lists": {"grade": ["A"]}})
+        self.assertIn("grade", v["cashflow"]["skippedFilters"])
+        self.assertEqual(v["cashflow"]["count"], 2)
+
+
+class LegacyNotesTest(unittest.TestCase):
+    def test_group_id_matches_ledger_html(self):
+        # ledger.html: FNV-1a over "\n".join(sorted keys), "g_" + hex + "_" + n
+        self.assertEqual(model.group_id_for_keys(["b|s|100.00000000"]), model.group_id_for_keys(["b|s|100.00000000"]))
+        self.assertTrue(model.group_id_for_keys(["a", "b"]).endswith("_2"))
+        self.assertEqual(model.group_id_for_keys(["a", "b"]), model.group_id_for_keys(["b", "a"]))
+
+    def test_legacy_note_lands_on_round_trip(self):
+        acts = model.normalize_activities([buy("b1", "AAA", 100, 10, "2026-01-01"), sell("s1", "AAA", 100, 12, "2026-01-10")])
+        fifo = model.match_fifo(acts)
+        key = model.slice_member_key(fifo["closed"][0])
+        legacy_id = model.group_id_for_keys([key])
+        journal = model.migrate_legacy_notes(fifo["closed"], [], {legacy_id: {"thesis": "why", "tag": "a, b", "grade": "C"}})
+        self.assertEqual(journal, {"rt:b1": {"thesis": "why", "tags": ["a", "b"], "grade": "C"}})
+
+
+class StoreTablesTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["BAGHOLDER_HOME"] = self.tmp.name
+        store.set_home(self.tmp.name)
+        bagholder.set_home(self.tmp.name)
+        store.ensure()
+        model.invalidate()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_fx_and_benchmark_roundtrip(self):
+        self.assertEqual(store.fx_last_date(), "")
+        self.assertEqual(store.upsert_fx_rates({"2026-01-02": "1.4", "bad": 1, "2026-01-03": 0}), 1)
+        self.assertEqual(store.fx_rates(), {"2026-01-02": 1.4})
+        self.assertEqual(store.fx_last_date(), "2026-01-02")
+        store.upsert_benchmark_prices({"2026-01-02": 5000, "2026-01-05": 5100})
+        self.assertEqual(store.benchmark_last_date(), "2026-01-05")
+        self.assertEqual(store.market_data()["benchmark"]["2026-01-05"], 5100)
+
+    def test_legacy_spy_meta_migrates_into_table(self):
+        store.set_meta("spy_by_date", json.dumps({"2020-01-02": 3200.5, "junk": "x"}))
+        with store._lock:
+            conn = store._connect()
+            try:
+                conn.execute("DELETE FROM benchmark_prices")
+                conn.commit()
+                store._migrate_spy_meta(conn)
+                conn.commit()
+            finally:
+                conn.close()
+        self.assertEqual(store.benchmark_prices(), {"2020-01-02": 3200.5})
+
+    def test_journal_roundtrip_and_version(self):
+        v0 = store.data_version()
+        store.save_journal_entry("rt:x", {"thesis": "t", "tags": ["a", "a", " b "], "grade": "z"})
+        self.assertEqual(store.journal(), {"rt:x": {"thesis": "t", "tags": ["a", "b"], "grade": ""}})
+        self.assertNotEqual(v0, store.data_version())
+        store.save_journal_entry("rt:x", {"thesis": "", "tags": [], "grade": ""})
+        self.assertEqual(store.journal(), {})
+
+    def test_model_view_from_store_and_cache(self):
+        store.merge_local_rows([
+            buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
+            sell("s1", "AAA", 10, 2, "2026-01-05", source="csv"),
+        ])
+        v = model.view(None)
+        self.assertEqual(v["kpi"]["count"], 1)
+        self.assertAlmostEqual(v["kpi"]["realized"], 10)
+        base1 = model.base_model()
+        self.assertIs(base1, model.base_model())
+        tid = v["trades"][0]["id"]
+        store.save_journal_entry(tid, {"grade": "B"})
+        v2 = model.view(None)
+        self.assertEqual(v2["trades"][0]["grade"], "B")
+        self.assertEqual(v2["grades"]["buckets"][1]["n"], 1)
+
+
+class MarketParseTest(unittest.TestCase):
+    def test_parsers(self):
+        boc = json.dumps({"observations": [{"d": "2026-08-28", "FXUSDCAD": {"v": "1.3888"}}, {"d": "x"}]})
+        self.assertEqual(market.parse_boc_json(boc), {"2026-08-28": 1.3888})
+        fred = "observation_date,SP500\n2026-08-28,6500.12\n2026-08-29,.\nbad\n"
+        self.assertEqual(market.parse_fred_csv(fred), {"2026-08-28": 6500.12})
+        stooq = "Date,Open,High,Low,Close,Volume\n2026-08-28,1,2,0,6501.5,0\n"
+        self.assertEqual(market.parse_stooq_csv(stooq), {"2026-08-28": 6501.5})
+
+    def test_refresh_uses_store_and_survives_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                with mock.patch.object(market, "_get_text", side_effect=OSError("offline")):
+                    self.assertEqual(market.refresh_all(), {"fx": 0, "benchmark": 0, "skipped": False})
+                self.assertTrue(market.is_stale())
+                boc = json.dumps({"observations": [{"d": "2026-09-04", "FXUSDCAD": {"v": "1.38"}}]})
+                fred = "observation_date,SP500\n2026-09-04,7000\n"
+                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]):
+                    out = market.refresh_all()
+                self.assertEqual(out["fx"], 1)
+                self.assertEqual(out["benchmark"], 1)
+                self.assertEqual(store.fx_rates(), {"2026-09-04": 1.38})
+            finally:
+                store.set_home(None)
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+
+class ServerTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["BAGHOLDER_HOME"] = self.tmp.name
+        store.set_home(self.tmp.name)
+        bagholder.set_home(self.tmp.name)
+        store.ensure()
+        model.invalidate()
+        store.upsert_fx_rates({"2099-01-01": 1.0})
+        store.upsert_benchmark_prices({"2099-01-01": 1.0})
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), bagholder.Handler)
+        self.port = self.httpd.server_address[1]
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.tmp.cleanup()
+        os.environ.pop("BAGHOLDER_HOME", None)
+
+    def _get(self, path):
+        req = Request("http://127.0.0.1:%d%s" % (self.port, path))
+        with urlopen(req, timeout=10) as r:
+            return r.status, r.read()
+
+    def _post(self, path, body):
+        req = Request(
+            "http://127.0.0.1:%d%s" % (self.port, path),
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Bagholder": "1"},
+            method="POST",
+        )
+        with urlopen(req, timeout=10) as r:
+            return r.status, json.loads(r.read().decode("utf-8"))
+
+    def test_v2_page_and_model_route(self):
+        status, body = self._get("/v2")
+        self.assertEqual(status, 200)
+        html = body.decode("utf-8")
+        self.assertIn('<link rel="icon" type="image/png" href="favicon.png"', html)
+        self.assertIn("/api/model", html)
+        self.assertIn("/api/journal", html)
+        store.merge_local_rows([
+            buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
+            sell("s1", "AAA", 10, 2, "2026-01-05", source="csv"),
+        ])
+        status, body = self._get("/api/model")
+        self.assertEqual(status, 200)
+        data = json.loads(body.decode("utf-8"))
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["kpi"]["count"], 1)
+        self.assertIn("status", data)
+        from urllib.parse import quote
+        status, body = self._get("/api/model?filters=" + quote(json.dumps({"lists": {"symbol": ["ZZZ"]}})))
+        data = json.loads(body.decode("utf-8"))
+        self.assertEqual(data["kpi"]["count"], 0)
+        self.assertEqual(data["tradeTotal"], 1)
+
+    def test_journal_post_persists(self):
+        store.merge_local_rows([
+            buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
+            sell("s1", "AAA", 10, 2, "2026-01-05", source="csv"),
+        ])
+        _, data = self._get("/api/model")
+        tid = json.loads(data.decode("utf-8"))["trades"][0]["id"]
+        status, out = self._post("/api/journal", {"id": tid, "thesis": "why", "tags": ["a"], "grade": "A"})
+        self.assertEqual(status, 200)
+        self.assertEqual(out["journal"][tid]["grade"], "A")
+        self.assertEqual(store.journal()[tid]["thesis"], "why")
+        _, data = self._get("/api/model")
+        self.assertEqual(json.loads(data.decode("utf-8"))["trades"][0]["tags"], ["a"])
+
+    def test_legacy_routes_untouched(self):
+        status, body = self._get("/")
+        self.assertEqual(status, 200)
+        self.assertIn(b"ledger.navByAccount.v1", body)
+
+
+if __name__ == "__main__":
+    unittest.main()
