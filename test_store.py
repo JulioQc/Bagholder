@@ -114,6 +114,30 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(row["netCashAmount"], 1050)
         self.assertEqual(row["symbol"], "QNC 19FEB27 3.00 CALL")
 
+    def test_cash_dividend_without_status_is_kept(self):
+        item = {
+            "type": "DIVIDEND",
+            "subType": "CASH_DIVIDEND",
+            "status": None,
+            "amount": "3660.00",
+            "amountSign": "positive",
+            "assetQuantity": "18300.0",
+            "assetSymbol": "RDDY",
+            "currency": "CAD",
+            "occurredAt": "2026-06-05T14:53:21.630000+00:00",
+            "accountId": "non-registered-x",
+            "canonicalId": "div-1",
+        }
+        self.assertFalse(bagholder.skip_activity(item))
+        rec = bagholder.map_activity(item)
+        self.assertEqual(rec["category"], "dividend")
+        self.assertEqual(rec["symbol"], "RDDY")
+        self.assertAlmostEqual(rec["netCashAmount"], 3660.0)
+        self.assertAlmostEqual(rec["unitPrice"], 0.2)
+        self.assertEqual(rec["transactionDate"], "2026-06-05")
+        item["type"] = "DIY_BUY"
+        self.assertTrue(bagholder.skip_activity(item))
+
     def test_options_buy_maps_as_buy_to_open(self):
         item = _ws_item(
             type="OPTIONS_BUY",

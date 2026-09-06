@@ -663,6 +663,9 @@ def skip_activity(item):
     if _is_corp_share_move(item):
         if any(x in status for x in ("REJECT", "CANCEL", "FAIL", "VOID")):
             return True
+    elif typ == "DIVIDEND" and not status:
+        # Cash dividends often arrive with no status at all; they are paid.
+        pass
     elif not status or status not in _KEEP_STATUS:
         return True
     # INTEREST / FPL_INTEREST must not be treated as a loan skip.
