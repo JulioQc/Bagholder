@@ -1925,21 +1925,6 @@ def review_queue(trades):
     return out
 
 
-def _infer_frequency(rows):
-    if len(rows) < 2:
-        return 12
-    gap = days_between(rows[1]["date"], rows[0]["date"])
-    if gap > 250:
-        return 1
-    if gap > 120:
-        return 2
-    if gap > 45:
-        return 4
-    if gap > 10:
-        return 12
-    return 52
-
-
 def cashflow_view(base, f, positions_all):
     today = base["today"]
     L = f["lists"]
@@ -2007,8 +1992,9 @@ def cashflow_view(base, f, positions_all):
         per = rs[0]["per"]
         if not per:
             return None
-        freq = _infer_frequency(rs)
-        return {"per": per, "freq": freq, "annual": per * freq}
+        # Yield on cost = latest per-unit distribution / average cost x 12;
+        # current yield = the same / last price x 12.
+        return {"per": per, "freq": 12, "annual": per * 12}
 
     holdings = []
     for p in held:
