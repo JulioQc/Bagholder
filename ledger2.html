@@ -141,9 +141,6 @@ const state = {
   busy: "",
   notice: "",
   dataOpen: false,
-  data: null,
-  wipeSession: true,
-  wipeJournal: false,
 };
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -371,7 +368,7 @@ function menuHtml() {
     (s.connected ? '<button data-act="refreshSession">Refresh session</button>' : '<button data-act="connect">Connect Wealthsimple</button>') +
     '<button data-act="exportCsv">Export trades CSV</button>' +
     '<button disabled title="Coming soon">Import CSV</button>' +
-    '<button data-act="openData">Data &amp; storage</button>' +
+    '<button data-act="openData">Clear data</button>' +
     '<button disabled title="Coming soon">Settings</button>' +
     '<div class="sep"></div>' +
     '<button data-act="legacy">Open classic view</button>' +
@@ -379,39 +376,18 @@ function menuHtml() {
     "</div>";
 }
 function dataDialogHtml() {
-  const d = state.data;
-  const row = (l, v) => '<div style="display:flex;justify-content:space-between;gap:12px;font-size:12.5px;padding:5px 0;border-top:1px solid rgba(233,233,237,.06)"><span class="dim">' + l + '</span><span class="tab">' + v + "</span></div>";
-  const n = (v) => (v == null ? "—" : Number(v).toLocaleString("en-US"));
-  const body = !d ? '<div class="muted" style="padding:20px 0"><span class="spin"></span>Reading the database…</div>' :
-    '<div class="muted" style="font-size:11px;word-break:break-all;margin-bottom:8px">' + esc(d.path) + "</div>" +
-    row("Activities", n(d.activities) + (d.firstActivity ? ' <span class="muted">' + esc(d.firstActivity) + " → " + esc(d.lastActivity) + "</span>" : "")) +
-    row("Accounts · balances", n(d.accounts) + " · " + n(d.balances)) + row("Equity history days", n(d.navDays)) + row("Securities", n(d.securities)) +
-    row("Journal entries", n(d.journal)) + row("FX days · S&amp;P 500 days", n(d.fxDays) + " · " + n(d.benchmarkDays)) +
-    row("Last sync", d.syncedAt ? esc(d.syncedAt.replace("T", " ").replace("Z", " UTC")) : "never") + row("Wealthsimple session", d.sessionPresent ? "saved" : "none") +
-    '<div style="margin-top:16px" class="lbl">Clear synced data</div><div class="dim" style="font-size:12px;margin:4px 0 10px;line-height:1.5">Deletes every activity, account, balance, equity day and security this app pulled from Wealthsimple, so the next sync walks the full history again. Nothing is sent anywhere.</div>' +
-    '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0;cursor:pointer"><input type="checkbox" id="wipeSession" ' + (state.wipeSession ? "checked" : "") + "> Also forget the Wealthsimple login (reconnect afterwards)</label>" +
-    '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0;cursor:pointer"><input type="checkbox" id="wipeJournal" ' + (state.wipeJournal ? "checked" : "") + "> Also delete grades, tags and theses</label>" +
-    '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeData">Cancel</button><button class="btn" data-act="clearData" style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (state.busy === "clearing" ? "disabled" : "") + ">" + (state.busy === "clearing" ? "Clearing…" : "Clear synced data") + "</button></div>";
-  return '<div id="dataDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="data"><div class="card elev-md" style="width:440px;max-width:100%;padding:18px 20px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><h5>Data &amp; storage</h5><button class="btn btn-icon btn-secondary" data-act="closeData" aria-label="Close" style="margin-left:auto;width:28px;height:28px">×</button></div>' + body + "</div></div>";
+  return '<div id="dataDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="data"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Clear data</h5>' +
+    '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">Deletes everything synced from Wealthsimple, your journal, and the saved login from this machine. You will need to connect and sync again.</div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeData">Cancel</button><button class="btn" data-act="clearData" style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (state.busy === "clearing" ? "disabled" : "") + ">" + (state.busy === "clearing" ? "Clearing…" : "Clear data") + "</button></div></div></div>";
 }
-function openData() {
-  state.menuOpen = false; state.dataOpen = true; state.data = null; render();
-  api("GET", "/api/data").then((d) => { if (!state.dataOpen) return; state.data = d && d.ok ? d : { path: "", ok: false }; render(); });
-}
+function openData() { state.menuOpen = false; state.dataOpen = true; render(); }
 function clearData() {
-  const d = state.data || {};
-  const parts = ["all " + Number(d.activities || 0).toLocaleString("en-US") + " synced activities and the equity history"];
-  if (state.wipeSession) parts.push("the saved Wealthsimple login");
-  if (state.wipeJournal) parts.push("every grade, tag and thesis");
-  if (!confirm("Delete " + parts.join(", ") + " from this machine? The next sync starts from a clean slate.")) return;
   state.busy = "clearing"; render();
-  api("POST", "/api/data/clear", { session: state.wipeSession, journal: state.wipeJournal }).then((r) => {
+  api("POST", "/api/data/clear", { session: true, journal: true }).then((r) => {
     state.busy = "";
     if (!r || !r.ok) { state.notice = (r && r.error) || "Could not clear data."; render(); return; }
-    state.dataOpen = false; state.data = null; state.sel = null; state.posSel = null; state.filters = EMPTY_FILTERS();
-    state.status.lastSync = ""; if (state.wipeSession) state.status.connected = false;
-    state.notice = "Synced data cleared";
-    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000);
+    state.dataOpen = false; state.sel = null; state.posSel = null; state.filters = EMPTY_FILTERS();
+    state.status.lastSync = ""; state.status.connected = false;
     loadModel(); pollStatus();
   });
 }
@@ -1107,8 +1083,6 @@ function bind() {
   document.addEventListener("change", (e) => {
     const t = e.target;
     if (t.id === "dateFrom" || t.id === "dateTo") { state.filters[t.id === "dateFrom" ? "from" : "to"] = t.value; setFilters({ years: [], preset: "all" }); }
-    if (t.id === "wipeSession") state.wipeSession = t.checked;
-    if (t.id === "wipeJournal") state.wipeJournal = t.checked;
   });
   document.addEventListener("focusout", (e) => {
     const t = e.target;

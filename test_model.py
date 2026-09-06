@@ -850,7 +850,7 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(payload["activityCount"], 0)
         html = bagholder.ledger2_path().read_text(encoding="utf-8")
         self.assertIn("/api/data/clear", html)
-        self.assertIn("Data &amp; storage", html)
+        self.assertIn("Clear data", html)
 
     def test_legacy_routes_untouched(self):
         status, body = self._get("/")
