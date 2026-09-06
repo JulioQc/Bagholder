@@ -342,7 +342,7 @@ function syncLine() {
   if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login…';
   if (s.syncing) return '<span class="spin"></span>' + esc(s.syncStep || "Syncing…");
   if (s.error) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
-  if (!s.connected) return 'Not connected <button class="btn btn-primary" data-act="connect" style="margin-left:8px;padding:4px 10px;font-size:12px">Connect Wealthsimple</button>';
+  if (!s.connected) return "Not connected";
   return "Synced " + esc(relTime(s.lastSync) || "—");
 }
 function headerHtml() {
