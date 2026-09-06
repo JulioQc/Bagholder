@@ -31,9 +31,11 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
+import market
+import model
 import store
 
 # --- constants (tradesimple WealthsimpleAPIBase) ---
@@ -2969,6 +2971,34 @@ def ledger_path():
     return Path(__file__).resolve().parent / "ledger.html"
 
 
+def ledger2_path():
+    return Path(__file__).resolve().parent / "ledger2.html"
+
+
+def refresh_market_data():
+    """USD/CAD and S&P 500 series for the derived model. Never raises."""
+    try:
+        return market.refresh_all(_ssl_context())
+    except Exception:
+        return {"fx": 0, "benchmark": 0, "skipped": True}
+
+
+def sync_then_market():
+    ok = run_sync()
+    refresh_market_data()
+    return ok
+
+
+def _model_filters(query):
+    raw = (parse_qs(query or "").get("filters") or [""])[0]
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return None
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stderr.write("bagholder %s - %s\n" % (self.address_string(), fmt % args))
@@ -3044,11 +3074,42 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send(200, data, "text/html; charset=utf-8")
             return
+        if path in ("/v2", "/v2/", "/ledger2.html"):
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            p = ledger2_path()
+            try:
+                data = p.read_bytes()
+            except OSError:
+                self._send(404, {"ok": False, "error": "ledger2.html missing"})
+                return
+            self._send(200, data, "text/html; charset=utf-8")
+            return
         if path == "/api/status":
             if not self._gate():
                 self._send(403, {"ok": False})
                 return
             self._send(200, status_payload())
+            return
+        if path == "/api/model":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            try:
+                if market.is_stale():
+                    market.refresh_in_background(_ssl_context())
+            except Exception:
+                pass
+            try:
+                payload = model.view(_model_filters(query))
+            except Exception as e:
+                sys.stderr.write("model failed: %r\n" % (e,))
+                self._send(500, {"ok": False, "error": "model failed: %s" % type(e).__name__})
+                return
+            payload["status"] = status_payload()
+            self._send(200, payload)
             return
         if path in ("/favicon.png", "/favicon.ico"):
             if not self._gate():
@@ -3113,8 +3174,24 @@ class Handler(BaseHTTPRequestHandler):
                 return
             with _lock:
                 _state["error"] = ""
-            threading.Thread(target=run_sync, name="bagholder-sync", daemon=True).start()
+            threading.Thread(target=sync_then_market, name="bagholder-sync", daemon=True).start()
             self._send(200, {"ok": True, "syncing": True})
+            return
+        if path == "/api/journal":
+            body = self._read_json()
+            if not isinstance(body, dict) or not _s(body.get("id")).strip():
+                self._send(400, {"ok": False, "error": "id required"})
+                return
+            entries = store.save_journal_entry(
+                body.get("id"),
+                {
+                    "thesis": body.get("thesis"),
+                    "tags": body.get("tags"),
+                    "grade": body.get("grade"),
+                },
+            )
+            model.invalidate()
+            self._send(200, {"ok": True, "journal": entries})
             return
         if path == "/api/disconnect":
             self._read_json()
@@ -3175,6 +3252,7 @@ def auto_sync_loop():
                 ok = run_sync(force_activity=True)
             except Exception:
                 ok = False
+            refresh_market_data()
             fail_delay = TOKEN_CHECK_SEC if ok else min(max(fail_delay, TOKEN_CHECK_SEC) * 2, 1800)
             delay = fail_delay
         else:
@@ -3201,6 +3279,7 @@ def main():
     httpd, port = bind_server()
     t = threading.Thread(target=auto_sync_loop, name="bagholder-auto-sync", daemon=True)
     t.start()
+    threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
     url = "http://127.0.0.1:%s" % port
     print("Bagholder  %s" % url, flush=True)
     try:
