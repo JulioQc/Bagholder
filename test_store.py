@@ -1720,7 +1720,7 @@ class WealthsimpleHttpTest(unittest.TestCase):
         conn.close()
         store.ensure()
         snap = store.snapshot()
-        self.assertEqual(store.get_meta("schema_version"), "3")
+        self.assertEqual(store.get_meta("schema_version"), str(store.SCHEMA_VERSION))
         self.assertEqual(len(snap["navHistory"]), 1)
         self.assertEqual(snap["navHistory"][0]["date"], "2024-01-02")
         self.assertEqual(snap["navHistory"][0]["equity"], 1000.0)
