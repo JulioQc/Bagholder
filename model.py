@@ -1925,6 +1925,27 @@ def review_queue(trades):
     return out
 
 
+_SCHEDULES = (52, 26, 24, 12, 6, 4, 2, 1)
+
+
+def payments_per_year(dates):
+    """Verified payment frequency from actual payment dates (any order).
+    Only the most recent gaps count (the last three), so a fund that changes
+    its schedule is re-read after two payments at the new cadence. Payments
+    on the same day count once. None when fewer than two distinct dates."""
+    days = sorted({_s(d)[:10] for d in dates if _s(d)[:10]})
+    if len(days) < 2:
+        return None
+    gaps = [days_between(a, b) for a, b in zip(days, days[1:])]
+    gaps = [g for g in gaps if g > 0][-3:]
+    if not gaps:
+        return None
+    gaps.sort()
+    median = gaps[len(gaps) // 2]
+    per_year = 365.25 / median
+    return min(_SCHEDULES, key=lambda s: abs(s - per_year))
+
+
 def cashflow_view(base, f, positions_all):
     today = base["today"]
     L = f["lists"]
@@ -1992,9 +2013,16 @@ def cashflow_view(base, f, positions_all):
         per = rs[0]["per"]
         if not per:
             return None
-        # Yield on cost = latest per-unit distribution / average cost x 12;
-        # current yield = the same / last price x 12.
-        return {"per": per, "freq": 12, "annual": per * 12}
+        # Payments per year is verified from this holding's own payment dates
+        # (every payment row, even ones without a per-unit value): the median
+        # gap between consecutive payments, snapped to a standard schedule.
+        # With a single payment on record it cannot be verified; monthly is
+        # assumed and the row says so.
+        freq = payments_per_year([r["date"] for r in for_yoc if r["symbol"] == sym])
+        verified = freq is not None
+        if not verified:
+            freq = 12
+        return {"per": per, "freq": freq, "annual": per * freq, "verified": verified}
 
     holdings = []
     for p in held:
@@ -2010,6 +2038,7 @@ def cashflow_view(base, f, positions_all):
                 "qty": p["qty"],
                 "per": r["per"] if r else None,
                 "freq": r["freq"] if r else None,
+                "freqVerified": bool(r and r["verified"]),
                 "cost": basis,
                 "avg": avg,
                 "last": last_px,
@@ -2017,14 +2046,15 @@ def cashflow_view(base, f, positions_all):
                 "ttm": sum_for(p["symbol"], lambda x: x["date"][:7] >= cut),
                 "all": sum_for(p["symbol"], lambda x: True),
                 "yob": (r["per"] * p["qty"]) if r else None,
-                "annual": (r["annual"] * p["qty"]) if r else None,
-                "yoc": (r["annual"] / avg) if (r and avg) else None,
-                "currentYield": (r["annual"] / last_px) if (r and last_px) else None,
+                "annual": (r["annual"] * p["qty"]) if (r and r["annual"] is not None) else None,
+                "yoc": (r["annual"] / avg) if (r and r["annual"] is not None and avg) else None,
+                "currentYield": (r["annual"] / last_px) if (r and r["annual"] is not None and last_px) else None,
             }
         )
-    basis_all = sum(h["cost"] for h in holdings)
-    earned_all = sum(h["ttm"] for h in holdings)
-    annual_all = sum(h["annual"] or 0.0 for h in holdings)
+    verified = [h for h in holdings if h["annual"] is not None]
+    basis_all = sum(h["cost"] for h in verified)
+    earned_all = sum(h["ttm"] for h in verified)
+    annual_all = sum(h["annual"] for h in verified)
     total = sum(r["amountCad"] for r in recs)
     this_yr = int(this_year)
     tiles = []

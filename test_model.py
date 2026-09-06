@@ -659,6 +659,58 @@ class CashflowTest(unittest.TestCase):
         self.assertEqual(v["cashflow"]["count"], 2)
 
 
+class PaymentFrequencyTest(unittest.TestCase):
+    def test_frequency_is_verified_from_dates(self):
+        self.assertEqual(model.payments_per_year(["2026-07-06", "2026-08-06"]), 12)
+        self.assertEqual(model.payments_per_year(["2026-08-06", "2026-07-06", "2026-06-05", "2026-05-06"]), 12)
+        self.assertEqual(model.payments_per_year(["2025-01-07", "2026-01-07"]), 1)
+        self.assertEqual(model.payments_per_year(["2025-03-20", "2025-06-20", "2025-09-22", "2025-12-19"]), 4)
+        self.assertEqual(model.payments_per_year(["2026-01-02", "2026-01-09", "2026-01-16"]), 52)
+        # a monthly payer that switched to weekly is read from its recent payments
+        self.assertEqual(model.payments_per_year(["2026-01-06", "2026-02-06", "2026-03-06", "2026-04-06", "2026-05-06", "2026-05-13", "2026-05-20", "2026-05-27"]), 52)
+        self.assertIsNone(model.payments_per_year(["2026-08-06"]))
+        self.assertIsNone(model.payments_per_year(["2026-08-06", "2026-08-06"]))
+
+    def test_frequency_uses_payment_rows_without_per_unit_values(self):
+        div = lambda i, day, qty, per, amount: act(
+            id="v%d" % i, category="dividend", activityType="Dividend", activitySubType="dividend", rawType="DIVIDEND",
+            quantity=qty, unitPrice=per, netCashAmount=amount, transactionDate=day, symbol="VEQT", currency="CAD", accountType="Kids",
+        )
+        snapshot = {
+            "activities": [buy("b1", "VEQT", 300, 49.76, "2024-06-01", accountType="Kids"), div(1, "2025-01-07", 0, 0, 91.56), div(2, "2026-01-07", 300, 0.76, 228)],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-09-06")
+        h = model.build_view(base, None)["cashflow"]["holdings"][0]
+        self.assertEqual(h["freq"], 1)
+        self.assertTrue(h["freqVerified"])
+
+    def test_single_payment_shows_no_yield_and_annual_payer_is_not_x12(self):
+        div = lambda i, sym, day, qty, per, acct="Kids": act(
+            id="d%s%d" % (sym, i), category="dividend", activityType="Dividend", activitySubType="dividend", rawType="DIVIDEND",
+            quantity=qty, unitPrice=per, netCashAmount=qty * per, transactionDate=day, symbol=sym, currency="CAD", accountType=acct,
+        )
+        snapshot = {
+            "activities": [
+                buy("b1", "VEQT", 300, 49.76, "2024-06-01", accountType="Kids"),
+                div(1, "VEQT", "2025-01-07", 300, 0.76),
+                div(2, "VEQT", "2026-01-07", 300, 0.76),
+                buy("b2", "NEWM", 1000, 10.0, "2026-07-01", accountType="Kids"),
+                div(1, "NEWM", "2026-08-06", 1000, 0.1),
+            ],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-09-06")
+        h = {x["symbol"]: x for x in model.build_view(base, None)["cashflow"]["holdings"]}
+        self.assertEqual(h["VEQT"]["freq"], 1)
+        self.assertTrue(h["VEQT"]["freqVerified"])
+        self.assertAlmostEqual(h["VEQT"]["yoc"], 0.76 / 49.76)
+        self.assertEqual(h["NEWM"]["freq"], 12)
+        self.assertFalse(h["NEWM"]["freqVerified"])
+        self.assertAlmostEqual(h["NEWM"]["yoc"], 0.1 * 12 / 10.0)
+        self.assertEqual(h["NEWM"]["per"], 0.1)
+
+
 class LegacyNotesTest(unittest.TestCase):
     def test_group_id_matches_ledger_html(self):
         # ledger.html: FNV-1a over "\n".join(sorted keys), "g_" + hex + "_" + n
