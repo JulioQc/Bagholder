@@ -138,6 +138,24 @@ class StoreTest(unittest.TestCase):
         item["type"] = "DIY_BUY"
         self.assertTrue(bagholder.skip_activity(item))
 
+    def test_margin_interest_charge_without_status_is_kept(self):
+        item = {
+            "type": "INTEREST_CHARGE",
+            "subType": "MARGIN_INTEREST",
+            "status": None,
+            "amount": "412.10",
+            "amountSign": "negative",
+            "currency": "CAD",
+            "occurredAt": "2026-06-01T04:00:00.000000+00:00",
+            "accountId": "non-registered-x",
+            "canonicalId": "int-1",
+        }
+        self.assertFalse(bagholder.skip_activity(item))
+        rec = bagholder.map_activity(item)
+        self.assertEqual(rec["activityType"], "INTEREST_CHARGE")
+        self.assertAlmostEqual(rec["netCashAmount"], -412.10)
+        self.assertEqual(rec["transactionDate"], "2026-06-01")
+
     def test_options_buy_maps_as_buy_to_open(self):
         item = _ws_item(
             type="OPTIONS_BUY",
