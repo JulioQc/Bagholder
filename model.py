@@ -313,6 +313,55 @@ def fold_stkdis(activities):
     return rest
 
 
+def split_markers(activities):
+    """Wealthsimple posts a share split as a CORPORATE_ACTION with quantity 0
+    and no ratio. Infer the ratio from the fill prices on either side and
+    return {(account, symbol, currency, date): factor}, where lot quantities
+    are multiplied by factor and prices divided by it (1/5 for a 1-for-5
+    reverse split, 4 for a 4-for-1 split)."""
+    out = {}
+    by_book = {}
+    for a in activities:
+        if a.get("category") not in ("trade", "option_event") or not a.get("symbol"):
+            continue
+        by_book.setdefault((fifo_account(a), _s(a.get("symbol"))), []).append(a)
+    for a in activities:
+        if compact(a.get("activityType")) != "STKDIS" or compact(a.get("rawType")) != "CORPORATEACTION":
+            continue
+        if abs(_num(a.get("quantity"))) > EPS:
+            continue
+        day = _s(a.get("transactionDate"))
+        # the marker's currency does not always match the fills'; key on account+symbol
+        key = (fifo_account(a), _s(a.get("symbol")))
+        priced = sorted(
+            (x for x in by_book.get(key, []) if _num(x.get("unitPrice")) > 0 and compact(x.get("activityType")) != "STKDIS"),
+            key=lambda x: (_s(x.get("transactionDate")), _s(x.get("occurredAt"))),
+        )
+        before = [_num(x.get("unitPrice")) for x in priced if _s(x.get("transactionDate")) < day][-3:]
+        after = [_num(x.get("unitPrice")) for x in priced if _s(x.get("transactionDate")) >= day][:3]
+        if not before or not after:
+            continue
+        before.sort()
+        after.sort()
+        pre = before[len(before) // 2]
+        post = after[len(after) // 2]
+        if not pre > 0 or not post > 0:
+            continue
+        ratio = post / pre
+        if ratio >= 1.5:
+            n = round(ratio)
+            factor = 1.0 / n
+        elif ratio <= 1 / 1.5:
+            n = round(1 / ratio)
+            factor = float(n)
+        else:
+            continue
+        if n < 2 or abs(ratio - (1 / factor)) / (1 / factor) > 0.35:
+            continue
+        out[(fifo_account(a), _s(a.get("symbol")), day)] = factor
+    return out
+
+
 def fifo_account(a):
     nick = norm_account_name(a.get("accountType"))
     if nick:
@@ -632,6 +681,32 @@ def match_fifo(activities):
     rt_open = {}
     closed = []
     unmatched = []
+    splits = split_markers(normalized)
+    pending_splits = {}
+    for (acct, sym, day), factor in splits.items():
+        pending_splits.setdefault(acct + "::" + sym, []).append((day, factor))
+
+    def apply_splits(key, day):
+        skey = "::".join(key.split("::")[:2])
+        todo = pending_splits.get(skey)
+        if not todo:
+            return
+        keep = []
+        for split_day, factor in sorted(todo):
+            if split_day <= day:
+                for lot in books.get(key, []):
+                    lot["qty"] *= factor
+                    lot["price"] /= factor
+                    lot.setdefault("flags", [])
+                    label = "split %s" % ("1:%d" % round(1 / factor) if factor < 1 else "%d:1" % round(factor))
+                    if label not in lot["flags"]:
+                        lot["flags"].append(label)
+            else:
+                keep.append((split_day, factor))
+        if keep:
+            pending_splits[skey] = keep
+        else:
+            pending_splits.pop(skey, None)
 
     def close_against(book, key, fill, a, remaining, symbol_override=None):
         closing_dir = "SHORT" if fill["side"] == "BUY" else "LONG"
@@ -652,6 +727,7 @@ def match_fifo(activities):
         a = fill["a"]
         key = book_key(a)
         book = books.setdefault(key, [])
+        apply_splits(key, _s(a.get("transactionDate")))
         remaining = close_against(book, key, fill, a, fill["qty"])
         if remaining > EPS and fill["side"] == "SELL":
             for dk, dbook in books.items():
@@ -708,6 +784,8 @@ def match_fifo(activities):
                     }
                 )
 
+    for key in list(books):
+        apply_splits(key, "9999-12-31")
     open_lots = []
     for book in books.values():
         for lot in book:

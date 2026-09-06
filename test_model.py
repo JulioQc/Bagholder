@@ -253,6 +253,45 @@ class FifoPortTest(unittest.TestCase):
         self.assertEqual(r["open"], [])
 
 
+class SplitTest(unittest.TestCase):
+    def test_reverse_split_marker_rescales_open_lots(self):
+        acts = [
+            buy("b1", "MSTY", 100, 7.0, "2025-12-01"),
+            buy("b2", "MSTY", 75, 6.9, "2025-12-05"),
+            act(id="ca", category="trade", activityType="STKDIS", activitySubType="BUY", rawType="CORPORATE_ACTION",
+                quantity=0, transactionDate="2025-12-08", symbol="MSTY", currency="CAD"),
+            buy("b3", "MSTY", 4, 34.0, "2025-12-11"),
+            sell("s1", "MSTY", 39, 31.0, "2026-01-16"),
+        ]
+        r = model.match_fifo(model.normalize_activities(acts))
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["open"], [])
+        self.assertAlmostEqual(sum(t["quantity"] for t in r["closed"]), 39)
+        first = min(r["closed"], key=lambda t: t["entryDate"])
+        self.assertAlmostEqual(first["entryPrice"], 35.0)
+        self.assertAlmostEqual(sum(t["pnl"] for t in r["closed"]), 39 * 31 - (100 * 7 + 75 * 6.9 + 4 * 34))
+
+    def test_forward_split_and_no_marker_without_prices(self):
+        acts = [
+            buy("b1", "NVDA", 10, 1000.0, "2024-05-01"),
+            act(id="ca", category="trade", activityType="STKDIS", activitySubType="BUY", rawType="CORPORATE_ACTION",
+                quantity=0, transactionDate="2024-06-10", symbol="NVDA", currency="CAD"),
+            buy("b2", "NVDA", 5, 98.0, "2024-06-12", currency="USD"),
+        ]
+        acts[0]["currency"] = "USD"
+        r = model.match_fifo(model.normalize_activities(acts))
+        self.assertAlmostEqual(sum(l["qty"] for l in r["open"]), 105)
+        big = max(r["open"], key=lambda l: l["qty"])
+        self.assertAlmostEqual(big["price"], 100.0)
+        self.assertIn("split 10:1", big["flags"])
+        r = model.match_fifo(model.normalize_activities([
+            buy("b1", "AAA", 10, 10.0, "2024-05-01"),
+            act(id="ca", category="trade", activityType="STKDIS", activitySubType="BUY", rawType="CORPORATE_ACTION",
+                quantity=0, transactionDate="2024-06-10", symbol="AAA", currency="CAD"),
+        ]))
+        self.assertEqual(r["open"][0]["qty"], 10)
+
+
 class RoundTripTest(unittest.TestCase):
     def _trades(self, acts, groups=None, journal=None):
         norm = model.normalize_activities(acts)

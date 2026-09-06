@@ -144,6 +144,8 @@ const state = {
 };
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MON_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function monthLong(key) { return MON_LONG[+key.slice(5, 7) - 1] + " " + key.slice(0, 4); }
 const PRESETS = [["1d", "1D"], ["1w", "1W"], ["1m", "1M"], ["3m", "3M"], ["6m", "6M"], ["ytd", "YTD"], ["1y", "1Y"], ["5y", "5Y"]];
 
 const FIELDS = [
@@ -839,7 +841,7 @@ function cashflowHtml(m) {
   const cs = state.sort.cash;
   const rows = sortRows(c.rows || [], cs.key, cs.dir, (r, k) => r[k]);
   const other = c.other || [];
-  const otherLine = other.length ? "Not shown above: " + [c.interest ? "interest " + money(c.interest) : "", c.withholding ? "withholding tax " + money(c.withholding) : ""].filter(Boolean).join(" · ") + " (" + other.length + " rows)." : "";
+  const otherLine = "";
   return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px;min-height:380px"><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px">' + tiles + "</div>" +
     (note ? '<div class="dim" style="font-size:11px;line-height:1.5">' + esc(note) + "</div>" : "") +
     '<div class="card elev-sm" style="padding:16px 18px 12px"><h5>Monthly distributions</h5><div style="display:flex;gap:10px;flex:1;min-height:232px;margin-top:14px"><div style="position:relative;width:58px;flex:none;font-size:10px;color:var(--ink60)" class="tab">' +
@@ -849,8 +851,8 @@ function cashflowHtml(m) {
     (ms.length ? ms.map((b, i) => '<div class="bar-col" data-i="' + i + '" style="cursor:default"><div style="position:absolute;left:0;right:0;bottom:6%;height:' + (b.count === 0 ? 0 : Math.max(1.5, b.value / head * 94)).toFixed(1) + '%;background:var(--accent);border-radius:2px 2px 0 0"></div></div>').join("") : '<div class="muted empty" style="flex:1;font-size:12px">No distributions in this range.</div>') +
     '</div></div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink60);padding-left:68px;margin-top:6px">' + [...new Set(axis)].map((a) => "<span>" + esc(a) + "</span>").join("") + "</div>" +
     (otherLine ? '<div class="muted" style="font-size:10px;margin-top:8px;padding-left:68px">' + esc(otherLine) + "</div>" : "") + "</div>" +
-    '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Yield on cost</h5><div class="muted" style="font-size:11px;margin-bottom:6px">Declared rate: latest per-unit payment × payments per year. Yield on cost uses your average cost; current yield uses the last fill price.</div><div class="scroll" style="max-height:344px"><table class="table" style="font-size:12px"><thead><tr>' + th("yoc", ycols) + "</tr></thead><tbody>" +
-    (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(h.symbol) + '<span class="muted" style="font-weight:400;font-size:10.5px;margin-left:6px">' + esc(h.account) + '</span></td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2) + (h.freq ? '<span class="muted" style="font-size:10px"> ×' + h.freq + "</span>" : "")) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.ttm) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right">' + (h.yob == null ? "—" : money0(h.yob)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="10" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
+    '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Cashflow Positions</h5><div class="scroll" style="max-height:344px"><table class="table" style="font-size:12px"><thead><tr>' + th("yoc", ycols) + "</tr></thead><tbody>" +
+    (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(h.symbol) + '</td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2)) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.ttm) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right">' + (h.yob == null ? "—" : money0(h.yob)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="10" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
     "</tbody></table></div></div>" +
     '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Distribution history</h5><div class="scroll-xy" style="max-height:420px"><table class="table" style="min-width:600px;font-size:12px"><thead><tr>' + th("cash", dcols) + "</tr></thead><tbody>" +
     (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.kind) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="7" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
@@ -866,7 +868,7 @@ function cfHover(e) {
   xl.style.left = x; xl.hidden = false;
   tip.style.left = x; tip.style.transform = "translateX(" + (i > n * 0.7 ? "-100%" : "-8px") + ")";
   tip.querySelector(".tv").textContent = money0(b.value);
-  tip.querySelector(".tl").textContent = b.label + " · " + b.count + (b.count === 1 ? " payment" : " payments");
+  tip.querySelector(".tl").textContent = monthLong(b.key);
   tip.hidden = false;
 }
 function cfLeave() { ["cfX", "cfTip"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = true; }); }
