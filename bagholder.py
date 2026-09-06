@@ -3092,6 +3092,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send(200, status_payload())
             return
+        if path == "/api/data":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            summary = store.data_summary()
+            summary["ok"] = True
+            summary["sessionPresent"] = bool(load_session())
+            self._send(200, summary)
+            return
         if path == "/api/model":
             if not self._gate():
                 self._send(403, {"ok": False})
@@ -3176,6 +3185,27 @@ class Handler(BaseHTTPRequestHandler):
                 _state["error"] = ""
             threading.Thread(target=sync_then_market, name="bagholder-sync", daemon=True).start()
             self._send(200, {"ok": True, "syncing": True})
+            return
+        if path == "/api/data/clear":
+            body = self._read_json()
+            body = body if isinstance(body, dict) else {}
+            with _lock:
+                if _state["syncing"]:
+                    self._send(409, {"ok": False, "error": "A sync is running. Wait for it to finish."})
+                    return
+            summary = store.clear_synced_data(
+                keep_journal=not bool(body.get("journal")),
+                keep_market=not bool(body.get("market")),
+            )
+            if body.get("session"):
+                delete_session_and_book()
+            with _lock:
+                _state["lastSync"] = ""
+                _state["error"] = ""
+            model.invalidate()
+            summary["ok"] = True
+            summary["sessionPresent"] = bool(load_session())
+            self._send(200, summary)
             return
         if path == "/api/journal":
             body = self._read_json()

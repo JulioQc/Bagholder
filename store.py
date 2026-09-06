@@ -1339,6 +1339,66 @@ def save_journal_entry(key, entry):
     return current
 
 
+SYNC_META_KEYS = ("synced_at", "last_activity_pull", "security_id_backfill_done")
+
+
+def data_summary():
+    """Row counts the Data & storage dialog shows before a wipe."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            count = lambda sql: int(conn.execute(sql).fetchone()[0] or 0)
+            journal_raw = conn.execute("SELECT value FROM meta WHERE key = ?", (JOURNAL_META,)).fetchone()
+            try:
+                journal_n = len(json.loads(journal_raw["value"])) if journal_raw and journal_raw["value"] else 0
+            except ValueError:
+                journal_n = 0
+            first = conn.execute("SELECT MIN(transaction_date), MAX(transaction_date) FROM activities").fetchone()
+            return {
+                "path": str(db_path()),
+                "activities": count("SELECT COUNT(*) FROM activities"),
+                "firstActivity": first[0] or "",
+                "lastActivity": first[1] or "",
+                "accounts": count("SELECT COUNT(*) FROM accounts"),
+                "balances": count("SELECT COUNT(*) FROM balances"),
+                "navDays": count("SELECT COUNT(*) FROM nav_history"),
+                "securities": count("SELECT COUNT(*) FROM securities"),
+                "journal": journal_n,
+                "fxDays": count("SELECT COUNT(*) FROM fx_rates"),
+                "benchmarkDays": count("SELECT COUNT(*) FROM benchmark_prices"),
+                "syncedAt": get_meta("synced_at"),
+            }
+        finally:
+            conn.close()
+
+
+def clear_synced_data(keep_journal=True, keep_market=True):
+    """Wipe everything Wealthsimple sync wrote so the next sync starts from zero.
+
+    Activities, accounts, balances, NAV history, securities, manual trade
+    groups and the sync bookmarks go. The journal (grades, tags, theses) and
+    the downloaded market data are kept unless told otherwise."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            for table in ("activities", "accounts", "balances", "nav_history", "securities", "grouped_trades"):
+                conn.execute("DELETE FROM %s" % table)
+            keys = list(SYNC_META_KEYS) + ["trade_groups", "trade_notes"]
+            if not keep_journal:
+                keys.append(JOURNAL_META)
+            conn.executemany("DELETE FROM meta WHERE key = ?", [(k,) for k in keys])
+            if not keep_market:
+                conn.execute("DELETE FROM fx_rates")
+                conn.execute("DELETE FROM benchmark_prices")
+                conn.execute("DELETE FROM meta WHERE key = 'spy_by_date'")
+            conn.commit()
+        finally:
+            conn.close()
+    return data_summary()
+
+
 def data_version():
     """Cheap fingerprint of everything the derived model depends on."""
     with _lock:

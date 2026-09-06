@@ -679,6 +679,34 @@ class StoreTablesTest(unittest.TestCase):
         store.save_journal_entry("rt:x", {"thesis": "", "tags": [], "grade": ""})
         self.assertEqual(store.journal(), {})
 
+    def test_clear_synced_data_keeps_journal_and_market_by_default(self):
+        store.merge_local_rows([
+            buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
+            sell("s1", "AAA", 10, 2, "2026-01-05", source="csv"),
+        ])
+        store.replace_accounts([{"id": "acct-1", "nickname": "Trading"}])
+        store.upsert_nav([{"date": "2026-01-05", "equity": 20, "netDeposits": 10}])
+        store.set_meta("synced_at", "2026-01-05T00:00:00Z")
+        store.upsert_fx_rates({"2026-01-05": 1.4})
+        store.save_journal_entry("rt:b1", {"grade": "A"})
+        before = store.data_summary()
+        self.assertEqual(before["activities"], 2)
+        self.assertEqual(before["accounts"], 1)
+        self.assertEqual(before["navDays"], 1)
+        self.assertEqual(before["journal"], 1)
+        after = store.clear_synced_data()
+        self.assertEqual(after["activities"], 0)
+        self.assertEqual(after["accounts"], 0)
+        self.assertEqual(after["navDays"], 0)
+        self.assertEqual(after["syncedAt"], "")
+        self.assertEqual(after["journal"], 1)
+        self.assertEqual(after["fxDays"], 1)
+        self.assertEqual(store.activity_count(), 0)
+        self.assertEqual(bagholder.activity_sync_bounds(), {"start_date": None, "full_history": True})
+        after = store.clear_synced_data(keep_journal=False, keep_market=False)
+        self.assertEqual(after["journal"], 0)
+        self.assertEqual(after["fxDays"], 0)
+
     def test_model_view_from_store_and_cache(self):
         store.merge_local_rows([
             buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
@@ -797,6 +825,32 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(store.journal()[tid]["thesis"], "why")
         _, data = self._get("/api/model")
         self.assertEqual(json.loads(data.decode("utf-8"))["trades"][0]["tags"], ["a"])
+
+    def test_data_routes_clear_and_disconnect(self):
+        store.merge_local_rows([
+            buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
+            sell("s1", "AAA", 10, 2, "2026-01-05", source="csv"),
+        ])
+        bagholder.save_session({"access_token": "x", "refresh_token": "y"})
+        status, body = self._get("/api/data")
+        data = json.loads(body.decode("utf-8"))
+        self.assertEqual(data["activities"], 2)
+        self.assertTrue(data["sessionPresent"])
+        self.assertIn("bagholder.db", data["path"])
+        _, data = self._get("/api/model")
+        self.assertEqual(json.loads(data.decode("utf-8"))["kpi"]["count"], 1)
+        status, out = self._post("/api/data/clear", {"session": True})
+        self.assertEqual(status, 200)
+        self.assertEqual(out["activities"], 0)
+        self.assertFalse(out["sessionPresent"])
+        self.assertIsNone(bagholder.load_session())
+        _, data = self._get("/api/model")
+        payload = json.loads(data.decode("utf-8"))
+        self.assertEqual(payload["kpi"]["count"], 0)
+        self.assertEqual(payload["activityCount"], 0)
+        html = bagholder.ledger2_path().read_text(encoding="utf-8")
+        self.assertIn("/api/data/clear", html)
+        self.assertIn("Data &amp; storage", html)
 
     def test_legacy_routes_untouched(self):
         status, body = self._get("/")
