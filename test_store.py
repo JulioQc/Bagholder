@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from unittest import mock
 
 import bagholder
+import market
 import store
 
 # Fake Wealthsimple production clientId for scrape tests. Not a real id.
@@ -83,6 +84,15 @@ class StoreTest(unittest.TestCase):
         self.assertNotEqual(v0, v1)
         store.upsert_distributions("RDDY", [{"exDate": "2026-09-30", "payDate": "2026-10-05", "amount": 0.2, "currency": "CAD"}])
         self.assertNotEqual(v1, bagholder.status_payload()["dataVersion"])
+
+    def test_history_endpoint_validates_and_serves_bars(self):
+        self.assertFalse(bagholder.history_payload("symbol=RDDY")["ok"])
+        bars = [{"date": "2026-09-04", "open": 4.8, "high": 4.8, "low": 4.68, "close": 4.75, "volume": 1}]
+        with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")):
+            out = bagholder.history_payload("symbol=RDDY&exchange=TSX&currency=CAD&kind=Shares&from=2026-08-25&to=2026-09-05")
+        self.assertEqual((out["ok"], out["source"], [b["close"] for b in out["bars"]]), (True, "tmx", [4.75]))
+        out = bagholder.history_payload("symbol=QNC%2020NOV26%203.00%20CALL&exchange=NYSE&currency=USD&kind=Options&from=2026-06-01&to=2026-09-05")
+        self.assertEqual((out["ok"], out["source"], out["bars"]), (True, "", []))
 
     def test_options_sell_maps_as_sell_to_open(self):
         item = _ws_item(

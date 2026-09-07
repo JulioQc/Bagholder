@@ -154,7 +154,18 @@ Cards:
 
 Table columns in this order: Open · Close · Symbol · Exchange · Qty · Entry · Exit · FX · P&L · P&L % · Hold · Grade · Tags. Every column sorts. FX is centred; numbers are right-aligned. Column widths are fixed proportions of the table so they do not shift with content; the table scrolls sideways only when its card is narrower than 1150 px. Long symbols truncate with an ellipsis and show in full on hover. Newest close first by default.
 
-Trade detail: symbol, name and exchange; P&L and P&L % in the trade's currency; a price path through the fills with buy and sell markers; facts Open, Close, Entry, Exit, Hold, Account; an executions table with When · Side · Qty · FX · Price · Amount where Side says what the fill did in this trade (`BUY TO OPEN`, `SELL TO CLOSE`, …); and the journal with thesis, grade and tags. The browser Back button returns to the list at the same scroll position.
+Trade detail: symbol, name and exchange; P&L and P&L % in the trade's currency; the trade chart; facts Open, Close, Entry, Exit, Hold, Account; an executions table with When · Side · Qty · FX · Price · Amount where Side says what the fill did in this trade (`BUY TO OPEN`, `SELL TO CLOSE`, …); and the journal with thesis, grade and tags. The browser Back button returns to the list at the same scroll position.
+
+**Trade chart.** Real daily bars for the trade's span, ten days either side, drawn with TradingView Lightweight Charts served from the app itself. Candlesticks when the source gives open, high, low and close; a line of closes when it gives closes only. Every execution is marked on its day at its price: an up arrow below the bar for a buy, a down arrow above for a sell, labelled with signed quantity and price. Wheel or pinch zooms the time axis, dragging pans, and the view a user set is kept while they stay on the trade. Labels appear once fewer than 80 bars are in view; the arrows are always shown. A fill with no price, a staking reward, is marked on its day when bars exist. When no history source covers the instrument, the priced executions themselves are plotted on a zoomable time axis. Nothing on the chart is synthetic.
+
+| Instrument | History source | Reach |
+|---|---|---|
+| Shares and ETFs on TSX, TSX-V, CSE and US exchanges | TMX Money daily series | Full listing history |
+| Cboe Canada listings | Cboe Canada's own feed | About the last three months |
+| Crypto | CoinGecko, daily, in the position's currency | The past year |
+| Options | None | Executions only |
+
+Bars are cached in the database. Closed days are written once and never rewritten; the newest day may be replaced. A span reaching the present is refetched once its copy is 20 hours old.
 
 ### Positions
 

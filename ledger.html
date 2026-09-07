@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Bagholder</title>
 <link rel="icon" type="image/png" href="favicon.png"/>
+<script src="/lightweight-charts.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"/>
@@ -859,50 +860,98 @@ function tradesTableHtml(m) {
       '<td style="font-variant-numeric:normal">' + (t.tags && t.tags.length ? '<span class="tagchip" title="' + esc(t.tags[0]) + '">' + esc(t.tags[0]) + "</span>" + (t.tags.length > 1 ? '<span class="muted" style="font-size:10.5px;margin-left:4px">+' + (t.tags.length - 1) + "</span>" : "") : '<span style="color:rgba(var(--ink-rgb),.5)">—</span>') + "</td></tr>").join("") +
     "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No trades match these filters. <a href="#" data-act="clearAll">Reset all</a></div>') + "</div></div>";
 }
-function tradeChart(t) {
-  const W = 1200, H = 300, L = 54, R = W - 20, T = 18, B = H - 36, MR = 6, NUDGE = MR * 2.5, day = 86400000;
-  const anchors = (t.fills || []).map((f) => ({ t: Date.parse(f.date), p: f.price, buy: f.side === "BUY", raw: f })).filter((a) => isFinite(a.t) && a.p > 0).sort((a, b) => a.t - b.t);
-  if (!anchors.length) return null;
-  let t0 = anchors[0].t, t1 = anchors[anchors.length - 1].t;
-  if (t1 - t0 < day) { t0 -= day * 3; t1 += day * 3; }
-  const padT = (t1 - t0) * 0.05; t0 -= padT; t1 += padT;
-  let seed = 0; for (let i = 0; i < t.symbol.length; i++) seed += t.symbol.charCodeAt(i);
-  const spanDays = (t1 - t0) / day;
-  const amp = 0.055 * Math.min(1, Math.max(0.25, spanDays / 120));
-  const priceAt = (ts) => {
-    let a = anchors[0], b = anchors[anchors.length - 1];
-    for (let i = 0; i < anchors.length - 1; i++) if (ts >= anchors[i].t && ts <= anchors[i + 1].t) { a = anchors[i]; b = anchors[i + 1]; }
-    const span = b.t - a.t || 1;
-    const u = Math.min(1, Math.max(0, (ts - a.t) / span));
-    const base = a.p + (b.p - a.p) * u;
-    const env = Math.sin(Math.PI * u);
-    const wob = Math.sin(u * 11 + seed) * 0.6 + Math.sin(u * 27 + seed * 1.7) * 0.3 + Math.sin(u * 5 + seed * 0.4);
-    return base * (1 + env * wob * amp);
-  };
-  const N = 72, pts = [];
-  for (let i = 0; i <= N; i++) { const ts = t0 + (t1 - t0) * (i / N); pts.push({ ts, p: priceAt(ts) }); }
-  anchors.forEach((a) => pts.push({ ts: a.t, p: a.p }));
-  pts.sort((a, b) => a.ts - b.ts);
-  let lo = Math.min.apply(null, pts.map((p) => p.p)), hi = Math.max.apply(null, pts.map((p) => p.p));
-  const padY = (hi - lo) * 0.14 || hi * 0.1 || 1; lo -= padY; hi += padY;
-  const X = (ts) => L + (R - L) * ((ts - t0) / (t1 - t0 || 1));
-  const Y = (p) => B - (B - T) * ((p - lo) / (hi - lo || 1));
-  const dp = hi < 1 ? 3 : 2;
-  return {
-    path: pts.map((p, i) => (i ? "L" : "M") + X(p.ts).toFixed(1) + " " + Y(p.p).toFixed(1)).join(" "),
-    labelRight: (100 - (L - 6) / W * 100).toFixed(2) + "%", plotLeft: (L / W * 100).toFixed(2) + "%", plotRight: ((W - R) / W * 100).toFixed(2) + "%",
-    ticks: [0, 1, 2, 3].map((i) => hi - padY * 0.6 - (hi - lo - padY * 1.2) * (i / 3)).map((v) => ({ y: +Y(v).toFixed(1), top: (Y(v) / H * 100).toFixed(2) + "%", label: "$" + v.toFixed(dp) })),
-    marks: anchors.map((a, i) => ({
-      x: +(X(a.t) + anchors.filter((b, j) => j < i && b.t === a.t && b.p === a.p).length * NUDGE).toFixed(1), y: +Y(a.p).toFixed(1),
-      fill: a.buy ? "var(--accent)" : "var(--surface)", stroke: a.buy ? "var(--surface)" : "var(--ink)",
-      title: a.raw.side + " " + qty(Math.abs(a.raw.qty)) + " @ " + px(a.raw.price) + " · " + a.raw.date,
-    })),
-    from: anchors[0].raw.date, to: anchors[anchors.length - 1].raw.date,
-  };
+// The trade chart: real daily bars for the trade's span with every execution
+// marked at its price, drawn by TradingView Lightweight Charts; wheel or pinch
+// zooms, drag pans. Without a history source the executions alone are plotted.
+let _chart = null;
+const _chartRange = {};
+const _histCache = {};
+function chartColors() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (n) => cs.getPropertyValue(n).trim();
+  return { text: v("--ink60"), grid: v("--grid"), up: v("--pos"), down: v("--neg"), line: "rgba(" + v("--ink-rgb") + ",.55)" };
+}
+function chartSpan(t) {
+  const day = 86400000;
+  const from = new Date(Date.parse(t.entryDate) - 10 * day).toISOString().slice(0, 10);
+  const to = new Date(Math.min(Date.now(), Date.parse(t.exitDate) + 10 * day)).toISOString().slice(0, 10);
+  return { from, to };
+}
+function loadHistory(t) {
+  if (_histCache[t.id]) return Promise.resolve(_histCache[t.id]);
+  const sp = chartSpan(t);
+  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to;
+  return api("GET", "/api/history?" + q).then((r) => { const bars = (r && r.ok && r.bars) || []; _histCache[t.id] = bars; return bars; });
+}
+function fillMarkers(fills, bars, c) {
+  const dates = bars.map((b) => b.date);
+  const onBar = (d) => { let best = null; for (const x of dates) { if (x <= d) best = x; else break; } return best || (dates[0] || d); };
+  return fills.map((f) => ({
+    time: bars.length ? onBar(f.date) : Math.round(Date.parse(f.when) / 1000),
+    position: f.side === "BUY" ? "belowBar" : "aboveBar",
+    shape: f.side === "BUY" ? "arrowUp" : "arrowDown",
+    color: f.side === "BUY" ? c.up : c.down,
+    text: (f.side === "BUY" ? "+" : "−") + qty(Math.abs(f.qty)) + (f.price > 0 ? " @ " + px(f.price) : (f.flags && f.flags.indexOf("reward") >= 0 ? " reward" : "")),
+  }));
+}
+function mountTradeChart() {
+  const host = document.getElementById("tradeChart");
+  if (_chart) { _chart.remove(); _chart = null; }
+  if (!host || !window.LightweightCharts) return;
+  const t = state.sel ? tradeById(state.sel) : null;
+  if (!t) return;
+  const c = chartColors();
+  const LW = window.LightweightCharts;
+  loadHistory(t).then((bars) => {
+    if (!document.getElementById("tradeChart") || state.sel !== t.id || _chart) return;
+    // With real bars every execution is marked on its day, a zero-price fill
+    // (a staking reward) included. Without bars only priced fills can be placed.
+    const timed = (t.fills || []).filter((f) => isFinite(Date.parse(f.when))).sort((a, b) => (a.when < b.when ? -1 : a.when > b.when ? 1 : 0));
+    const fills = bars.length ? timed : timed.filter((f) => f.price > 0);
+    const candles = bars.length > 0 && bars.every((b) => b.open != null && b.high != null && b.low != null);
+    const chart = LW.createChart(host, {
+      autoSize: true,
+      layout: { background: { type: "solid", color: "transparent" }, textColor: c.text, fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: true },
+      grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+      rightPriceScale: { borderColor: c.grid },
+      timeScale: { borderColor: c.grid, timeVisible: false, secondsVisible: false },
+      crosshair: { mode: LW.CrosshairMode.Normal },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
+    });
+    _chart = chart;
+    window.__bhChart = chart;
+    let series;
+    if (candles) {
+      series = chart.addSeries(LW.CandlestickSeries, { upColor: c.up, downColor: c.down, borderUpColor: c.up, borderDownColor: c.down, wickUpColor: c.up, wickDownColor: c.down, priceLineVisible: false, lastValueVisible: false });
+      series.setData(bars.map((b) => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close })));
+    } else if (bars.length) {
+      series = chart.addSeries(LW.LineSeries, { color: c.line, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      series.setData(bars.map((b) => ({ time: b.date, value: b.close })));
+    } else {
+      const pts = fills.map((f) => ({ time: Math.round(Date.parse(f.when) / 1000), value: f.price }));
+      for (let i = 1; i < pts.length; i++) if (pts[i].time <= pts[i - 1].time) pts[i].time = pts[i - 1].time + 1;
+      series = chart.addSeries(LW.LineSeries, { color: c.line, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
+      series.setData(pts);
+    }
+    const markers = fillMarkers(fills, bars, c);
+    if (!bars.length) { const pts = series.data(); markers.forEach((m, i) => { if (pts[i]) m.time = pts[i].time; }); }
+    // Labels only once the view is zoomed in enough to read them: fewer than 80
+    // bars (or executions) across the chart. Arrows are always shown.
+    const bare = markers.map((m) => Object.assign({}, m, { text: "" }));
+    const sm = LW.createSeriesMarkers(series, bare);
+    let labelled = false;
+    const relabel = (r) => { const want = !!r && (r.to - r.from) < 80; if (want !== labelled) { labelled = want; sm.setMarkers(want ? markers : bare); } };
+    const kept = _chartRange[t.id];
+    const fit = () => { if (_chart !== chart) return; if (kept) chart.timeScale().setVisibleLogicalRange(kept); else chart.timeScale().fitContent(); relabel(chart.timeScale().getVisibleLogicalRange()); };
+    fit();
+    // autoSize learns the card's width a frame after the redraw; fit again then
+    requestAnimationFrame(() => requestAnimationFrame(fit));
+    chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { if (r) { _chartRange[t.id] = r; relabel(r); } });
+  });
 }
 function execSortValue(e, key) { if (key === "when") return e.when; if (key === "side") return e.side; if (key === "qty") return e.qty; if (key === "currency") return e.currency; if (key === "price") return e.price; return e.amount; }
 function tradeDetailHtml(t, m) {
-  const c = tradeChart(t);
   const fact = (l, v) => '<div><div class="lbl">' + l + '</div><div class="tab" style="font-size:13px">' + v + "</div></div>";
   const s = state.sort.execs;
   const execs = sortRows(t.fills || [], s.key, s.dir, execSortValue);
@@ -912,12 +961,7 @@ function tradeDetailHtml(t, m) {
     '<div class="card elev-sm" style="padding:16px 18px 12px"><div style="display:flex;align-items:flex-start;gap:14px;margin:0 0 14px"><div style="min-width:0"><h4>' + esc(t.symbol) + '</h4><div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(t.name || t.symbol) + (t.exchange ? " · " + esc(t.exchange) : "") + "</div>" +
 "</div>" +
     '<div style="margin-left:auto;text-align:right"><div class="tab" style="font-size:24px;font-weight:500;line-height:1.1;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</div><div class="tab" style="font-size:12px;color:' + color(t.pnl) + ';margin-top:2px">' + pct(t.pnlPct) + "</div></div></div>" +
-    (c ? '<div class="tab"><div style="position:relative"><svg viewBox="0 0 1200 300" style="display:block;width:100%;height:auto">' +
-      c.ticks.map((k) => '<line x1="54" y1="' + k.y + '" x2="1180" y2="' + k.y + '" style="stroke:var(--grid)"/>').join("") +
-      '<path d="' + c.path + '" fill="none" style="stroke:rgba(var(--ink-rgb),.42)" stroke-width="1.5" stroke-linejoin="round"/>' +
-      c.marks.map((k) => '<circle cx="' + k.x + '" cy="' + k.y + '" r="6" style="fill:' + k.fill + ';stroke:' + k.stroke + '" stroke-width="2"><title>' + esc(k.title) + "</title></circle>").join("") + "</svg>" +
-      c.ticks.map((k) => '<span style="position:absolute;right:' + c.labelRight + ";top:" + k.top + ';transform:translateY(-50%);font-size:10px;line-height:1;color:var(--ink60)">' + k.label + "</span>").join("") + "</div>" +
-      '<div style="display:flex;justify-content:space-between;padding-left:' + c.plotLeft + ";padding-right:" + c.plotRight + ';margin-top:4px;font-size:10px;color:var(--ink60)"><span>' + esc(c.from) + '</span><span>' + esc(c.to) + "</span></div></div>" : "") + "</div>" +
+    '<div id="tradeChart" style="position:relative;height:300px"></div></div>' +
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch;height:372px">' +
     '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div class="rule-b" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:0 0 14px">' +
     fact("Open", esc(t.entryDate)) + fact("Close", esc(t.exitDate)) + fact("Entry", px(t.entry)) + fact("Exit", px(t.exit)) + fact("Hold", hold(t.holdDays)) + fact("Account", esc(t.account)) + "</div>" +
@@ -1093,6 +1137,7 @@ function render() {
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
   const menu = document.getElementById("tagMenu");
   if (menu) menu.innerHTML = tagMenuHtml();
+  mountTradeChart();
 }
 function renderHeaderOnly() {
   const hdr = document.getElementById("hdr");

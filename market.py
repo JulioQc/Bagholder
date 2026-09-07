@@ -43,6 +43,15 @@ COINBASE_URL = "https://api.coinbase.com/v2/prices/%s/spot"
 CBOE_CA_URL = "https://www-api.cboe.com/ca/equities/securities-1/%s/quote/"
 CBOE_OPTIONS_URL = "https://cdn.cboe.com/api/global/delayed_quotes/options/%s.json"
 CBOE_CANADA_EXCHANGES = ("CBOE CANADA", "NEO")
+TMX_HISTORY_QUERY = (
+    "query getTimeSeriesData($symbol: String!, $freq: String, $interval: Int, $start: String, $end: String) "
+    "{ getTimeSeriesData(symbol: $symbol, freq: $freq, interval: $interval, start: $start, end: $end) { dateTime open high low close volume } }"
+)
+CBOE_CA_HISTORY_URL = "https://www-api.cboe.com/ca/equities/securities-1/%s/trading-activity-historical/"
+COINGECKO_SEARCH_URL = "https://api.coingecko.com/api/v3/search?query=%s"
+COINGECKO_RANGE_URL = "https://api.coingecko.com/api/v3/coins/%s/market_chart/range?vs_currency=%s&from=%d&to=%d&interval=daily"
+COINGECKO_MAX_DAYS = 365
+HISTORY_STALE_HOURS = 20
 RECORD_STALE_HOURS = QUOTE_STALE_HOURS
 MARKET_ATTEMPT_HOURS = 6
 CANADIAN_EXCHANGES = ("TSX", "TSX-V", "TSXV", "CSE", "CBOE CANADA", "NEO", "ALPHA EXCHANGE")
@@ -558,6 +567,139 @@ def fx_day_published_but_missing(now=None):
     if et.weekday() > 4 or (et.hour, et.minute) < BOC_PUBLISH_ET:
         return False
     return (store.fx_last_date() or "") < et.date().isoformat()
+
+
+# --------------------------------------------------------------------------
+# daily price history for the trade chart
+# --------------------------------------------------------------------------
+
+
+def parse_tmx_history(data):
+    rows = ((data or {}).get("data") or {}).get("getTimeSeriesData") or []
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        d = str(r.get("dateTime") or "")[:10]
+        if len(d) == 10:
+            out.append({"date": d, "open": r.get("open"), "high": r.get("high"), "low": r.get("low"), "close": r.get("close"), "volume": r.get("volume")})
+    out.sort(key=lambda b: b["date"])
+    return out
+
+
+def parse_cboe_ca_history(text):
+    rows = (json.loads(text or "{}") or {}).get("data") or []
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        d = str(r.get("date") or "")[:10]
+        if len(d) == 10:
+            out.append({"date": d, "open": r.get("open"), "high": r.get("high"), "low": r.get("low"), "close": r.get("close"), "volume": r.get("volume")})
+    out.sort(key=lambda b: b["date"])
+    return out
+
+
+def parse_coingecko_range(text):
+    """CoinGecko gives one price per day (no open/high/low): close only."""
+    d = json.loads(text or "{}") or {}
+    out = {}
+    for ts, px in d.get("prices") or []:
+        try:
+            day = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).date().isoformat()
+        except (TypeError, ValueError, OSError):
+            continue
+        if px and px > 0:
+            out[day] = {"date": day, "open": None, "high": None, "low": None, "close": px, "volume": None}
+    return [out[k] for k in sorted(out)]
+
+
+def coingecko_id(symbol, ssl_context=None):
+    """CoinGecko's id for a crypto symbol, remembered once found."""
+    sym = str(symbol or "").strip().upper()
+    if not sym:
+        return ""
+    key = "coingecko_id:" + sym
+    cached = store.get_meta(key)
+    if cached:
+        return cached
+    try:
+        d = json.loads(_get_text(COINGECKO_SEARCH_URL % sym, ssl_context) or "{}") or {}
+    except Exception:
+        return ""
+    hits = [c for c in d.get("coins") or [] if str(c.get("symbol") or "").upper() == sym and c.get("id")]
+    hits.sort(key=lambda c: c.get("market_cap_rank") or 10 ** 9)
+    if not hits:
+        return ""
+    store.set_meta(key, hits[0]["id"])
+    return hits[0]["id"]
+
+
+def history_source(rec):
+    """(source, key) for daily bars, or None when nothing public covers the instrument."""
+    src = quote_source(rec)
+    if not src:
+        return None
+    source, key = src
+    if source == "tmx":
+        return ("tmx", key)
+    if source == "cboe_ca":
+        return ("cboe_ca", key)
+    if source == "coinbase":
+        return ("coingecko", key)
+    return None
+
+
+def fetch_history(rec, start, end, ssl_context=None):
+    """Daily bars for one instrument between two dates, oldest first."""
+    src = history_source(rec)
+    if not src:
+        return [], ""
+    source, key = src
+    try:
+        if source == "tmx":
+            data = _post_json(TMX_URL, {"operationName": "getTimeSeriesData", "variables": {"symbol": key, "freq": "day", "interval": 1, "start": start, "end": end}, "query": TMX_HISTORY_QUERY}, ssl_context, _TMX_HEADERS)
+            return parse_tmx_history(data), source
+        if source == "cboe_ca":
+            return parse_cboe_ca_history(_get_text(CBOE_CA_HISTORY_URL % key, ssl_context)), source
+        if source == "coingecko":
+            sym, ccy = key.split("-", 1)
+            cid = coingecko_id(sym, ssl_context)
+            if not cid:
+                return [], ""
+            end_dt = datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+            start_dt = max(datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc), end_dt - timedelta(days=COINGECKO_MAX_DAYS))
+            return parse_coingecko_range(_get_text(COINGECKO_RANGE_URL % (cid, ccy.lower(), int(start_dt.timestamp()), int(end_dt.timestamp())), ssl_context)), source
+    except Exception:
+        return [], ""
+    return [], ""
+
+
+def ensure_history(rec, start, end, ssl_context=None, now=None):
+    """Stored bars for [start, end], fetching when the span was never fetched or
+    the copy is older than HISTORY_STALE_HOURS and the span reaches the present."""
+    now = now or datetime.now(timezone.utc)
+    sym = tmx_symbol(rec.get("symbol"))
+    start, end = str(start or "")[:10], str(end or "")[:10]
+    if not sym or len(start) != 10 or len(end) != 10:
+        return []
+    last = store.history_fetch(sym)
+    covered = bool(last) and last["start"] <= start
+    fresh = False
+    if last:
+        try:
+            fresh = now - datetime.fromisoformat(last["fetchedAt"].replace("Z", "+00:00")) < timedelta(hours=HISTORY_STALE_HOURS)
+        except ValueError:
+            fresh = False
+    today = now.date().isoformat()
+    needs_recent = end >= (now.date() - timedelta(days=3)).isoformat()
+    if not covered or (needs_recent and not fresh):
+        fetch_from = start if not covered else min(start, last["start"])
+        bars, source = fetch_history(rec, fetch_from, today, ssl_context)
+        if bars:
+            store.upsert_price_history(sym, bars, source)
+            store.mark_history_fetched(sym, fetch_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return store.price_history(sym, start, end)
 
 
 def refresh_periodic(ssl_context=None, symbols=None, now=None):

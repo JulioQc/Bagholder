@@ -3101,6 +3101,22 @@ def sync_then_market():
     return ok
 
 
+def history_payload(query):
+    """Daily bars for one instrument over a date span, fetched and cached on demand."""
+    q = parse_qs(query or "")
+    one = lambda k: (q.get(k) or [""])[0].strip()
+    rec = {"symbol": one("symbol"), "exchange": one("exchange"), "currency": one("currency") or "CAD", "kind": one("kind") or "Shares"}
+    start, end = one("from")[:10], one("to")[:10]
+    if not rec["symbol"] or len(start) != 10 or len(end) != 10:
+        return {"ok": False, "error": "symbol, from and to are required"}
+    src = market.history_source(rec)
+    try:
+        bars = market.ensure_history(rec, start, end, _ssl_context()) if src else []
+    except Exception:
+        bars = []
+    return {"ok": True, "symbol": rec["symbol"], "source": src[0] if src else "", "bars": bars}
+
+
 def _model_filters(query):
     raw = (parse_qs(query or "").get("filters") or [""])[0]
     if not raw:
@@ -3191,6 +3207,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(403, {"ok": False})
                 return
             self._send(200, status_payload())
+            return
+        if path == "/api/history":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            self._send(200, history_payload(self.path.split("?", 1)[1] if "?" in self.path else ""))
+            return
+        if path == "/lightweight-charts.js":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            lib = Path(__file__).resolve().parent / "lightweight-charts.js"
+            try:
+                data = lib.read_bytes()
+            except OSError:
+                self._send(404, {"ok": False, "error": "lightweight-charts.js missing"})
+                return
+            self._send(200, data, "application/javascript; charset=utf-8")
             return
         if path == "/api/watch":
             if not self._gate():

@@ -1242,6 +1242,58 @@ class MarketParseTest(unittest.TestCase):
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
+    def test_history_parsers_and_sources(self):
+        tmx = {"data": {"getTimeSeriesData": [{"dateTime": "2026-09-04T16:00:00-04:00", "open": 4.8, "high": 4.8, "low": 4.68, "close": 4.75, "volume": 50972}, {"dateTime": "2026-09-03T16:00:00-04:00", "open": 4.83, "high": 4.95, "low": 4.73, "close": 4.75, "volume": 115702}]}}
+        bars = market.parse_tmx_history(tmx)
+        self.assertEqual([b["date"] for b in bars], ["2026-09-03", "2026-09-04"])
+        self.assertEqual(bars[1]["close"], 4.75)
+        cboe = json.dumps({"data": [{"date": "2026-09-04", "open": "6.59", "close": "6.70", "high": 6.7, "low": 6.58, "volume": 53193.0}, {"date": "2026-09-03", "open": "6.56", "close": "6.76", "high": 6.76, "low": 6.54, "volume": 35377.0}]})
+        bars = market.parse_cboe_ca_history(cboe)
+        self.assertEqual([(b["date"], b["close"]) for b in bars], [("2026-09-03", "6.76"), ("2026-09-04", "6.70")])
+        gecko = json.dumps({"prices": [[1787000400000, 89278.71], [1787086800000, 88900.0], [1787090400000, 88950.0]]})
+        bars = market.parse_coingecko_range(gecko)
+        self.assertEqual([b["date"] for b in bars], ["2026-08-17", "2026-08-18"])
+        self.assertEqual(bars[1]["close"], 88950.0, "the last point of a day wins")
+        self.assertIsNone(bars[0]["open"])
+        src = market.history_source
+        self.assertEqual(src({"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}), ("tmx", "RDDY"))
+        self.assertEqual(src({"symbol": "LUNR", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}), ("tmx", "LUNR:US"))
+        self.assertEqual(src({"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD", "kind": "Shares"}), ("cboe_ca", "HBIX"))
+        self.assertEqual(src({"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}), ("coingecko", "BTC-CAD"))
+        self.assertIsNone(src({"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}))
+
+    def test_history_is_cached_and_closed_days_never_rewritten(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                rec = {"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}
+                bars = [{"date": "2026-09-03", "open": 4.83, "high": 4.95, "low": 4.73, "close": 4.75, "volume": 1}, {"date": "2026-09-04", "open": 4.8, "high": 4.8, "low": 4.68, "close": 4.75, "volume": 1}]
+                now = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
+                with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")) as f:
+                    out = market.ensure_history(rec, "2026-08-25", "2026-09-05", now=now)
+                self.assertEqual([b["date"] for b in out], ["2026-09-03", "2026-09-04"])
+                self.assertEqual(f.call_args.args[1:3], ("2026-08-25", "2026-09-05"))
+                # Same span, minutes later: served from the store, no fetch.
+                with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")) as f:
+                    market.ensure_history(rec, "2026-08-25", "2026-09-05", now=now + timedelta(minutes=5))
+                self.assertEqual(f.call_count, 0)
+                # An older span was never fetched: fetched from that start.
+                with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")) as f:
+                    market.ensure_history(rec, "2026-06-01", "2026-06-30", now=now + timedelta(minutes=5))
+                self.assertEqual(f.call_args.args[1], "2026-06-01")
+                # A span reaching the present is refetched once the copy is a day old; a
+                # closed day keeps its bar, the newest day may be replaced.
+                changed = [{"date": "2026-09-03", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}, {"date": "2026-09-04", "open": 4.8, "high": 4.9, "low": 4.68, "close": 4.85, "volume": 2}]
+                with mock.patch.object(market, "fetch_history", return_value=(changed, "tmx")) as f:
+                    out = market.ensure_history(rec, "2026-08-25", "2026-09-05", now=now + timedelta(hours=25))
+                self.assertEqual(f.call_count, 1)
+                self.assertEqual([(b["date"], b["close"]) for b in out], [("2026-09-03", 4.75), ("2026-09-04", 4.85)])
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_refresh_uses_store_and_survives_errors(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["BAGHOLDER_HOME"] = tmp

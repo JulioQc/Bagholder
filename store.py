@@ -201,6 +201,24 @@ def _init_schema(conn):
             symbol TEXT PRIMARY KEY,
             fetched_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS price_history (
+            symbol TEXT NOT NULL,
+            date TEXT NOT NULL,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL NOT NULL,
+            volume REAL,
+            source TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (symbol, date)
+        );
+
+        CREATE TABLE IF NOT EXISTS history_fetches (
+            symbol TEXT PRIMARY KEY,
+            start TEXT NOT NULL,
+            fetched_at TEXT NOT NULL
+        );
         """
     )
     _migrate_nav_history(conn)
@@ -1417,6 +1435,84 @@ def distributions_fetched_at():
         try:
             _init_schema(conn)
             return {r["symbol"]: r["fetched_at"] or "" for r in conn.execute("SELECT symbol, fetched_at FROM distribution_fetches").fetchall()}
+        finally:
+            conn.close()
+
+
+def price_history(symbol, start="", end=""):
+    """Daily bars for one symbol, oldest first: [{date, open, high, low, close, volume}]."""
+    sym = _s(symbol).strip().upper()
+    if not sym:
+        return []
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            rows = conn.execute(
+                "SELECT date, open, high, low, close, volume FROM price_history WHERE symbol = ? AND date >= ? AND date <= ? ORDER BY date",
+                (sym, _s(start)[:10] or "0000-01-01", _s(end)[:10] or "9999-12-31"),
+            ).fetchall()
+            return [{"date": r["date"], "open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"]} for r in rows]
+        finally:
+            conn.close()
+
+
+def upsert_price_history(symbol, bars, source=""):
+    """Closed days are written once and never rewritten; the newest stored day may
+    be replaced, since a source can hand back a bar for a session still in progress."""
+    sym = _s(symbol).strip().upper()
+    clean = []
+    for b in bars or []:
+        d = _s(b.get("date"))[:10]
+        close = _num(b.get("close"), None)
+        if len(d) != 10 or d[4] != "-" or close is None or close <= 0:
+            continue
+        clean.append((sym, d, _num(b.get("open"), None), _num(b.get("high"), None), _num(b.get("low"), None), close, _num(b.get("volume"), None), _s(source)))
+    if not sym or not clean:
+        return 0
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            newest = conn.execute("SELECT MAX(date) FROM price_history WHERE symbol = ?", (sym,)).fetchone()[0] or ""
+            conn.executemany("INSERT OR IGNORE INTO price_history(symbol, date, open, high, low, close, volume, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", clean)
+            if newest:
+                conn.executemany(
+                    "UPDATE price_history SET open = ?, high = ?, low = ?, close = ?, volume = ?, source = ? WHERE symbol = ? AND date = ?",
+                    [(c[2], c[3], c[4], c[5], c[6], c[7], c[0], c[1]) for c in clean if c[1] == newest],
+                )
+            conn.commit()
+            return len(clean)
+        finally:
+            conn.close()
+
+
+def history_fetch(symbol):
+    """{start, fetchedAt} of the last history fetch for a symbol, or None."""
+    sym = _s(symbol).strip().upper()
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            r = conn.execute("SELECT start, fetched_at FROM history_fetches WHERE symbol = ?", (sym,)).fetchone()
+            return {"start": r["start"], "fetchedAt": r["fetched_at"]} if r else None
+        finally:
+            conn.close()
+
+
+def mark_history_fetched(symbol, start, when):
+    sym = _s(symbol).strip().upper()
+    if not sym or not when:
+        return
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute(
+                "INSERT INTO history_fetches(symbol, start, fetched_at) VALUES (?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET start = MIN(history_fetches.start, excluded.start), fetched_at = excluded.fetched_at",
+                (sym, _s(start)[:10], _s(when)),
+            )
+            conn.commit()
         finally:
             conn.close()
 
