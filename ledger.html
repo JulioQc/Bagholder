@@ -1009,11 +1009,11 @@ function cashflowHtml(m) {
   for (let i = 0; i < want; i++) axis.push(ms[Math.round(i * (ms.length - 1) / Math.max(1, want - 1))].label);
   const ycols = [{ key: "symbol", label: "Holding", width: "12%" }, { key: "qty", label: "Qty", align: "right" }, { key: "avg", label: "Avg", align: "right" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "per", label: "Distribution", align: "right" }, { key: "ytd", label: "YTD", align: "right" }, { key: "all", label: "All time", align: "right" }, { key: "yob", label: "Projected", align: "right" }, { key: "yoc", label: "Yield on cost", align: "right" }, { key: "currentYield", label: "Current yield", align: "right", padRight: "0px" }];
   const ys = state.sort.yoc;
-  const posBySym = {};
-  (m.positions || []).forEach((p) => { posBySym[p.symbol] = p; });
+  const posById = {};
+  (m.positions || []).forEach((p) => { posById[p.id] = p; });
   const holdingRows = (c.holdings || []).map((h) => {
-    const p = posBySym[h.symbol];
-    return Object.assign({}, h, { avg: p ? p.avg : (h.qty ? h.cost / h.qty : null), mv: p ? p.mv : null });
+    const p = posById[h.id];
+    return Object.assign({}, h, { mv: p ? p.mv : null });
   });
   const holdings = sortRows(holdingRows, ys.key, ys.dir, (r, k) => r[k]);
   const dcols = [{ key: "date", label: "Date" }, { key: "symbol", label: "Symbol" }, { key: "kind", label: "Type" }, { key: "account", label: "Account" }, { key: "qty", label: "Qty", align: "right" }, { key: "per", label: "Distribution", align: "right" }, { key: "amount", label: "Amount", align: "right" }];
