@@ -11,29 +11,30 @@
 <style>
 html{color-scheme:dark}
 :root{
-  --bg:#161826;--surface:#232532;--n900:#292b31;--accent:#9184d9;--accent-300:#d2cefd;--accent-900:#2b2741;
+  --mat:#101220;--bg:#161826;--surface:#232532;--n900:#292b31;--accent:#9184d9;--accent-300:#d2cefd;--accent-900:#2b2741;
   --ink:#e9e9ed;--ink-rgb:233,233,237;--ink75:rgba(233,233,237,.8);--ink60:rgba(233,233,237,.68);--ink55:rgba(233,233,237,.62);
   --hair:rgba(233,233,237,.14);--grid:rgba(233,233,237,.07);--pos:#6fd39b;--neg:#e0778a;--mixed:#7972a9;
   --shadow-sm:0 1px 2px rgba(0,0,0,.28);--shadow-md:0 10px 28px rgba(0,0,0,.45),0 0 0 1px rgba(233,233,237,.06);
   --font:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--font-num:var(--font);--brand-color:var(--ink);--brand-transform:none;--brand-spacing:.02em;--outline:.1;--field:rgba(22,24,38,.55);
 }
 html[data-theme="midnight"]{
-  --bg:#0b0d12;--surface:#10131a;--n900:#171b24;--accent:#3fd68a;--accent-300:#8fe8b8;--accent-900:#123324;
+  --mat:#06070b;--bg:#0b0d12;--surface:#10131a;--n900:#171b24;--accent:#3fd68a;--accent-300:#8fe8b8;--accent-900:#123324;
   --ink:#e6e8ee;--ink-rgb:230,232,238;--ink75:rgba(230,232,238,.8);--ink60:rgba(230,232,238,.66);--ink55:rgba(230,232,238,.6);
   --hair:rgba(230,232,238,.16);--grid:rgba(230,232,238,.08);--pos:#3fd68a;--neg:#ff6b7a;--mixed:#6c6f8a;
   --shadow-sm:0 1px 2px rgba(0,0,0,.5);--shadow-md:0 10px 28px rgba(0,0,0,.6),0 0 0 1px rgba(230,232,238,.08);
   --font-num:ui-monospace,"JetBrains Mono","SF Mono",Menlo,monospace;--brand-color:#3fd68a;--brand-transform:uppercase;--brand-spacing:.12em;--outline:.14;--field:rgba(4,5,9,.6);
 }
 html[data-theme="light"]{color-scheme:light;
-  --bg:#f3f4f8;--surface:#ffffff;--n900:#eceef4;--accent:#6b5cd6;--accent-300:#4a3bb8;--accent-900:#e7e3fb;
+  --mat:#e4e6ee;--bg:#f3f4f8;--surface:#ffffff;--n900:#eceef4;--accent:#6b5cd6;--accent-300:#4a3bb8;--accent-900:#e7e3fb;
   --ink:#1b1d27;--ink-rgb:27,29,39;--ink75:rgba(27,29,39,.8);--ink60:rgba(27,29,39,.64);--ink55:rgba(27,29,39,.58);
   --hair:rgba(27,29,39,.14);--grid:rgba(27,29,39,.07);--pos:#178a52;--neg:#c8384f;--mixed:#8c86b8;
   --shadow-sm:0 1px 2px rgba(20,22,40,.08);--shadow-md:0 10px 28px rgba(20,22,40,.16),0 0 0 1px rgba(27,29,39,.08);
   --outline:.12;--field:rgba(27,29,39,.04);
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);color-scheme:dark}
-body{font:400 13px/1.45 var(--font);-webkit-font-smoothing:antialiased;min-height:100vh}
+html,body{margin:0;background:var(--mat);color:var(--ink);color-scheme:dark}
+body{font:400 13px/1.45 var(--font);-webkit-font-smoothing:antialiased;min-height:100vh;padding:24px}
+#app{background:var(--bg);border-radius:20px;box-shadow:0 0 0 1px var(--hair);overflow:hidden;min-height:calc(100vh - 48px)}
 button{font-family:inherit}
 a{color:var(--accent)}
 h4,h5{font-weight:500;margin:0;letter-spacing:0}
@@ -275,7 +276,7 @@ function th(table, cols) {
     const right = c.align === "right";
     return '<th data-act="sort" data-arg=\'' + attr({ table, key: c.key }) + "' style=\"white-space:nowrap;text-align:" + (c.align || "left") +
       ";cursor:pointer;position:sticky;top:0;z-index:1;color:" + (on ? "var(--ink)" : "rgba(var(--ink-rgb),.6)") +
-      (c.padLeft ? ";padding-left:" + c.padLeft : "") + (c.padRight ? ";padding-right:" + c.padRight : "") + '">' +
+      (c.padLeft ? ";padding-left:" + c.padLeft : "") + (c.padRight ? ";padding-right:" + c.padRight : "") + (c.width ? ";width:" + c.width : "") + '">' +
       '<span class="th-in" style="flex-direction:' + (right ? "row-reverse" : "row") + '">' + esc(c.label) +
       '<span class="arrow" style="color:' + (on ? "var(--accent)" : "transparent") + '">' + (on && s.dir === "asc" ? "▲" : "▼") + "</span></span></th>";
   }).join("");
@@ -832,22 +833,22 @@ function tradeSortValue(t, key) {
 }
 function tradesTableHtml(m) {
   const cols = [
-    { key: "entryDate", label: "Open", padRight: "12px" }, { key: "exitDate", label: "Close" }, { key: "symbol", label: "Symbol" }, { key: "exchange", label: "Exchange" },
-    { key: "qty", label: "Qty", align: "right" }, { key: "entry", label: "Entry", align: "right" }, { key: "exit", label: "Exit", align: "right" },
-    { key: "currency", label: "FX", align: "center", padLeft: "24px", padRight: "24px" }, { key: "pnl", label: "P&L", align: "right" }, { key: "pnlPct", label: "P&L %", align: "right" }, { key: "holdDays", label: "Hold", align: "right" },
-    { key: "grade", label: "Grade", padLeft: "22px" }, { key: "tags", label: "Tags" },
+    { key: "entryDate", label: "Open", width: "133px" }, { key: "exitDate", label: "Close", width: "133px" }, { key: "symbol", label: "Symbol", width: "90px" }, { key: "exchange", label: "Exchange", width: "82px" },
+    { key: "qty", label: "Qty", align: "right", width: "101px" }, { key: "entry", label: "Entry", align: "right", width: "99px" }, { key: "exit", label: "Exit", align: "right", width: "99px" },
+    { key: "currency", label: "FX", align: "center", width: "108px" }, { key: "pnl", label: "P&L", align: "right", width: "96px" }, { key: "pnlPct", label: "P&L %", align: "right", width: "107px" }, { key: "holdDays", label: "Hold", align: "right", width: "87px" },
+    { key: "grade", label: "Grade", padLeft: "50px", width: "110px" }, { key: "tags", label: "Tags" },
   ];
   const s = state.sort.trades;
   const rows = sortRows(m.trades || [], s.key, s.dir, tradeSortValue);
   return '<div class="card elev-sm" style="min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Trades</h5></div>' +
-    '<div class="scroll-xy" data-keep-scroll="trades" style="flex:1;min-height:0"><table class="table" style="min-width:760px"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
+    '<div class="scroll-xy" data-keep-scroll="trades" style="flex:1;min-height:0"><table class="table" style="min-width:1256px;table-layout:fixed"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
     rows.map((t) => '<tr class="tab" style="cursor:pointer" data-act="selectTrade" data-arg=\'' + attr({ id: t.id }) + "'>" +
       '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + "</td>" +
-      '<td title="' + esc(t.symbol) + '" style="font-weight:500;font-variant-numeric:normal;max-width:186px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.symbol) + "</td>" +
-      '<td class="dim" style="font-variant-numeric:normal;white-space:nowrap">' + esc(t.exchange || "—") + "</td>" +
-      '<td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center;padding:7px 24px">' + esc(t.currency) + "</td>" +
+      '<td title="' + esc(t.symbol) + '" style="font-weight:500;font-variant-numeric:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.symbol) + "</td>" +
+      '<td class="dim" style="font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(t.exchange || "—") + "</td>" +
+      '<td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center">' + esc(t.currency) + "</td>" +
       '<td style="text-align:right;font-weight:500;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</td><td style="text-align:right;color:' + color(t.pnl) + '">' + pct(t.pnlPct) + "</td>" +
-      '<td style="text-align:right" class="dim">' + hold(t.holdDays) + '</td><td style="white-space:nowrap;max-width:64px;padding-left:22px">' + gradeChip(t) + "</td>" +
+      '<td style="text-align:right" class="dim">' + hold(t.holdDays) + '</td><td style="white-space:nowrap;padding-left:50px">' + gradeChip(t) + "</td>" +
       '<td style="font-variant-numeric:normal">' + (t.tags && t.tags.length ? '<span class="tagchip" title="' + esc(t.tags[0]) + '">' + esc(t.tags[0]) + "</span>" + (t.tags.length > 1 ? '<span class="muted" style="font-size:10.5px;margin-left:4px">+' + (t.tags.length - 1) + "</span>" : "") : '<span style="color:rgba(var(--ink-rgb),.5)">—</span>') + "</td></tr>").join("") +
     "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No trades match these filters. <a href="#" data-act="clearAll">Reset all</a></div>') + "</div></div>";
 }
@@ -995,8 +996,8 @@ function positionPanelHtml(p) {
 function cashflowHtml(m) {
   const c = m.cashflow;
   const tiles = c.tiles.map((t) => {
-    if (t.label === "Yield on cost") return '<div class="card elev-sm" style="padding:13px 14px"><div class="lbl">Yield on cost</div><div class="tab" style="font-size:21px;font-weight:500;margin-top:5px;color:var(--accent-300)">' + (t.yield == null ? "—" : pctPlain(t.yield, 2)) + '</div><div class="dim" style="font-size:11px;margin-top:3px">' + (t.book ? money0(t.earned) + " earned on " + money0(t.book) + " book cost" : "No income holdings in scope") + "</div></div>";
-    return '<div class="card elev-sm" style="padding:13px 14px"><div class="lbl">' + esc(t.label) + '</div><div class="tab" style="font-size:21px;font-weight:500;margin-top:5px">' + money0(t.total) + '</div><div class="dim" style="font-size:11px;margin-top:3px">' + money0(t.perMonth) + "/mo avg</div></div>";
+    if (t.label === "Yield on cost") return '<div class="card elev-sm kpi"><div class="lbl">Yield on cost</div><div class="tab v" style="color:var(--accent-300)">' + (t.yield == null ? "—" : pctPlain(t.yield, 2)) + '</div><div class="s">' + (t.book ? money0(t.earned) + " earned on " + money0(t.book) + " book cost" : "No income holdings in scope") + "</div></div>";
+    return '<div class="card elev-sm kpi"><div class="lbl">' + esc(String(t.label).replace(/^\d{4} YTD$/, "YTD")) + '</div><div class="tab v">' + money0(t.total) + '</div><div class="s">' + money0(t.perMonth) + "/mo avg</div></div>";
   }).join("");
   const skipped = c.skippedFilters || [];
   const note = skipped.length ? skipped.join(", ") + (skipped.length > 1 ? " filters do not" : " filter does not") + " apply to distributions — only account, date and symbol narrow this page." : "";
@@ -1006,9 +1007,15 @@ function cashflowHtml(m) {
   const want = Math.min(6, ms.length);
   const axis = [];
   for (let i = 0; i < want; i++) axis.push(ms[Math.round(i * (ms.length - 1) / Math.max(1, want - 1))].label);
-  const ycols = [{ key: "symbol", label: "Holding" }, { key: "qty", label: "Qty", align: "right" }, { key: "per", label: "Distribution", align: "right" }, { key: "cost", label: "Book cost", align: "right" }, { key: "ytd", label: "YTD", align: "right" }, { key: "ttm", label: "1Y", align: "right" }, { key: "all", label: "All time", align: "right" }, { key: "yob", label: "Yield on book", align: "right" }, { key: "yoc", label: "Yield on cost", align: "right" }, { key: "currentYield", label: "Current yield", align: "right", padRight: "0px" }];
+  const ycols = [{ key: "symbol", label: "Holding", width: "12%" }, { key: "qty", label: "Qty", align: "right" }, { key: "avg", label: "Avg", align: "right" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "per", label: "Distribution", align: "right" }, { key: "ytd", label: "YTD", align: "right" }, { key: "all", label: "All time", align: "right" }, { key: "yob", label: "Projected", align: "right" }, { key: "yoc", label: "Yield on cost", align: "right" }, { key: "currentYield", label: "Current yield", align: "right", padRight: "0px" }];
   const ys = state.sort.yoc;
-  const holdings = sortRows(c.holdings || [], ys.key, ys.dir, (r, k) => r[k]);
+  const posBySym = {};
+  (m.positions || []).forEach((p) => { posBySym[p.symbol] = p; });
+  const holdingRows = (c.holdings || []).map((h) => {
+    const p = posBySym[h.symbol];
+    return Object.assign({}, h, { avg: p ? p.avg : (h.qty ? h.cost / h.qty : null), mv: p ? p.mv : null });
+  });
+  const holdings = sortRows(holdingRows, ys.key, ys.dir, (r, k) => r[k]);
   const dcols = [{ key: "date", label: "Date" }, { key: "symbol", label: "Symbol" }, { key: "kind", label: "Type" }, { key: "account", label: "Account" }, { key: "qty", label: "Qty", align: "right" }, { key: "per", label: "Distribution", align: "right" }, { key: "amount", label: "Amount", align: "right" }];
   const cs = state.sort.cash;
   const rows = sortRows(c.rows || [], cs.key, cs.dir, (r, k) => r[k]);
@@ -1023,8 +1030,8 @@ function cashflowHtml(m) {
     (ms.length ? ms.map((b, i) => '<div class="bar-col" data-i="' + i + '" style="cursor:default"><div style="position:absolute;left:0;right:0;bottom:6%;height:' + (b.count === 0 ? 0 : Math.max(1.5, b.value / head * 94)).toFixed(1) + '%;background:var(--accent);border-radius:2px 2px 0 0"></div></div>').join("") : '<div class="muted empty" style="flex:1;font-size:12px">No distributions in this range.</div>') +
     '</div></div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink60);padding-left:68px;margin-top:6px">' + [...new Set(axis)].map((a) => "<span>" + esc(a) + "</span>").join("") + "</div>" +
     (otherLine ? '<div class="muted" style="font-size:10px;margin-top:8px;padding-left:68px">' + esc(otherLine) + "</div>" : "") + "</div>" +
-    '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Cashflow Positions</h5><div class="scroll" style="max-height:344px"><table class="table" style="font-size:12px"><thead><tr>' + th("yoc", ycols) + "</tr></thead><tbody>" +
-    (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(h.symbol) + '</td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2)) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.ttm) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right">' + (h.yob == null ? "—" : money0(h.yob)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="10" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
+    '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Cashflow Positions</h5><div class="scroll" style="max-height:344px"><table class="table" style="font-size:12px;table-layout:fixed"><thead><tr>' + th("yoc", ycols) + "</tr></thead><tbody>" +
+    (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(h.symbol) + '</td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + px(h.avg) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.mv == null ? "—" : money0(h.mv)) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2)) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right">' + (h.yob == null ? "—" : money0(h.yob)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="11" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
     "</tbody></table></div></div>" +
     '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Distribution history</h5><div class="scroll-xy" style="max-height:420px"><table class="table" style="min-width:600px;font-size:12px"><thead><tr>' + th("cash", dcols) + "</tr></thead><tbody>" +
     (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.kind) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="7" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
