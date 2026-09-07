@@ -205,6 +205,10 @@ function chartTfFor(t, available) {
 }
 function chartTf() { const t = state.sel ? tradeById(state.sel) : null; return t ? chartTfFor(t) : "1d"; }
 function setChartTf(tf) { if (state.sel) _tfByTrade[state.sel] = tf; }
+// The index the yearly returns are compared against: a preference, not a filter
+const BENCHMARKS = [["SP500", "S&P 500"], ["TSX", "S&P/TSX"]];
+function benchmarkPref() { const v = state.benchmark || (function () { try { return localStorage.getItem("bh2.benchmark"); } catch (e) { return ""; } })(); return BENCHMARKS.some((x) => x[0] === v) ? v : "SP500"; }
+function setBenchmark(key) { state.benchmark = key; try { localStorage.setItem("bh2.benchmark", key); } catch (e) {} loadModel(); }
 function chartBasis() { const v = state.chartBasis || (function () { try { return localStorage.getItem("bh2.chartBasis"); } catch (e) { return ""; } })(); return v === "contract" ? "contract" : "underlying"; }
 function setChartBasis(b) { state.chartBasis = b; try { localStorage.setItem("bh2.chartBasis", b); } catch (e) {} }
 function applyTheme(name) {
@@ -334,7 +338,7 @@ function loadModel() {
   const seq = ++_loadSeq;
   state.loading = true;
   if (!state.model) render();
-  const q = encodeURIComponent(JSON.stringify(state.filters));
+  const q = encodeURIComponent(JSON.stringify(Object.assign({}, state.filters, { benchmark: benchmarkPref() })));
   return fetch("/api/model?filters=" + q, { headers: { "X-Bagholder": "1" } })
     .then((r) => r.json())
     .then((m) => {
@@ -467,7 +471,6 @@ function menuHtml() {
     item("folder", "Load folder", "openFolder") +
     item("export", "Export trades CSV", "exportCsv") +
     item("trash", "Clear data", "openData") +
-    item("gear", "Settings", null, { disabled: true }) +
     '<div class="sep"></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px 4px"><span class="lbl" style="margin-right:auto">Theme</span>' +
     THEMES.map((t) => '<button class="pill' + (state.theme === t[0] ? " on" : "") + '" data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "' style=\"padding:3px 9px;font-size:11.5px;width:auto\">" + t[1] + "</button>").join("") + "</div>" +
     (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
@@ -771,10 +774,12 @@ function yearsCardHtml(m) {
   const scale = Math.max.apply(null, rs.map((x) => Math.abs(x.r)).concat(rs.map((x) => Math.abs(x.spR || 0))).concat([0.01]));
   const comparable = (m.years || []).filter((x) => x.spR != null);
   const beat = comparable.filter((x) => x.r > x.spR).length;
-  const note = !(m.years || []).length ? "No NAV history yet." : "Outperformed S&P 500 in " + beat + " of " + comparable.length + (comparable.length === 1 ? " year." : " years.");
+  const bench = (m.benchmark && m.benchmark.label) || "S&P 500";
+  const note = !(m.years || []).length ? "No NAV history yet." : "Outperformed " + bench + " in " + beat + " of " + comparable.length + (comparable.length === 1 ? " year." : " years.");
+  const pills = BENCHMARKS.map((x) => '<button class="pill' + (x[0] === benchmarkPref() ? " on" : "") + '" data-act="benchmark" data-arg=\'' + attr({ key: x[0] }) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + esc(x[1]) + "</button>").join("");
   // contain:size keeps this card from setting the row's height: the equity curve
   // does that, and the list of years scrolls inside whatever height is left
-  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0;contain:size"><h5 style="margin-bottom:2px">Annualized returns</h5><div class="muted" style="font-size:11px;margin-bottom:14px">Vs S&amp;P 500</div>' +
+  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0;contain:size"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:2px"><h5>Annualized returns</h5><div style="display:flex;gap:4px">' + pills + '</div></div><div class="muted" style="font-size:11px;margin-bottom:14px">Vs ' + esc(bench) + "</div>" +
     '<div class="scroll" style="flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;padding-right:2px">' +
     (rs.length ? rs.map((y) => '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span class="tab">' + esc(y.year) + '</span><span class="tab" style="color:' + color(y.r) + '">' + pct(y.r) + '<span class="muted"> / ' + (y.spR == null ? "—" : pct(y.spR)) + "</span></span></div>" +
       '<div style="display:flex;flex-direction:column;gap:3px"><div style="height:7px;width:' + Math.max(2, Math.abs(y.r) / scale * 100).toFixed(0) + "%;background:" + color(y.r) + ';border-radius:2px"></div><div style="height:7px;width:' + Math.max(2, Math.abs(y.spR || 0) / scale * 100).toFixed(0) + '%;background:var(--mixed);border-radius:2px"></div></div></div>').join("") : '<div class="muted" style="font-size:12px">No complete years yet.</div>') +
@@ -1370,6 +1375,7 @@ function act(name, arg, ev) {
     case "chipRemove": clearField(arg.key); break;
     case "chartTf": setChartTf(arg.tf); render(); break;
     case "chartBasis": setChartBasis(arg.basis); render(); break;
+    case "benchmark": setBenchmark(arg.key); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
     case "toggleList": { const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value); setFilters({}); const vq = document.getElementById("valueQuery"); if (vq) { vq.focus(); vq.select(); } break; }
