@@ -1964,6 +1964,8 @@ def build_base(snapshot, market, journal, today=None):
     today = today or today_local()
     fx = market.get("fx") or {}
     bench = market.get("benchmark") or {}
+    benchmarks = dict(market.get("benchmarks") or {})
+    benchmarks.setdefault("SP500", bench)
     raw_acts = snapshot.get("activities") or []
     acts = normalize_activities(raw_acts)
     acts_by_id = {_s(a.get("id")): a for a in acts}
@@ -2008,6 +2010,7 @@ def build_base(snapshot, market, journal, today=None):
         "syncedAt": _s(snapshot.get("syncedAt")),
         "fx": fx,
         "benchmark": bench,
+        "benchmarks": benchmarks,
         "distributions": market.get("distributions") or {},
         "quotes": market.get("quotes") or {},
         "fxLast": max(fx) if fx else "",
@@ -2040,7 +2043,10 @@ EMPTY_FILTERS = {
     "from": "",
     "to": "",
     "search": "",
+    "benchmark": "SP500",
 }
+
+BENCHMARK_LABELS = {"SP500": "S&P 500", "TSX": "S&P/TSX"}
 
 PRESET_DAYS = {"1d": 1, "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365, "5y": 1826}
 
@@ -2071,6 +2077,8 @@ def clean_filters(raw):
         v = _s(raw.get(k))[:10]
         f[k] = v if re.match(r"^\d{4}-\d{2}-\d{2}$", v) else ""
     f["search"] = _s(raw.get("search")).strip()
+    b = _s(raw.get("benchmark")).strip().upper()
+    f["benchmark"] = b if b in BENCHMARK_LABELS else "SP500"
     return f
 
 
@@ -2455,7 +2463,8 @@ def build_view(base, filters=None):
     else:
         series = base["equity"]
         series_label = "All accounts"
-    years = yearly_returns(series, base["benchmark"], today)
+    bench_key = f["benchmark"]
+    years = yearly_returns(series, (base.get("benchmarks") or {}).get(bench_key) or {}, today)
     ann = annualized(years)
     dd = drawdown(series)
     bounds = date_bounds(f, today)
@@ -2507,6 +2516,7 @@ def build_view(base, filters=None):
             "annualized": ann,
         },
         "years": years,
+        "benchmark": {"key": bench_key, "label": BENCHMARK_LABELS[bench_key]},
         "monthly": monthly(trades),
         "bySymbol": by_symbol(trades),
         "grades": grade_buckets(trades),

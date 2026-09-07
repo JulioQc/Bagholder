@@ -1695,8 +1695,17 @@ def dividend_symbols():
             conn.close()
 
 
+BENCHMARK_SYMBOLS = ("SP500", "TSX")
+
+
 def market_data():
-    return {"fx": fx_rates(), "benchmark": benchmark_prices(), "distributions": distributions(), "quotes": quotes()}
+    return {
+        "fx": fx_rates(),
+        "benchmark": benchmark_prices(),
+        "benchmarks": {sym: benchmark_prices(sym) for sym in BENCHMARK_SYMBOLS},
+        "distributions": distributions(),
+        "quotes": quotes(),
+    }
 
 
 _GRADES = ("A", "B", "C", "F")

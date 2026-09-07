@@ -222,6 +222,26 @@ def refresh_benchmark(ssl_context=None):
     return store.upsert_benchmark_prices(mapping)
 
 
+BENCHMARKS = {"SP500": "S&P 500", "TSX": "S&P/TSX"}
+TSX_SYMBOL = "^TSX"
+TSX_START = "2016-01-01"
+
+
+def refresh_tsx(ssl_context=None):
+    """S&P/TSX Composite closes from TMX Money's daily series, appended from a week
+    before the newest stored day."""
+    last = store.benchmark_last_date("TSX")
+    start = (date.fromisoformat(last) - timedelta(days=7)).isoformat() if last else TSX_START
+    try:
+        data = _post_json(TMX_URL, {"operationName": "getTimeSeriesData", "variables": {"symbol": TSX_SYMBOL, "freq": "day", "interval": 1, "start": start, "end": date.today().isoformat()}, "query": TMX_HISTORY_QUERY}, ssl_context, _TMX_HEADERS)
+    except Exception:
+        return 0
+    mapping = {b["date"]: b["close"] for b in parse_tmx_history(data) if b.get("close")}
+    if not mapping:
+        return 0
+    return store.upsert_benchmark_prices(mapping, symbol="TSX")
+
+
 def _post_json(url, payload, ssl_context=None, headers=None):
     body = json.dumps(payload).encode("utf-8")
     hdrs = {"User-Agent": UA, "Content-Type": "application/json", "Accept": "*/*"}
@@ -559,7 +579,7 @@ def refresh_all(ssl_context=None, symbols=None):
         store.set_meta("market_attempt_at", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
         return {
             "fx": refresh_fx(ssl_context),
-            "benchmark": refresh_benchmark(ssl_context),
+            "benchmark": refresh_benchmark(ssl_context) + refresh_tsx(ssl_context),
             "distributions": refresh_distributions(symbols or [], ssl_context),
             "skipped": False,
         }
@@ -1078,7 +1098,7 @@ def refresh_periodic(ssl_context=None, symbols=None, now=None):
         if age is None or age > timedelta(hours=MARKET_ATTEMPT_HOURS) or fx_day_published_but_missing(now):
             store.set_meta("market_attempt_at", now.strftime("%Y-%m-%dT%H:%M:%SZ"))
             out["fx"] = refresh_fx(ssl_context)
-            out["benchmark"] = refresh_benchmark(ssl_context)
+            out["benchmark"] = refresh_benchmark(ssl_context) + refresh_tsx(ssl_context)
         out["distributions"] = refresh_distributions(symbols or [], ssl_context, now=now)
         return out
     finally:

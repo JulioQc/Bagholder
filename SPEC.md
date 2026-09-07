@@ -73,7 +73,7 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 
 - **Equity series.** Daily net liquidation value from Wealthsimple, all accounts combined, or one account when the account filter selects exactly one.
 - **Yearly return.** Daily returns net of deposits and withdrawals, chain-linked over the calendar year. A balance under 1 % of the account's all-time peak is pre-history: a year that never clears it is not shown, and a year in which the account first clears it part way through is measured from that first point, so the first real deposit is never read as a return. The S&P 500 is measured over the same span as the account's year.
-- **S&P 500.** FRED daily close, same calendar span, Stooq as fallback.
+- **Index.** S&P 500 from FRED daily closes (Stooq as fallback), or the S&P/TSX Composite from TMX Money's daily series, over the same span as the account's year.
 - **Avg annualized.** Yearly returns compounded and annualized over the days they cover; years shorter than 30 days are skipped.
 - **Max drawdown.** Largest peak-to-trough fall of the flow-adjusted equity index, so money moved in or out is neither a gain nor a loss. Reported as a percentage, the CAD equivalent at the peak, and the trough date.
 
@@ -83,6 +83,7 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 |---|---|---|
 | Bank of Canada Valet | USD/CAD, one rate per business day | New days are appended at start, after every sync, and on the hourly check once the table is 6 hours old; a day's rate is written once and never rewritten |
 | FRED (Stooq fallback) | S&P 500 daily close | Same: new days appended, never rewritten |
+| TMX Money | S&P/TSX Composite daily close, from 2016 | Same clock as the S&P 500 |
 | TMX Money | Quotes for held shares and ETFs on TSX, TSX-V, CSE and US exchanges | Every minute while running |
 | Cboe Canada (cboe.com) | Quotes for held shares and ETFs listed on Cboe Canada | Every minute while running |
 | Coinbase | Spot price of each held crypto asset, in the currency the position is booked in | Every minute while running |
@@ -148,7 +149,7 @@ Six KPI tiles in one row, all in CAD over the trades in scope:
 Cards:
 
 - **Equity curve.** The equity series in scope with a `$` axis and six date labels; hover shows the value and day.
-- **Annualized returns.** Title `Annualized returns`, subtitle `Vs S&P 500`. Every year, newest first, each with the account's return and the index's return and two equal-height bars; the list scrolls inside the card, which takes its height from the equity curve beside it and never grows past it. Footer, fixed below the list: `Outperformed S&P 500 in N of M years.`
+- **Annualized returns.** Title `Annualized returns` with a two-way switch at the right, `S&P 500` or `S&P/TSX`, choosing the index the years are compared against; the choice is remembered on this machine and is not a filter. Subtitle `Vs <index>`. Every year, newest first, each with the account's return and the index's return and two equal-height bars; the list scrolls inside the card, which takes its height from the equity curve beside it and never grows past it. Footer, fixed below the list: `Outperformed <index> in N of M years.`
 - **Monthly P&L.** One bar per calendar month of close date, CAD, six axis labels; hover shows the month and trade count; click opens the trade or filters to that month.
 - **Grade vs P&L.** Four bars, A B C F, CAD sum per grade with the count under each.
 - **By symbol.** Symbol, P&L (CAD), Trades, Win rate, Avg hold, grouped by underlying, sorted by P&L; click opens or filters.

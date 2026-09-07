@@ -788,6 +788,24 @@ class ViewTest(unittest.TestCase):
         self.assertAlmostEqual(by["2023"]["spR"], 4770 / 4400 - 1, places=6, msg="the index is measured over the same span as the account")
         self.assertAlmostEqual(by["2024"]["spR"], 5880 / 4770 - 1, places=6)
 
+    def test_yearly_returns_compare_against_the_chosen_index(self):
+        series = model.equity_series([
+            {"date": "2023-12-31", "equity": 100000, "netDeposits": 100000},
+            {"date": "2024-12-31", "equity": 120000, "netDeposits": 100000},
+        ])
+        market_data = {"fx": {}, "benchmark": {"2023-12-29": 100.0, "2024-12-31": 110.0}, "benchmarks": {"SP500": {"2023-12-29": 100.0, "2024-12-31": 110.0}, "TSX": {"2023-12-29": 200.0, "2024-12-31": 250.0}}}
+        snapshot = {"activities": [], "accounts": [], "balances": [], "navHistory": [{"date": "2023-12-31", "equity": 100000, "netDeposits": 100000}, {"date": "2024-12-31", "equity": 120000, "netDeposits": 100000}], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
+        base = model.build_base(snapshot, market_data, {}, today="2025-01-01")
+        self.assertEqual(model.clean_filters({"benchmark": "tsx"})["benchmark"], "TSX")
+        self.assertEqual(model.clean_filters({"benchmark": "nope"})["benchmark"], "SP500")
+        v = model.build_view(base, {})
+        self.assertEqual(v["benchmark"], {"key": "SP500", "label": "S&P 500"})
+        self.assertAlmostEqual(v["years"][-1]["spR"], 0.10, places=6)
+        v = model.build_view(base, {"benchmark": "TSX"})
+        self.assertEqual(v["benchmark"], {"key": "TSX", "label": "S&P/TSX"})
+        self.assertAlmostEqual(v["years"][-1]["spR"], 0.25, places=6)
+        self.assertAlmostEqual(v["years"][-1]["r"], 0.20, places=6, msg="the account's own return does not depend on the index")
+
     def test_filters_are_cleaned(self):
         f = model.clean_filters({"lists": {"account": ["A", 3, ""]}, "ranges": {"hold": {"op": "<", "v": "7"}}, "preset": "bogus", "years": [2025, "abcd"], "from": "2026-1-1", "to": "2026-02-01"})
         self.assertEqual(f["lists"]["account"], ["A", "3"])
@@ -1239,31 +1257,31 @@ class MarketParseTest(unittest.TestCase):
                 syms = [{"symbol": "CCHI", "exchange": "TSX", "currency": "CAD"}]
                 divs = ({"price": 1.0}, [{"exDate": "2026-09-01", "payDate": "2026-09-05", "amount": 0.1, "currency": "CAD"}])
                 t0 = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
-                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
                     out = market.refresh_periodic(symbols=syms, now=t0)
                 self.assertEqual((out["fx"], out["benchmark"], out["distributions"]), (1, 1, 1))
                 self.assertEqual((g.call_count, f.call_count), (2, 1))
                 # Ten minutes later: FX and the benchmark wait for their six hours; the record is fresh.
-                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
                     out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(minutes=10))
                 self.assertEqual((out["fx"], out["benchmark"], out["distributions"]), (0, 0, 0))
                 self.assertEqual((g.call_count, f.call_count), (0, 0))
                 # Seven hours later FX and the benchmark are attempted again; the record is still within 20 hours.
-                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
                     out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(hours=7))
                 self.assertEqual((g.call_count, f.call_count), (2, 0))
                 # A day later the declared record is refetched.
-                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]), mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]), mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
                     out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(hours=25))
                 self.assertEqual(f.call_count, 1)
                 # Tuesday 2026-09-08 at 16:00 Eastern: the Bank has not published, and the
                 # attempt is fresh, so nothing is fetched; at 16:45 Eastern today's rate is
                 # missing from the table and is fetched at once.
                 store.set_meta("market_attempt_at", "2026-09-08T19:50:00Z")
-                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs):
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs):
                     market.refresh_periodic(symbols=syms, now=datetime(2026, 9, 8, 20, 0, tzinfo=timezone.utc))
                 self.assertEqual(g.call_count, 0)
-                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs):
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs):
                     market.refresh_periodic(symbols=syms, now=datetime(2026, 9, 8, 20, 45, tzinfo=timezone.utc))
                 self.assertEqual(g.call_count, 2)
                 self.assertFalse(market.fx_day_published_but_missing(datetime(2026, 9, 12, 21, 0, tzinfo=timezone.utc)), "Saturday: nothing to publish")
@@ -1516,18 +1534,38 @@ class MarketParseTest(unittest.TestCase):
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
+    def test_tsx_composite_is_fetched_from_tmx_and_stored_by_symbol(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                tmx = {"data": {"getTimeSeriesData": [{"dateTime": "2026-09-04T16:00:00-04:00", "open": 1, "high": 1, "low": 1, "close": 36513.8, "volume": 0}, {"dateTime": "2026-09-03T16:00:00-04:00", "open": 1, "high": 1, "low": 1, "close": 36633.12, "volume": 0}]}}
+                with mock.patch.object(market, "_post_json", return_value=tmx) as p:
+                    self.assertEqual(market.refresh_tsx(), 2)
+                self.assertEqual(p.call_args.args[1]["variables"]["symbol"], "^TSX")
+                self.assertEqual(p.call_args.args[1]["variables"]["start"], "2016-01-01", "first fetch goes back to 2016")
+                self.assertEqual(store.benchmark_prices("TSX")["2026-09-04"], 36513.8)
+                self.assertEqual(store.benchmark_prices("SP500"), {}, "kept apart from the S&P 500")
+                self.assertEqual(sorted(store.market_data()["benchmarks"]), ["SP500", "TSX"])
+                with mock.patch.object(market, "_post_json", return_value=tmx) as p:
+                    market.refresh_tsx()
+                self.assertEqual(p.call_args.args[1]["variables"]["start"], "2026-08-28", "later fetches start a week before the newest stored day")
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_refresh_uses_store_and_survives_errors(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["BAGHOLDER_HOME"] = tmp
             store.set_home(tmp)
             store.ensure()
             try:
-                with mock.patch.object(market, "_get_text", side_effect=OSError("offline")):
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=OSError("offline")):
                     self.assertEqual(market.refresh_all(), {"fx": 0, "benchmark": 0, "distributions": 0, "skipped": False})
                 self.assertTrue(market.is_stale())
                 boc = json.dumps({"observations": [{"d": "2026-09-04", "FXUSDCAD": {"v": "1.38"}}]})
                 fred = "observation_date,SP500\n2026-09-04,7000\n"
-                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]):
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]):
                     out = market.refresh_all()
                 self.assertEqual(out["fx"], 1)
                 self.assertEqual(out["benchmark"], 1)
