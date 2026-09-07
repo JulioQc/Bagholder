@@ -462,6 +462,16 @@ class RoundTripTest(unittest.TestCase):
         self.assertEqual(trades[0]["tags"], ["momo"])
         self.assertEqual(trades[0]["thesis"], "breakout")
 
+    def test_fill_labels_reflect_what_the_fill_did(self):
+        trades = self._trades([
+            act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
+                quantity=-2, unitPrice=3, netCashAmount=600, transactionDate="2026-01-01", symbol="ZZZ 21AUG26 10.00 CALL"),
+            act(id="buy", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOOPEN", rawType="OPTIONS_BUY",
+                quantity=2, unitPrice=1, netCashAmount=-200, transactionDate="2026-02-01", symbol="ZZZ 21AUG26 10.00 CALL"),
+        ])
+        subs = {f["id"]: f["sub"] for f in trades[0]["fills"]}
+        self.assertEqual(subs, {"sto": "SELL TO OPEN", "buy": "BUY TO CLOSE"})
+
     def test_short_round_trip_is_cover(self):
         trades = self._trades([
             act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
