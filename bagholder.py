@@ -3026,7 +3026,7 @@ def status_payload():
             "listingsFilling": bool(_state.get("listingsFilling")),
             "syncStep": _state.get("syncStep") or "",
             "error": _state["error"] or "",
-            "dataVersion": store.data_version(),
+            "dataVersion": store.data_version() + "|" + model.today_local(),
             "protocol": PROTOCOL,
             "startedAt": STARTED_AT,
             "version": APP_VERSION,
