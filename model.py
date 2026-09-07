@@ -389,39 +389,40 @@ def book_key(a):
     return fifo_account(a) + "::" + _s(a.get("symbol")) + "::" + _s(a.get("currency"))
 
 
-def ticker_was_replaced(activities, account, symbol, currency, by_date):
-    removed_on = ""
+_REMOVAL_RE = re.compile(r"CODECHANGE|SYMBOLCHANGE|TICKERCHANGE|LISTINGSTATUS|SECURITYSWAP")
+
+
+def replacement_index(activities):
+    """Per (account, symbol, currency): the first date the ticker was removed
+    (code change / STKDIS out) and the dates of real trades, computed once so
+    ticker_was_replaced is a lookup instead of a scan."""
+    removed = {}
+    trades = {}
     for a in activities:
-        if fifo_account(a) != _s(account):
-            continue
-        if a.get("symbol") != symbol or a.get("currency") != currency:
-            continue
+        key = (fifo_account(a), _s(a.get("symbol")), _s(a.get("currency")))
         t = compact(a.get("activityType"))
-        raw = compact(a.get("rawType")) + compact(a.get("aftType"))
-        sub = compact(a.get("activitySubType"))
-        q = _num(a.get("quantity"))
-        removal = (t == "STKDIS" and (sub == "SELL" or q < 0)) or bool(
-            re.search(r"CODECHANGE|SYMBOLCHANGE|TICKERCHANGE|LISTINGSTATUS|SECURITYSWAP", raw)
-        )
         d = _s(a.get("transactionDate"))
-        if removal and d and (not removed_on or d < removed_on):
-            removed_on = d
+        if t == "STKDIS":
+            sub = compact(a.get("activitySubType"))
+            if sub == "SELL" or _num(a.get("quantity")) < 0:
+                if d and (key not in removed or d < removed[key]):
+                    removed[key] = d
+            continue
+        raw = compact(a.get("rawType")) + compact(a.get("aftType"))
+        if _REMOVAL_RE.search(raw):
+            if d and (key not in removed or d < removed[key]):
+                removed[key] = d
+        if a.get("category") in ("trade", "option_event") and store.trade_side(a):
+            trades.setdefault(key, []).append(d)
+    return {"removed": removed, "trades": trades}
+
+
+def ticker_was_replaced(index, account, symbol, currency, by_date):
+    key = (_s(account), _s(symbol), _s(currency))
+    removed_on = index["removed"].get(key)
     if not removed_on or removed_on > by_date:
         return False
-    for a in activities:
-        if fifo_account(a) != _s(account):
-            continue
-        if a.get("symbol") != symbol or a.get("currency") != currency:
-            continue
-        if _s(a.get("transactionDate")) <= removed_on:
-            continue
-        if (
-            a.get("category") in ("trade", "option_event")
-            and compact(a.get("activityType")) != "STKDIS"
-            and store.trade_side(a)
-        ):
-            return False
-    return True
+    return not any(d > removed_on for d in index["trades"].get(key, []))
 
 
 # --------------------------------------------------------------------------
@@ -800,6 +801,7 @@ def match_fifo(activities):
                     rt_open[k2] = None
         return remaining
 
+    replaced = replacement_index(normalized)
     splits = split_markers(normalized)
     pending_splits = {}
     for (acct, sym, day), factor in splits.items():
@@ -906,7 +908,7 @@ def match_fifo(activities):
                 bits = dk.split("::")
                 if bits[0] != fifo_account(a) or bits[2] != _s(a.get("currency")):
                     continue
-                if not ticker_was_replaced(normalized, bits[0], bits[1], bits[2], _s(a.get("transactionDate"))):
+                if not ticker_was_replaced(replaced, bits[0], bits[1], bits[2], _s(a.get("transactionDate"))):
                     continue
                 remaining = close_against(dbook, dk, fill, a, remaining, symbol_override=a.get("symbol"))
                 if remaining <= EPS:
