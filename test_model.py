@@ -1115,6 +1115,9 @@ class StoreTablesTest(unittest.TestCase):
     def test_fx_and_benchmark_roundtrip(self):
         self.assertEqual(store.fx_last_date(), "")
         self.assertEqual(store.upsert_fx_rates({"2026-01-02": "1.4", "bad": 1, "2026-01-03": 0}), 1)
+        # A day's rate is written once and never rewritten: a later fetch cannot change it.
+        store.upsert_fx_rates({"2026-01-02": 9.9})
+        self.assertEqual(store.fx_rates()["2026-01-02"], 1.4)
         self.assertEqual(store.fx_rates(), {"2026-01-02": 1.4})
         self.assertEqual(store.fx_last_date(), "2026-01-02")
         store.upsert_benchmark_prices({"2026-01-02": 5000, "2026-01-05": 5100})

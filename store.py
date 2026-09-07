@@ -1244,8 +1244,7 @@ def upsert_fx_rates(mapping, pair=FX_PAIR):
         try:
             _init_schema(conn)
             conn.executemany(
-                "INSERT INTO fx_rates(pair, date, rate) VALUES (?, ?, ?) "
-                "ON CONFLICT(pair, date) DO UPDATE SET rate = excluded.rate",
+                "INSERT OR IGNORE INTO fx_rates(pair, date, rate) VALUES (?, ?, ?)",
                 [(pair, d, v) for d, v in sorted(clean.items())],
             )
             conn.commit()
@@ -1290,8 +1289,7 @@ def upsert_benchmark_prices(mapping, symbol=BENCHMARK_SYMBOL):
         try:
             _init_schema(conn)
             conn.executemany(
-                "INSERT INTO benchmark_prices(symbol, date, close) VALUES (?, ?, ?) "
-                "ON CONFLICT(symbol, date) DO UPDATE SET close = excluded.close",
+                "INSERT OR IGNORE INTO benchmark_prices(symbol, date, close) VALUES (?, ?, ?)",
                 [(symbol, d, v) for d, v in sorted(clean.items())],
             )
             conn.commit()

@@ -81,8 +81,8 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 
 | Source | Data | Refresh |
 |---|---|---|
-| Bank of Canada Valet | USD/CAD daily | At start, after every sync, and every 6 hours while running, on an hourly check |
-| FRED (Stooq fallback) | S&P 500 daily close | At start, after every sync, and every 6 hours while running, on an hourly check |
+| Bank of Canada Valet | USD/CAD, one rate per business day | New days are appended at start, after every sync, and on the hourly check once the table is 6 hours old; a day's rate is written once and never rewritten |
+| FRED (Stooq fallback) | S&P 500 daily close | Same: new days appended, never rewritten |
 | TMX Money | Quotes for held shares and ETFs on TSX, TSX-V, CSE and US exchanges | Every minute while running |
 | Cboe Canada (cboe.com) | Quotes for held shares and ETFs listed on Cboe Canada | Every minute while running |
 | Coinbase | Spot price of each held crypto asset, in the currency the position is booked in | Every minute while running |
@@ -91,6 +91,8 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 | Wealthsimple | Activities, balances, accounts, NAV history | Full sync once, then incremental, automatically on weekdays after 2 PM Mountain while running; the session is refreshed without a new sign-in |
 
 Each declared record carries its own fetch stamp, separate from the quote's, so the quote loop keeping a price fresh never makes the fund's distribution history look fresh.
+
+A USD transaction is converted at the Bank of Canada rate for its own date, looked up from that table when the model is built. The table is append-only, so a transaction's CAD value never changes once its day's rate is in. Until the Bank publishes a day's rate, at 16:30 Eastern, a transaction dated that day uses the latest earlier rate.
 
 ### Freshness of what is on the page
 
