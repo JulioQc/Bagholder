@@ -1554,8 +1554,11 @@ def build_positions(open_lots, last_prices, balances, accounts, securities, jour
                     found = True
             if found:
                 ws_qty = total
-        pid = "pos:" + "|".join([account, symbol, currency])
-        entry_j = journal.get(pid) or {}
+        # A position and the trade it becomes when it closes share one journal
+        # entry: both are keyed by the round trip that opened the position.
+        legacy_pid = "pos:" + "|".join([account, symbol, currency])
+        pid = lots[0].get("rt") or legacy_pid
+        entry_j = journal.get(pid) or journal.get(legacy_pid) or {}
         rows.append(
             {
                 "id": pid,

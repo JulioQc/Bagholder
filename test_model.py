@@ -432,6 +432,24 @@ class RoundTripTest(unittest.TestCase):
         self.assertTrue(trades[0]["locked"])
         self.assertEqual(trades[0]["legCount"], 2)
 
+    def test_position_notes_carry_over_to_the_closed_trade(self):
+        snapshot = {
+            "activities": [buy("b1", "AAA", 100, 10, "2026-01-01")],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-02-01")
+        pid = base["positions"][0]["id"]
+        self.assertEqual(pid, "rt:b1")
+        journal = {pid: {"thesis": "holding for the catalyst", "tags": ["core"], "grade": ""}}
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, journal, today="2026-02-01")
+        self.assertEqual(base["positions"][0]["thesis"], "holding for the catalyst")
+        snapshot["activities"].append(sell("s1", "AAA", 100, 12, "2026-03-01"))
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, journal, today="2026-04-01")
+        self.assertEqual(base["positions"], [])
+        self.assertEqual(base["trades"][0]["id"], "rt:b1")
+        self.assertEqual(base["trades"][0]["thesis"], "holding for the catalyst")
+        self.assertEqual(base["trades"][0]["tags"], ["core"])
+
     def test_journal_attaches_to_trade(self):
         trades = self._trades(
             [buy("b1", "AAA", 100, 10, "2026-01-01"), sell("s1", "AAA", 100, 12, "2026-01-10")],
