@@ -176,6 +176,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
+const PROTOCOL = "2026-09-07.2"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 function chartTf() { const v = state.chartTf || (function () { try { return localStorage.getItem("bh2.chartTf"); } catch (e) { return ""; } })(); return TIMEFRAMES.some((x) => x[0] === v) ? v : "1d"; }
 function setChartTf(tf) { state.chartTf = tf; try { localStorage.setItem("bh2.chartTf", tf); } catch (e) {} }
@@ -347,9 +348,9 @@ let _pollTimer = 0;
 function pollStatus() {
   clearTimeout(_pollTimer);
   api("GET", "/api/status").then((st) => {
-    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing]);
+    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol]);
     applyStatus(st);
-    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing]);
+    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol]);
     if (before !== after) renderHeaderOnly();
     const fast = state.status.syncing || state.status.capturing || state.busy;
     _pollTimer = setTimeout(pollStatus, fast ? 2500 : 30000);
@@ -382,6 +383,7 @@ function saveJournal(id, patch, soon) {
 // ---------------------------------------------------------------------------
 function syncLine() {
   const s = state.status;
+  if (s.protocol && s.protocol !== PROTOCOL) return '<span class="status-err">Restart Bagholder to finish the update</span>';
   if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login…';
   if (s.syncing) return '<span class="spin"></span>' + esc(s.syncStep || "Syncing…");
   if (s.error) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";

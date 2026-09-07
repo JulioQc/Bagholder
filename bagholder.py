@@ -518,6 +518,10 @@ query FetchSecurities($ids: [ID!]!) {
 
 SECURITY_BATCH = 50
 
+# Bumped whenever the page and the server change together. The page compares it
+# with what /api/status reports and tells the user to restart when they differ.
+PROTOCOL = "2026-09-07.2"
+
 QUERIES = {
     "FetchSecurities": Q_FETCH_SECURITIES,
     "IdentityHistoricalFinancialsQuery": Q_IDENTITY_HISTORICAL_FINANCIALS,
@@ -3012,6 +3016,7 @@ def status_payload():
             "syncStep": _state.get("syncStep") or "",
             "error": _state["error"] or "",
             "dataVersion": store.data_version(),
+            "protocol": PROTOCOL,
         }
 
 

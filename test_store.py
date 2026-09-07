@@ -85,6 +85,13 @@ class StoreTest(unittest.TestCase):
         store.upsert_distributions("RDDY", [{"exDate": "2026-09-30", "payDate": "2026-10-05", "amount": 0.2, "currency": "CAD"}])
         self.assertNotEqual(v1, bagholder.status_payload()["dataVersion"])
 
+    def test_page_and_server_agree_on_the_protocol_stamp(self):
+        page = (bagholder.ledger_path()).read_text(encoding="utf-8")
+        m = re.search(r'const PROTOCOL = "([^"]+)"', page)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group(1), bagholder.PROTOCOL)
+        self.assertEqual(bagholder.status_payload()["protocol"], bagholder.PROTOCOL)
+
     def test_history_endpoint_validates_and_serves_bars(self):
         self.assertFalse(bagholder.history_payload("symbol=RDDY")["ok"])
         bars = [{"date": "2026-09-04", "open": 4.8, "high": 4.8, "low": 4.68, "close": 4.75, "volume": 1}]
