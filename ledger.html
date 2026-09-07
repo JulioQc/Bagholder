@@ -699,7 +699,7 @@ function kpiHtml(m) {
   const pf = k.profitFactorInfinite ? "∞" : k.profitFactor == null ? "—" : k.profitFactor.toFixed(2);
   const tile = (label, value, sub, vcls) => '<div class="card elev-sm kpi"><div class="lbl">' + label + '</div><div class="v ' + (vcls || "") + '">' + value + '</div><div class="s">' + sub + "</div></div>";
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px">' +
-    tile("Realized P&amp;L", money(k.realized), k.count + (k.count === 1 ? " trade" : " trades") + " · CAD", cls(k.realized)) +
+    tile("Realized P&amp;L", money(k.realized), k.count + (k.count === 1 ? " trade" : " trades"), cls(k.realized)) +
     tile("Win rate", k.winRate == null ? "—" : pctPlain(k.winRate), k.wins + " W · " + k.losses + " L" + (k.breakeven ? " · " + k.breakeven + " BE" : "")) +
     tile("Profit factor", pf, "W " + money0(k.grossWin) + " · L " + money0(k.grossLoss)) +
     tile("Expectancy", k.expectancy == null ? "—" : money(k.expectancy), "avg W " + money0(k.avgWin) + " · L " + money0(k.avgLoss)) +

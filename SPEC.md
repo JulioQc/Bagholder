@@ -8,7 +8,7 @@ The model lives in `model.py` and is served as JSON by `GET /api/model`. The pag
 
 - **Accuracy over convenience.** A number on the page is either exactly what this file defines or it is not shown. A blank is rendered as an em dash.
 - **Payout frequency is verified from the fund's own record, every day.** Each dividend payer's declared distribution history is fetched from TMX Money, the public record the fund itself publishes, and refetched whenever the stored copy is more than 20 hours old, on start and on every sync. Frequency is computed from the gaps between the most recent ex-dates in that record, not from any stored setting, so it is correct from the first holding day even with no payment history, and a schedule change is picked up after two payments at the new cadence. Only when a fund has no declared record does the holding's own received payments stand in, and only a fund that has paid exactly once is treated as monthly until its second payment.
-- **Currency.** Every figure that belongs to one trade, position, fill or distribution is in that instrument's own currency, with no prefix and no conversion. Every figure that adds trades or distributions together is in CAD, converted on the date of each fill or payment with the Bank of Canada rate. A currency code is shown in an FX column, never as a prefix on the amount.
+- **Currency.** Every figure that belongs to one trade, position, fill or distribution is in that instrument's own currency, with no prefix and no conversion. Every figure that adds trades or distributions together is in CAD, converted on the date of each fill or payment with the Bank of Canada rate. The app is for Wealthsimple users, so CAD is the home currency and is never labelled: a currency code appears only in the FX column of a per-instrument row, never on a tile, a total, or as a prefix on an amount.
 - **Raw data is never rewritten.** Wealthsimple activity rows are stored once and left as received. Everything derived is recomputed from them.
 - **Nothing is added that was not asked for.** No captions, tooltips, notes or helper text beyond what this file lists.
 
@@ -134,7 +134,7 @@ Six KPI tiles in one row, all in CAD over the trades in scope:
 
 | Tile | Value | Subtitle |
 |---|---|---|
-| Realized P&L | Sum of P&L (CAD) | Trade count and `CAD` |
+| Realized P&L | Sum of P&L (CAD) | Trade count |
 | Win rate | Winning trades ÷ all trades | Wins, losses and breakevens |
 | Profit factor | Gross wins ÷ gross losses; `∞` with no losses | Gross W and L |
 | Expectancy | Realized P&L ÷ trade count | Average win and average loss |
