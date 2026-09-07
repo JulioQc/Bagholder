@@ -766,6 +766,54 @@ class PaymentFrequencyTest(unittest.TestCase):
         self.assertEqual(h["NEWM"]["per"], 0.1)
 
 
+class QuoteTest(unittest.TestCase):
+    def test_tmx_quote_symbol_mapping(self):
+        self.assertEqual(market.tmx_quote_symbol("CCHI", "TSX", "CAD"), "CCHI")
+        self.assertEqual(market.tmx_quote_symbol("CH", "TSX-V", "CAD"), "CH")
+        self.assertEqual(market.tmx_quote_symbol("LUNR", "NASDAQ", "USD"), "LUNR:US")
+        self.assertEqual(market.tmx_quote_symbol("ASTS", "", "USD"), "ASTS:US")
+        self.assertIsNone(market.tmx_quote_symbol("HBIX", "Cboe Canada", "CAD"))
+        self.assertIsNone(market.tmx_quote_symbol("QNC 20NOV26 3.00 CALL", "", "USD"))
+
+    def test_positions_use_the_quote_when_present(self):
+        snapshot = {
+            "activities": [buy("b1", "VEQT", 100, 49.76, "2026-01-05", accountType="Kids"), buy("b2", "HBIX", 100, 7.0, "2026-01-05", accountType="Kids")],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        quotes = {"VEQT": {"price": 62.4, "priceChange": 0.08, "percentChange": 0.128, "fetchedAt": "2026-09-06T14:00:00Z"}}
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}, "quotes": quotes}, {}, today="2026-09-06")
+        p = {x["symbol"]: x for x in base["positions"]}
+        self.assertEqual(p["VEQT"]["last"], 62.4)
+        self.assertEqual(p["VEQT"]["priceSource"], "quote")
+        self.assertAlmostEqual(p["VEQT"]["unreal"], (62.4 - 49.76) * 100)
+        self.assertEqual(p["VEQT"]["priceChange"], 0.08)
+        self.assertEqual(p["HBIX"]["priceSource"], "fill")
+        self.assertEqual(p["HBIX"]["last"], 7.0)
+        self.assertEqual(model.held_symbols(base), [{"symbol": "VEQT", "exchange": "", "currency": "CAD"}, {"symbol": "HBIX", "exchange": "", "currency": "CAD"}])
+
+    def test_refresh_quotes_respects_the_interval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                from datetime import datetime, timezone
+                syms = [{"symbol": "VEQT", "exchange": "TSX", "currency": "CAD"}, {"symbol": "LUNR", "exchange": "NASDAQ", "currency": "USD"}, {"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD"}]
+                with mock.patch.object(market, "fetch_tmx_quote", return_value={"price": 10.0, "priceChange": 0.1, "percentChange": 1.0, "prevClose": 9.9, "fetchedAt": "2026-09-06T14:00:00Z"}) as f:
+                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 0, tzinfo=timezone.utc)), 2)
+                    self.assertEqual([c.args[0] for c in f.call_args_list], ["VEQT", "LUNR:US"])
+                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 5, tzinfo=timezone.utc)), 0)
+                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 20, tzinfo=timezone.utc)), 2)
+                q = store.quotes()["LUNR"]
+                self.assertEqual(q["price"], 10.0)
+                self.assertEqual(q["prevClose"], 9.9)
+                store.upsert_quote("LUNR", {"price": 11.0, "fetchedAt": "2026-09-06T15:00:00Z", "dividendAmount": None})
+                self.assertEqual(store.quotes()["LUNR"]["price"], 11.0)
+            finally:
+                store.set_home(None)
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+
 class DeclaredDistributionsTest(unittest.TestCase):
     def test_tmx_parsers(self):
         q = {"data": {"getQuoteBySymbol": {"symbol": "CCHI", "name": "Ninepoint Cameco HighShares ETF", "price": 10.95, "dividendFrequency": None, "dividendYield": 27.5, "dividendAmount": 0.135, "exDividendDate": "2026-09-15 00:00:00.0"}}}

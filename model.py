@@ -1317,7 +1317,8 @@ def last_fill_prices(activities):
     return out
 
 
-def build_positions(open_lots, last_prices, balances, accounts, securities, journal, today):
+def build_positions(open_lots, last_prices, balances, accounts, securities, journal, today, quotes=None):
+    quotes = quotes or {}
     nick_ids = {}
     for acc in accounts or []:
         nick = norm_account_name(acc.get("nickname") or acc.get("unifiedAccountType") or acc.get("type"))
@@ -1348,6 +1349,13 @@ def build_positions(open_lots, last_prices, balances, accounts, securities, jour
         sec_id = next((l.get("securityId") for l in lots if l.get("securityId")), "")
         last = last_prices.get(symbol)
         last_px = last["price"] if last else (cost / (qty * mult) if qty else 0.0)
+        last_at = last["date"] if last else ""
+        price_source = "fill"
+        quote = quotes.get(symbol) if lots[0]["kind"] == "Shares" else None
+        if quote and _num(quote.get("price"), None):
+            last_px = _num(quote.get("price"))
+            last_at = _s(quote.get("fetchedAt"))
+            price_source = "quote"
         mv = qty * last_px * mult
         unreal = (mv - cost) if direction == "LONG" else (cost - mv)
         held = sum(l["qty"] * days_between(l["date"], today) for l in lots)
@@ -1382,8 +1390,10 @@ def build_positions(open_lots, last_prices, balances, accounts, securities, jour
                 "cost": cost,
                 "fees": fees,
                 "last": last_px,
-                "lastAt": last["date"] if last else "",
-                "priceSource": "fill",
+                "lastAt": last_at,
+                "priceSource": price_source,
+                "priceChange": _num(quote.get("priceChange"), None) if quote else None,
+                "percentChange": _num(quote.get("percentChange"), None) if quote else None,
                 "mv": mv,
                 "unreal": unreal,
                 "unrealPct": (unreal / cost) if cost else None,
@@ -1753,7 +1763,7 @@ def build_base(snapshot, market, journal, today=None):
     saved = snapshot.get("tradeGroups") or []
     trades = build_trades(fifo["closed"], fifo["open"], saved, acts_by_id, securities, journal)
     last_prices = last_fill_prices(acts)
-    positions = build_positions(fifo["open"], last_prices, snapshot.get("balances"), snapshot.get("accounts"), securities, journal, today)
+    positions = build_positions(fifo["open"], last_prices, snapshot.get("balances"), snapshot.get("accounts"), securities, journal, today, market.get("quotes") or {})
     cashflow = build_cashflow(acts, securities, fx)
     equity = equity_series(snapshot.get("navHistory"))
     by_account = {}
@@ -2325,6 +2335,19 @@ def base_model(force=False):
 
 def view(filters=None):
     return build_view(base_model(), filters)
+
+
+def held_symbols(base=None):
+    """Held share positions (not options or crypto): what live quotes are fetched for."""
+    base = base or base_model()
+    out = []
+    seen = set()
+    for p in base["positions"]:
+        if p["kind"] != "Shares" or p["symbol"] in seen:
+            continue
+        seen.add(p["symbol"])
+        out.append({"symbol": p["symbol"], "exchange": p["exchange"], "currency": p["currency"]})
+    return out
 
 
 def payer_symbols(base=None):

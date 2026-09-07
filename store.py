@@ -201,6 +201,7 @@ def _init_schema(conn):
     _migrate_nav_history(conn)
     _ensure_activity_security_id(conn)
     _migrate_spy_meta(conn)
+    _ensure_quote_columns(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES (?, ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -1153,6 +1154,13 @@ def save_trade_notes(notes):
 
 
 
+def _ensure_quote_columns(conn):
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(quotes)").fetchall()}
+    for col in ("price_change", "percent_change", "prev_close"):
+        if col not in cols:
+            conn.execute("ALTER TABLE quotes ADD COLUMN %s REAL" % col)
+
+
 def _migrate_spy_meta(conn):
     """One-shot: copy the legacy meta.spy_by_date map into benchmark_prices."""
     row = conn.execute(
@@ -1340,6 +1348,9 @@ def quotes():
             for r in conn.execute("SELECT * FROM quotes").fetchall():
                 out[r["symbol"]] = {
                     "price": r["price"],
+                    "priceChange": r["price_change"],
+                    "percentChange": r["percent_change"],
+                    "prevClose": r["prev_close"],
                     "dividendAmount": r["dividend_amount"],
                     "dividendFrequency": r["dividend_frequency"] or "",
                     "exDividendDate": r["ex_dividend_date"] or "",
@@ -1360,13 +1371,20 @@ def upsert_quote(symbol, rec, source="tmx"):
         try:
             _init_schema(conn)
             conn.execute(
-                "INSERT INTO quotes(symbol, price, dividend_amount, dividend_frequency, ex_dividend_date, source, fetched_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET price = excluded.price, "
-                "dividend_amount = excluded.dividend_amount, dividend_frequency = excluded.dividend_frequency, "
-                "ex_dividend_date = excluded.ex_dividend_date, source = excluded.source, fetched_at = excluded.fetched_at",
+                "INSERT INTO quotes(symbol, price, price_change, percent_change, prev_close, dividend_amount, "
+                "dividend_frequency, ex_dividend_date, source, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(symbol) DO UPDATE SET price = excluded.price, price_change = excluded.price_change, "
+                "percent_change = excluded.percent_change, prev_close = excluded.prev_close, "
+                "dividend_amount = COALESCE(excluded.dividend_amount, quotes.dividend_amount), "
+                "dividend_frequency = CASE WHEN excluded.dividend_frequency = '' THEN quotes.dividend_frequency ELSE excluded.dividend_frequency END, "
+                "ex_dividend_date = CASE WHEN excluded.ex_dividend_date = '' THEN quotes.ex_dividend_date ELSE excluded.ex_dividend_date END, "
+                "source = excluded.source, fetched_at = excluded.fetched_at",
                 (
                     sym,
                     _num(rec.get("price"), None),
+                    _num(rec.get("priceChange"), None),
+                    _num(rec.get("percentChange"), None),
+                    _num(rec.get("prevClose"), None),
                     _num(rec.get("dividendAmount"), None),
                     _s(rec.get("dividendFrequency")),
                     _s(rec.get("exDividendDate"))[:10],

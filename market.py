@@ -26,8 +26,10 @@ STOOQ_URL = "https://stooq.com/q/d/l/?s=^spx&i=d"
 TMX_URL = "https://app-money.tmx.com/graphql"
 TMX_QUOTE_QUERY = (
     "query getQuoteBySymbol($symbol: String, $locale: String) { getQuoteBySymbol(symbol: $symbol, locale: $locale) "
-    "{ symbol name price dividendFrequency dividendYield dividendAmount exDividendDate } }"
+    "{ symbol name price priceChange percentChange prevClose currency dividendFrequency dividendYield dividendAmount exDividendDate } }"
 )
+QUOTE_REFRESH_MINUTES = 15
+US_EXCHANGES = ("NASDAQ", "NYSE", "NYSE AMERICAN", "NYSE ARCA", "BATS", "AMEX", "ARCA", "CBOE", "IEX")
 TMX_DIVIDENDS_QUERY = (
     "query getDividendsForSymbol($symbol: String!, $page: Int, $batch: Int) { dividends: getDividendsForSymbol("
     "symbol: $symbol, page: $page, batch: $batch) { dividends { exDate payableDate amount currency } } }"
@@ -219,6 +221,20 @@ def tmx_symbol(symbol):
     return s
 
 
+def tmx_quote_symbol(symbol, exchange, currency):
+    """TMX Money symbol for a listing: bare for Canadian listings, ':US' for
+    US listings. None when TMX does not carry it (Cboe Canada, crypto, options)."""
+    s = tmx_symbol(symbol)
+    if not s or " " in s:
+        return None
+    ex = str(exchange or "").strip().upper()
+    if ex in US_EXCHANGES or (not ex and str(currency or "").upper() == "USD"):
+        return s + ":US"
+    if ex in ("TSX", "TSX-V", "TSXV", "CSE", "") or (not ex and str(currency or "").upper() == "CAD"):
+        return s
+    return None
+
+
 def is_canadian_listing(exchange, currency):
     ex = str(exchange or "").strip().upper()
     if ex:
@@ -233,6 +249,10 @@ def parse_tmx_quote(data):
     ex = str(q.get("exDividendDate") or "")[:10]
     return {
         "price": q.get("price"),
+        "priceChange": q.get("priceChange"),
+        "percentChange": q.get("percentChange"),
+        "prevClose": q.get("prevClose"),
+        "currency": str(q.get("currency") or ""),
         "dividendAmount": q.get("dividendAmount"),
         "dividendFrequency": str(q.get("dividendFrequency") or ""),
         "exDividendDate": ex,
@@ -273,6 +293,46 @@ def fetch_tmx(symbol, ssl_context=None):
     except Exception:
         divs = []
     return quote, divs
+
+
+def fetch_tmx_quote(tmx_sym, ssl_context=None):
+    try:
+        return parse_tmx_quote(_post_json(TMX_URL, {"operationName": "getQuoteBySymbol", "variables": {"symbol": tmx_sym, "locale": "en"}, "query": TMX_QUOTE_QUERY}, ssl_context, _TMX_HEADERS))
+    except Exception:
+        return None
+
+
+def quote_symbols_needing_refresh(symbols, now=None, max_age_minutes=QUOTE_REFRESH_MINUTES):
+    """[(stored symbol, tmx symbol)] for held listings whose quote is older than max_age."""
+    now = now or datetime.now(timezone.utc)
+    fetched = store.quote_fetched_at()
+    out = []
+    seen = set()
+    for rec in symbols or []:
+        sym = tmx_symbol(rec.get("symbol"))
+        q = tmx_quote_symbol(rec.get("symbol"), rec.get("exchange"), rec.get("currency"))
+        if not sym or not q or sym in seen:
+            continue
+        seen.add(sym)
+        last = fetched.get(sym) or ""
+        try:
+            age = now - datetime.fromisoformat(last.replace("Z", "+00:00")) if last else None
+        except ValueError:
+            age = None
+        if age is None or age > timedelta(minutes=max_age_minutes):
+            out.append((sym, q))
+    return out
+
+
+def refresh_quotes(symbols, ssl_context=None, now=None):
+    """Live-ish prices for held positions, at most every QUOTE_REFRESH_MINUTES."""
+    done = 0
+    for sym, q in quote_symbols_needing_refresh(symbols, now=now):
+        rec = fetch_tmx_quote(q, ssl_context)
+        if rec and rec.get("price") is not None:
+            store.upsert_quote(sym, rec)
+            done += 1
+    return done
 
 
 def stale_symbols(symbols, now=None):

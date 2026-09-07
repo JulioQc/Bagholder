@@ -3032,11 +3032,28 @@ def refresh_market_data():
     """USD/CAD, S&P 500 and declared distributions for the derived model. Never raises."""
     try:
         out = market.refresh_all(_ssl_context(), _payer_symbols())
-        if out.get("distributions"):
+        out["quotes"] = refresh_quotes()
+        if out.get("distributions") or out.get("quotes"):
             model.invalidate()
         return out
     except Exception:
-        return {"fx": 0, "benchmark": 0, "distributions": 0, "skipped": True}
+        return {"fx": 0, "benchmark": 0, "distributions": 0, "quotes": 0, "skipped": True}
+
+
+def refresh_quotes():
+    """Prices for held positions, at most every QUOTE_REFRESH_MINUTES. Never raises."""
+    try:
+        n = market.refresh_quotes(model.held_symbols(), _ssl_context())
+        if n:
+            model.invalidate()
+        return n
+    except Exception:
+        return 0
+
+
+def quote_loop():
+    while not _stop.wait(60 * market.QUOTE_REFRESH_MINUTES):
+        refresh_quotes()
 
 
 def sync_then_market():
@@ -3165,6 +3182,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if market.is_stale(symbols=_payer_symbols()):
                     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
+                elif market.quote_symbols_needing_refresh(model.held_symbols()):
+                    threading.Thread(target=refresh_quotes, name="bagholder-quotes", daemon=True).start()
             except Exception:
                 pass
             try:
@@ -3366,6 +3385,7 @@ def main():
     t = threading.Thread(target=auto_sync_loop, name="bagholder-auto-sync", daemon=True)
     t.start()
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
+    threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
     url = "http://127.0.0.1:%s" % port
     print("Bagholder  %s" % url, flush=True)
     try:
