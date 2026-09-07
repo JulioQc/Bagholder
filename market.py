@@ -16,6 +16,7 @@ import os
 import re
 import ssl
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib.request import Request, urlopen
@@ -810,17 +811,59 @@ def aggregate_session(minutes, bucket_minutes):
 
 
 def fetch_tmx_minutes(key, start, end, ssl_context=None):
-    """One-minute bars over [start, end], fetched a month at a time."""
-    out = []
+    """One-minute bars over [start, end], fetched a month at a time, a few months in parallel."""
+    chunks = []
     cur = datetime.strptime(str(start)[:10], "%Y-%m-%d").date()
     last = datetime.strptime(str(end)[:10], "%Y-%m-%d").date()
     while cur <= last:
         nxt = (cur.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-        chunk_end = min(nxt, last)
-        data = _post_json(TMX_URL, {"operationName": "getCompanyChart", "variables": {"symbol": key, "from": cur.isoformat(), "to": chunk_end.isoformat()}, "query": TMX_CHART_QUERY}, ssl_context, _TMX_HEADERS)
-        out.extend(parse_tmx_minutes(data))
-        cur = chunk_end + timedelta(days=1)
+        chunks.append((cur.isoformat(), min(nxt, last).isoformat()))
+        cur = min(nxt, last) + timedelta(days=1)
+    def one(span):
+        try:
+            return parse_tmx_minutes(_post_json(TMX_URL, {"operationName": "getCompanyChart", "variables": {"symbol": key, "from": span[0], "to": span[1]}, "query": TMX_CHART_QUERY}, ssl_context, _TMX_HEADERS))
+        except Exception:
+            return []
+    out = []
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for bars in pool.map(one, chunks):
+            out.extend(bars)
+    out.sort(key=lambda b: b["time"])
     return out
+
+
+_pending_lock = threading.Lock()
+_pending = set()
+
+
+def intraday_ready(rec, tf, start, now=None):
+    """True when the stored bars already cover [start, now] for this timeframe."""
+    now = now or datetime.now(timezone.utc)
+    sym = tmx_symbol(rec.get("symbol"))
+    reach = intraday_reach(rec, now)
+    if not sym or not reach or tf not in INTRADAY_SECONDS:
+        return True
+    start_day = max(str(start)[:10], reach)
+    start_ts = int(datetime.strptime(start_day, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+    last = store.bar_fetch(sym, tf)
+    return bool(last) and last["startTs"] <= start_ts
+
+
+def ensure_intraday_in_background(rec, tf, start, end, ssl_context=None):
+    """Start the fetch for a span that is not stored yet, once per instrument, and
+    return at once. Callers poll intraday_ready."""
+    sym = tmx_symbol(rec.get("symbol"))
+    with _pending_lock:
+        if sym in _pending:
+            return
+        _pending.add(sym)
+    def run():
+        try:
+            ensure_intraday(rec, tf, start, end, ssl_context)
+        finally:
+            with _pending_lock:
+                _pending.discard(sym)
+    threading.Thread(target=run, name="bagholder-intraday-" + sym, daemon=True).start()
 
 
 def session_bucket(now, bucket_minutes):
@@ -940,7 +983,7 @@ def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None, max_age_hou
     return store.price_bars(sym, tf, start_ts, end_ts)
 
 
-ARCHIVE_BATCH = 8
+ARCHIVE_BATCH = 12
 ARCHIVE_TOPUP_HOURS = 20
 
 

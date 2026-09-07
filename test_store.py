@@ -106,6 +106,11 @@ class StoreTest(unittest.TestCase):
             out = bagholder.history_payload("symbol=QNC%2020NOV26%203.00%20CALL&exchange=NYSE&currency=USD&kind=Options&from=2026-06-01&to=2026-09-05")
         self.assertEqual((out["ok"], out["source"], out["chartSymbol"], [b["close"] for b in out["bars"]]), (True, "tmx", "QNC", [4.75]), "an option is charted on its underlying")
         self.assertEqual((out["basis"], out["contractAvailable"]), ("underlying", []))
+        # intraday not stored yet: the request returns at once, pending, and starts the fetch
+        with mock.patch.object(market, "ensure_intraday_in_background") as bg:
+            out = bagholder.history_payload("symbol=RDDY&exchange=TSX&currency=CAD&kind=Shares&from=2026-08-25&to=2026-09-05&tf=1h")
+        self.assertEqual((out["pending"], out["bars"]), (True, []))
+        self.assertEqual(bg.call_count, 1)
         store.record_bar_tick("QNC 20NOV26 3.00 CALL", "1h", 1788800400, 0.15)
         with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")):
             out = bagholder.history_payload("symbol=QNC%2020NOV26%203.00%20CALL&exchange=NYSE&currency=USD&kind=Options&from=2026-06-01&to=2026-09-05&tf=1h&basis=contract")

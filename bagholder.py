@@ -3078,10 +3078,13 @@ def archive_intraday_bars():
 
 
 def archive_loop():
-    """Sweeps the archive every few minutes until every instrument is kept, then
-    tops up once a day per instrument."""
-    while not _stop.wait(5 * 60):
-        archive_intraday_bars()
+    """Sweeps the archive until every instrument is kept, then tops up once a day
+    per instrument. While there is a backlog the next pass follows at once; when a
+    pass finds nothing to do the loop rests five minutes."""
+    delay = 20
+    while not _stop.wait(delay):
+        worked = archive_intraday_bars()
+        delay = 5 if len(worked) >= market.ARCHIVE_BATCH else 5 * 60
 
 
 def quote_loop():
@@ -3140,15 +3143,24 @@ def history_payload(query):
     # an option contract's own premium, recorded by the app while it was held
     recorded = [x for x in market.TIMEFRAMES if x in store.recorded_timeframes(rec["symbol"])] if rec["kind"] == "Options" else []
     basis = "contract" if (one("basis") == "contract" and recorded) else "underlying"
+    pending = False
     try:
         if basis == "contract":
             bars = store.price_bars(rec["symbol"], tf) if tf in recorded else []
+        elif not (src and tf in available):
+            bars = []
+        elif tf in market.INTRADAY_SECONDS and not market.intraday_ready(inst, tf, start):
+            # never block the chart on a minute-data fetch: hand back what is stored,
+            # fetch the rest in the background, and let the page ask again
+            market.ensure_intraday_in_background(inst, tf, start, end, _ssl_context())
+            pending = True
+            bars = []
         else:
-            bars = market.ensure_bars(inst, tf, start, end, _ssl_context()) if (src and tf in available) else []
+            bars = market.ensure_bars(inst, tf, start, end, _ssl_context())
     except Exception:
         bars = []
     return {"ok": True, "symbol": rec["symbol"], "chartSymbol": rec["symbol"] if basis == "contract" else inst["symbol"], "source": "recorded" if basis == "contract" else (src[0] if src else ""),
-            "tf": tf, "basis": basis, "available": recorded if basis == "contract" else available, "contractAvailable": recorded, "bars": bars}
+            "tf": tf, "basis": basis, "available": recorded if basis == "contract" else available, "contractAvailable": recorded, "bars": bars, "pending": pending}
 
 
 def _model_filters(query):
