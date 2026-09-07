@@ -833,15 +833,15 @@ function tradeSortValue(t, key) {
 }
 function tradesTableHtml(m) {
   const cols = [
-    { key: "entryDate", label: "Open", width: "133px" }, { key: "exitDate", label: "Close", width: "133px" }, { key: "symbol", label: "Symbol", width: "90px" }, { key: "exchange", label: "Exchange", width: "82px" },
-    { key: "qty", label: "Qty", align: "right", width: "101px" }, { key: "entry", label: "Entry", align: "right", width: "99px" }, { key: "exit", label: "Exit", align: "right", width: "99px" },
-    { key: "currency", label: "FX", align: "center", width: "108px" }, { key: "pnl", label: "P&L", align: "right", width: "96px" }, { key: "pnlPct", label: "P&L %", align: "right", width: "107px" }, { key: "holdDays", label: "Hold", align: "right", width: "87px" },
-    { key: "grade", label: "Grade", padLeft: "50px", width: "110px" }, { key: "tags", label: "Tags" },
+    { key: "entryDate", label: "Open", width: "9%" }, { key: "exitDate", label: "Close", width: "9%" }, { key: "symbol", label: "Symbol", width: "7.5%" }, { key: "exchange", label: "Exchange", width: "8%" },
+    { key: "qty", label: "Qty", align: "right", width: "8.5%" }, { key: "entry", label: "Entry", align: "right", width: "7%" }, { key: "exit", label: "Exit", align: "right", width: "7%" },
+    { key: "currency", label: "FX", align: "center", width: "6%" }, { key: "pnl", label: "P&L", align: "right", width: "8%" }, { key: "pnlPct", label: "P&L %", align: "right", width: "7%" }, { key: "holdDays", label: "Hold", align: "right", width: "5%" },
+    { key: "grade", label: "Grade", padLeft: "50px", width: "9%" }, { key: "tags", label: "Tags" },
   ];
   const s = state.sort.trades;
   const rows = sortRows(m.trades || [], s.key, s.dir, tradeSortValue);
   return '<div class="card elev-sm" style="min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Trades</h5></div>' +
-    '<div class="scroll-xy" data-keep-scroll="trades" style="flex:1;min-height:0"><table class="table" style="min-width:1256px;table-layout:fixed"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
+    '<div class="scroll-xy" data-keep-scroll="trades" style="flex:1;min-height:0"><table class="table" style="min-width:1150px;table-layout:fixed"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
     rows.map((t) => '<tr class="tab" style="cursor:pointer" data-act="selectTrade" data-arg=\'' + attr({ id: t.id }) + "'>" +
       '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + "</td>" +
       '<td title="' + esc(t.symbol) + '" style="font-weight:500;font-variant-numeric:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.symbol) + "</td>" +
@@ -959,7 +959,7 @@ function tradesHtml(m) {
 // ---------------------------------------------------------------------------
 function posSortValue(p, key) { if (key === "pnl") return p.unreal; if (key === "held") return p.held; return p[key]; }
 function positionsHtml(m) {
-  const cols = [{ key: "symbol", label: "Symbol" }, { key: "qty", label: "Qty", align: "right" }, { key: "avg", label: "Avg cost", align: "right" }, { key: "last", label: "Price", align: "right" }, { key: "currency", label: "FX", align: "center", padLeft: "24px", padRight: "24px" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "pnl", label: "P&L", align: "right" }, { key: "held", label: "Hold", align: "right" }, { key: "alloc", label: "Allocation", align: "right" }];
+  const cols = [{ key: "symbol", label: "Symbol" }, { key: "qty", label: "Qty", align: "right" }, { key: "avg", label: "Avg cost", align: "right" }, { key: "last", label: "Price", align: "right" }, { key: "currency", label: "FX", align: "center", padLeft: "8px", padRight: "8px" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "pnl", label: "P&L", align: "right" }, { key: "held", label: "Hold", align: "right" }, { key: "alloc", label: "Allocation", align: "right" }];
   const s = state.sort.positions;
   const rows = sortRows(m.positions || [], s.key, s.dir, posSortValue);
   const p = state.posSel ? positionById(state.posSel) : null;
@@ -968,8 +968,8 @@ function positionsHtml(m) {
     '<div class="card elev-sm" style="flex:1;min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Positions</h5></div>' +
     '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0"><table class="table" style="min-width:680px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab' + (state.posSel === r.id ? " sel" : "") + '" style="cursor:pointer" data-act="selectPos" data-arg=\'' + attr({ id: r.id }) + "'>" +
-      '<td title="' + esc(r.symbol) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
-      '<td style="text-align:right">' + qty(r.qty) + '</td><td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right" title="' + (r.priceSource === "quote" ? "Quote from TMX Money" : "Last fill in your history; no quote available") + '">' + px(r.last) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center;padding:7px 24px">' + esc(r.currency) + '</td><td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
+      '<td title="' + esc(r.symbol) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:115px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
+      '<td style="text-align:right">' + qty(r.qty) + '</td><td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right" title="' + (r.priceSource === "quote" ? "Quote from TMX Money" : "Last fill in your history; no quote available") + '">' + px(r.last) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center;padding:7px 8px">' + esc(r.currency) + '</td><td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
       '<td style="text-align:right;white-space:nowrap;font-weight:500;color:' + color(r.unreal) + '">' + signedMoney(r.unreal, r.currency) + " (" + pct(r.unrealPct, 2) + ")</td>" +
       '<td style="text-align:right" class="dim">' + hold(r.held) + '</td><td style="text-align:right;color:rgba(var(--ink-rgb),.85)">' + pctPlain(r.alloc) + "</td></tr>").join("") +
     "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No open positions match these filters.</div>') + "</div></div>" +
@@ -1007,7 +1007,7 @@ function cashflowHtml(m) {
   const want = Math.min(6, ms.length);
   const axis = [];
   for (let i = 0; i < want; i++) axis.push(ms[Math.round(i * (ms.length - 1) / Math.max(1, want - 1))].label);
-  const ycols = [{ key: "symbol", label: "Holding", width: "12%" }, { key: "qty", label: "Qty", align: "right" }, { key: "avg", label: "Avg", align: "right" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "per", label: "Distribution", align: "right" }, { key: "ytd", label: "YTD", align: "right" }, { key: "all", label: "All time", align: "right" }, { key: "yob", label: "Projected", align: "right" }, { key: "yoc", label: "Yield on cost", align: "right" }, { key: "currentYield", label: "Current yield", align: "right", padRight: "0px" }];
+  const ycols = [{ key: "symbol", label: "Holding", width: "10%" }, { key: "qty", label: "Qty", align: "right", width: "6.5%" }, { key: "avg", label: "Avg", align: "right", width: "6.5%" }, { key: "cost", label: "Book", align: "right", width: "8%" }, { key: "mv", label: "Market", align: "right", width: "8.5%" }, { key: "per", label: "Distribution", align: "right", width: "11.5%" }, { key: "ytd", label: "YTD", align: "right", width: "6.5%" }, { key: "all", label: "All time", align: "right", width: "8.5%" }, { key: "yob", label: "Projected", align: "right", width: "10%" }, { key: "yoc", label: "Yield on cost", align: "right", width: "12%" }, { key: "currentYield", label: "Current yield", align: "right", padRight: "0px", width: "12%" }];
   const ys = state.sort.yoc;
   const posById = {};
   (m.positions || []).forEach((p) => { posById[p.id] = p; });
