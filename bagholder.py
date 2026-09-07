@@ -3295,7 +3295,7 @@ class Handler(BaseHTTPRequestHandler):
                     "grade": body.get("grade"),
                 },
             )
-            model.invalidate()
+            model.apply_journal(entries)
             self._send(200, {"ok": True, "journal": entries})
             return
         if path == "/api/disconnect":

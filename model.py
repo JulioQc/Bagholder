@@ -2549,6 +2549,25 @@ def payer_symbols(base=None):
     return out
 
 
+def apply_journal(entries):
+    """Push saved journal entries into the cached model without rebuilding it."""
+    with _cache_lock:
+        base = _cache["base"]
+        if base is None:
+            return
+        entries = entries or {}
+        for t in base["trades"]:
+            e = entries.get(t["id"]) or {}
+            t["grade"] = e.get("grade", "")
+            t["thesis"] = e.get("thesis", "")
+            t["tags"] = list(e.get("tags", []))
+        for p in base["positions"]:
+            e = entries.get(p["id"]) or {}
+            p["thesis"] = e.get("thesis", "")
+            p["tags"] = list(e.get("tags", []))
+        _cache["version"] = store.data_version()
+
+
 def invalidate():
     with _cache_lock:
         _cache["version"] = None

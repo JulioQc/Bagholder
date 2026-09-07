@@ -326,21 +326,13 @@ function saveJournal(id, patch, soon) {
   clearTimeout(_saveTimers[id]);
   const post = () => api("POST", "/api/journal", body).then((r) => {
     if (!r || !r.ok) { state.notice = "Could not save journal entry."; renderHeaderOnly(); return; }
-    // grades, tags and the review queue feed the dashboard: refresh the
-    // derived numbers, but never while the user is still typing in a field
-    if (!soon) refreshDerived();
   });
+  // the trade on screen is already updated locally; the dashboard's grade
+  // buckets and review queue are refreshed the next time a page is opened
+  if (patch.tags) { const opts = state.model.options; patch.tags.forEach((x) => { if (opts.tags.indexOf(x) < 0) { opts.tags.push(x); opts.tags.sort(); } }); }
+  state.derivedStale = true;
   if (soon) _saveTimers[id] = setTimeout(post, 500);
   else post();
-}
-let _refreshTimer = 0;
-function refreshDerived() {
-  clearTimeout(_refreshTimer);
-  _refreshTimer = setTimeout(() => {
-    const a = document.activeElement;
-    if (a && (a.id === "thesis" || a.id === "posThesis" || a.id === "tagInput")) { _refreshTimer = setTimeout(refreshDerived, 1500); return; }
-    loadModel();
-  }, 250);
 }
 
 // ---------------------------------------------------------------------------
@@ -930,6 +922,7 @@ function applyHash() {
   state.menuOpen = false;
   state.tagDraft = "";
   render();
+  if (state.derivedStale && !state.sel) { state.derivedStale = false; loadModel(); }
 }
 function go(page) {
   state.page = page;
@@ -938,6 +931,7 @@ function go(page) {
   state.sel = null;
   location.hash = page;
   render();
+  if (state.derivedStale) { state.derivedStale = false; loadModel(); }
 }
 function openTrade(id) {
   state.sel = id;
