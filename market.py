@@ -270,6 +270,18 @@ def tmx_symbol(symbol):
     return s
 
 
+def tmx_record_symbol(symbol, exchange):
+    """TMX Money symbol for a listing's declared distribution record: bare for
+    TSX, TSX-V and CSE listings, ':AQL' for Cboe Canada (the former NEO) ones,
+    which TMX carries only under that suffix."""
+    s = tmx_symbol(symbol)
+    if not s:
+        return None
+    if str(exchange or "").strip().upper() in CBOE_CANADA_EXCHANGES:
+        return s + ":AQL"
+    return s
+
+
 def tmx_quote_symbol(symbol, exchange, currency):
     """TMX Money symbol for a listing: bare for Canadian listings, ':US' for
     US listings. None when TMX does not carry it (Cboe Canada, crypto, options)."""
@@ -326,9 +338,10 @@ def parse_tmx_dividends(data):
     return out
 
 
-def fetch_tmx(symbol, ssl_context=None):
-    """Quote + declared distribution history for one Canadian listing."""
-    sym = tmx_symbol(symbol)
+def fetch_tmx(symbol, ssl_context=None, exchange=None):
+    """Quote + declared distribution history for one Canadian listing; the
+    exchange picks the TMX symbol form (see tmx_record_symbol)."""
+    sym = tmx_record_symbol(symbol, exchange)
     if not sym:
         return None, []
     quote = None
@@ -544,10 +557,14 @@ def refresh_distributions(symbols=None, ssl_context=None, force=False, now=None)
     recs = symbols or []
     now = now or datetime.now(timezone.utc)
     todo = [tmx_symbol(r.get("symbol")) for r in recs if is_canadian_listing(r.get("exchange"), r.get("currency"))] if force else stale_symbols(recs, now=now)
+    exchanges = {tmx_symbol(r.get("symbol")): r.get("exchange") for r in recs}
     done = 0
     for sym in todo:
-        quote, divs = fetch_tmx(sym, ssl_context)
-        if quote:
+        exchange = exchanges.get(sym)
+        quote, divs = fetch_tmx(sym, ssl_context, exchange=exchange)
+        # A Cboe Canada listing's price comes from Cboe's own feed every minute;
+        # TMX's delayed quote for it must not replace that, only its record is kept.
+        if quote and str(exchange or "").strip().upper() not in CBOE_CANADA_EXCHANGES:
             store.upsert_quote(sym, quote)
         if divs:
             store.upsert_distributions(sym, divs)

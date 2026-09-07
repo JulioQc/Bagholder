@@ -110,7 +110,7 @@ The page polls the server every 30 seconds and, whenever the data version change
 | Position Price, Market, P&L, Allocation; Cashflow Market and Current yield | Live quote | One minute for shares, ETFs, crypto and US-listed options |
 | Cashflow Distribution, Projected, Yield on cost, Current yield | Declared record from TMX | 20 hours, or the next sync, whichever comes first |
 
-Every instrument Wealthsimple offers has a live price source. A Cboe Canada listing has a live price but no declared distribution record on TMX, so its distribution rate comes from the payments received.
+Every instrument Wealthsimple offers has a live price source. TMX Money carries a Cboe Canada listing's declared record under the `:AQL` symbol form (the former NEO exchange), which the app asks for; its price still comes from Cboe's own feed, never from TMX's delayed quote.
 
 ## 3. Formatting
 
@@ -207,6 +207,8 @@ Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
 | Distribution | Per-unit amount from the rate above |
 | YTD | CAD received from this symbol this calendar year |
 | All time | CAD received from this symbol ever |
+| Ex-Div | The ex-date of the next distribution still to be paid, whether or not it has gone ex; when nothing is left to pay, of the last known one. From the fund's declared record (TSX, TSX-V, CSE and Cboe Canada listings all have one on TMX); without a record, the ex-date TMX reports on the quote. A date before today is shown muted |
+| Pay Day | The pay date of that same distribution; without a record, the date of the last payment received. A date before today is shown muted; the pay day itself is not |
 | Projected | Expected monthly income: annual income ÷ 12 |
 | Yield on cost | Per-unit amount × payments per year ÷ average cost |
 | Current yield | Per-unit amount × payments per year ÷ current price |

@@ -2384,6 +2384,24 @@ def cashflow_view(base, f, positions_all):
             freq = 12
         return {"per": per, "freq": freq, "annual": per * freq, "verified": verified, "source": "payments"}
 
+    def distribution_dates(sym):
+        """(ex-date, pay date, ex passed, pay passed): the next distribution still
+        to be paid, whether or not it has gone ex, else the last known one. The
+        fund's declared record first; failing that the ex-date TMX reports on the
+        quote and the last payment received. A date is 'passed' once it is
+        before today."""
+        recs_ = sorted(public.get(sym, []), key=lambda d: (_s(d.get("payDate"))[:10] or d["exDate"], d["exDate"]))
+        unpaid = [d for d in recs_ if (_s(d.get("payDate"))[:10] or d["exDate"]) >= today]
+        pick = unpaid[0] if unpaid else (recs_[-1] if recs_ else None)
+        if pick:
+            ex, pay = pick["exDate"], _s(pick.get("payDate"))[:10]
+        else:
+            q = quotes.get(sym) or {}
+            ex = _s(q.get("exDividendDate"))[:10]
+            paid = sorted(r["date"] for r in for_yoc if r["symbol"] == sym)
+            pay = paid[-1] if paid else ""
+        return ex, pay, bool(ex and ex < today), bool(pay and pay < today)
+
     def last_price(p):
         q = quotes.get(p["symbol"]) or {}
         px = _num(q.get("price"), None)
@@ -2414,6 +2432,10 @@ def cashflow_view(base, f, positions_all):
                 "ytd": sum_for(p["symbol"], lambda x: x["date"][:4] == this_year),
                 "ttm": sum_for(p["symbol"], lambda x: x["date"][:7] >= cut),
                 "all": sum_for(p["symbol"], lambda x: True),
+                "nextExDate": distribution_dates(p["symbol"])[0],
+                "nextPayDate": distribution_dates(p["symbol"])[1],
+                "exPast": distribution_dates(p["symbol"])[2],
+                "payPast": distribution_dates(p["symbol"])[3],
                 "yob": (r["per"] * p["qty"]) if r else None,
                 "annual": (r["annual"] * p["qty"]) if (r and r["annual"] is not None) else None,
                 "yoc": (r["annual"] / avg) if (r and r["annual"] is not None and avg) else None,

@@ -33,7 +33,13 @@ The file served from the design URL carries Design's preview harness on line 4 (
 
 ## Releases
 
-Versions are GitHub releases tagged `vMAJOR.MINOR.PATCH`; commits are not versions. To release: bump `APP_VERSION` in `bagholder.py` on the release commit, merge, then `gh release create vX.Y.Z --target master --title vX.Y.Z --notes "..."`. Running copies check the latest release once a day and show an "Update available" link when it is newer.
+Versions are GitHub releases tagged `vMAJOR.MINOR.PATCH` (semantic versioning); commits are not versions. Which part to bump:
+
+- PATCH (1.1.0 → 1.1.1): fixes only, nothing new to use.
+- MINOR (1.1.0 → 1.2.0): anything new a user can see or do (a column, a card, a toggle, a data source), with existing data and behaviour intact.
+- MAJOR (1.1.0 → 2.0.0): a change that breaks existing installs (a database that must be migrated by hand, a removed page, a changed protocol with the page that requires more than a restart).
+
+To release: bump `APP_VERSION` in `bagholder.py` in the last PR going into the release, merge, then `gh release create vX.Y.Z --target master --title vX.Y.Z --notes "..."` with notes listing the merged PRs. Master may carry unreleased features between releases; a release collects everything merged since the last tag, so the bump is decided by the biggest change in that set, not by the last PR alone. Running copies check the latest release once a day and show an "Update available" link when it is newer.
 
 ## Do not
 
