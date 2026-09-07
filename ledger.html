@@ -764,13 +764,15 @@ function eqHover(e) {
 function eqLeave() { ["eqX", "eqDot", "eqTip"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = true; }); }
 
 function yearsCardHtml(m) {
-  const rs = (m.years || []).slice(-4).reverse();
+  const rs = (m.years || []).slice().reverse();
   const scale = Math.max.apply(null, rs.map((x) => Math.abs(x.r)).concat(rs.map((x) => Math.abs(x.spR || 0))).concat([0.01]));
   const comparable = (m.years || []).filter((x) => x.spR != null);
   const beat = comparable.filter((x) => x.r > x.spR).length;
   const note = !(m.years || []).length ? "No NAV history yet." : "Outperformed S&P 500 in " + beat + " of " + comparable.length + (comparable.length === 1 ? " year." : " years.");
-  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column"><h5 style="margin-bottom:2px">Annualized returns</h5><div class="muted" style="font-size:11px;margin-bottom:14px">Vs S&amp;P 500</div>' +
-    '<div style="display:flex;flex-direction:column;gap:14px">' +
+  // contain:size keeps this card from setting the row's height: the equity curve
+  // does that, and the list of years scrolls inside whatever height is left
+  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0;contain:size"><h5 style="margin-bottom:2px">Annualized returns</h5><div class="muted" style="font-size:11px;margin-bottom:14px">Vs S&amp;P 500</div>' +
+    '<div class="scroll" style="flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;padding-right:2px">' +
     (rs.length ? rs.map((y) => '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span class="tab">' + esc(y.year) + '</span><span class="tab" style="color:' + color(y.r) + '">' + pct(y.r) + '<span class="muted"> / ' + (y.spR == null ? "—" : pct(y.spR)) + "</span></span></div>" +
       '<div style="display:flex;flex-direction:column;gap:3px"><div style="height:7px;width:' + Math.max(2, Math.abs(y.r) / scale * 100).toFixed(0) + "%;background:" + color(y.r) + ';border-radius:2px"></div><div style="height:7px;width:' + Math.max(2, Math.abs(y.spR || 0) / scale * 100).toFixed(0) + '%;background:var(--mixed);border-radius:2px"></div></div></div>').join("") : '<div class="muted" style="font-size:12px">No complete years yet.</div>') +
     '</div><div class="rule-t muted" style="margin-top:auto;padding-top:12px;font-size:10px">' + esc(note) + "</div></div>";

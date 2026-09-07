@@ -144,7 +144,7 @@ Six KPI tiles in one row, all in CAD over the trades in scope:
 Cards:
 
 - **Equity curve.** The equity series in scope with a `$` axis and six date labels; hover shows the value and day.
-- **Annualized returns.** Title `Annualized returns`, subtitle `Vs S&P 500`. Up to four most recent years, newest first, each with the account's return and the index's return and two equal-height bars. Footer: `Outperformed S&P 500 in N of M years.`
+- **Annualized returns.** Title `Annualized returns`, subtitle `Vs S&P 500`. Every year, newest first, each with the account's return and the index's return and two equal-height bars; the list scrolls inside the card, which takes its height from the equity curve beside it and never grows past it. Footer, fixed below the list: `Outperformed S&P 500 in N of M years.`
 - **Monthly P&L.** One bar per calendar month of close date, CAD, six axis labels; hover shows the month and trade count; click opens the trade or filters to that month.
 - **Grade vs P&L.** Four bars, A B C F, CAD sum per grade with the count under each.
 - **By symbol.** Symbol, P&L (CAD), Trades, Win rate, Avg hold, grouped by underlying, sorted by P&L; click opens or filters.
