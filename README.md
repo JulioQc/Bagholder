@@ -9,7 +9,7 @@ Use at your own risk. The app has you sign in to the real Wealthsimple website i
 - Stocks and ETFs on Canadian and US exchanges, in CAD and USD
 - Options, including covered calls, rolls, expiries and assignments
 - Crypto, including staking rewards
-- Dividends and distributions, interest, and withholding tax
+- Dividends and distributions
 - Any number of Wealthsimple accounts, self-directed or managed
 
 Futures are not supported yet.
