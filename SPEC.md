@@ -216,7 +216,7 @@ One filter set applies to every page: Date (presets 1D 1W 1M 3M 6M YTD 1Y 5Y, ye
 
 ## 6. Layout
 
-- The app sits inside a rounded panel with a 24 px margin on a darker mat, in all three themes: Nocturne (default), Midnight (green accents, monospace numerals), Light.
+- The app sits inside a rounded panel with a 24 px margin on a darker mat, in all three themes: Nocturne (default), Midnight (green accents, monospace numerals), Light. The Bagholder wordmark is identical in every theme. Tag chips, the selected grade and tag suggestions take the accent colour, except in Midnight, where the accent is the gain green: there they are neutral grey, so a tag or grade never reads as a gain or a loss.
 - No table may extend past its card or clip a cell at a window 1340 px wide or wider. Below that a table may scroll sideways inside its card, never the page.
 - Table headers are uppercase, one line, level with each other regardless of alignment, and a centred header sits exactly over the centre of its values.
 - Scrollbars appear only while scrolling and only inside tables.
