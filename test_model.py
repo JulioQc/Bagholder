@@ -806,6 +806,25 @@ class ViewTest(unittest.TestCase):
         self.assertAlmostEqual(v["years"][-1]["spR"], 0.25, places=6)
         self.assertAlmostEqual(v["years"][-1]["r"], 0.20, places=6, msg="the account's own return does not depend on the index")
 
+    def test_next_ex_dividend_date_from_the_declared_record_then_the_quote(self):
+        acts = [
+            buy("b1", "RDDY", 100, 5, "2026-05-01", accountType="Cashflow"),
+            act(id="d1", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-08-06", symbol="RDDY", currency="CAD", accountType="Cashflow"),
+            buy("b2", "HHIS", 100, 5, "2026-05-01", accountType="Cashflow"),
+            act(id="d2", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-08-06", symbol="HHIS", currency="CAD", accountType="Cashflow"),
+            buy("b3", "HBIX", 100, 5, "2026-05-01", accountType="Cashflow"),
+            act(id="d3", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-08-06", symbol="HBIX", currency="CAD", accountType="Cashflow"),
+        ]
+        snapshot = {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
+        market_data = {"fx": {}, "benchmark": {},
+                       "distributions": {"RDDY": [{"exDate": "2026-09-30", "payDate": "2026-10-06", "amount": 0.15, "currency": "CAD"}, {"exDate": "2026-08-31", "payDate": "2026-09-04", "amount": 0.15, "currency": "CAD"}]},
+                       "quotes": {"HHIS": {"price": 11.0, "exDividendDate": "2026-09-29"}, "HBIX": {"price": 6.7, "exDividendDate": "2026-08-29"}}}
+        base = model.build_base(snapshot, market_data, {}, today="2026-09-07")
+        by = {h["symbol"]: h["nextExDate"] for h in model.build_view(base, {})["cashflow"]["holdings"]}
+        self.assertEqual(by["RDDY"], "2026-09-30", "the declared record's next ex-date")
+        self.assertEqual(by["HHIS"], "2026-09-29", "no record: the ex-date on the quote")
+        self.assertEqual(by["HBIX"], "", "a past ex-date on the quote is not an upcoming one")
+
     def test_monthly_distributions_run_to_the_current_month(self):
         acts = [
             buy("b1", "RDDY", 100, 5, "2026-05-01", accountType="Cashflow"),

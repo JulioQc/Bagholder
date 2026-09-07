@@ -207,6 +207,7 @@ Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
 | Distribution | Per-unit amount from the rate above |
 | YTD | CAD received from this symbol this calendar year |
 | All time | CAD received from this symbol ever |
+| Ex-Div | The next ex-dividend date: the earliest date after today in the fund's declared record, else the ex-date TMX reports on the quote if it is still ahead, else a dash |
 | Projected | Expected monthly income: annual income ÷ 12 |
 | Yield on cost | Per-unit amount × payments per year ÷ average cost |
 | Current yield | Per-unit amount × payments per year ÷ current price |

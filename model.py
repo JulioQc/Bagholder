@@ -2384,6 +2384,16 @@ def cashflow_view(base, f, positions_all):
             freq = 12
         return {"per": per, "freq": freq, "annual": per * freq, "verified": verified, "source": "payments"}
 
+    def next_ex_date(sym):
+        # the next ex-dividend date: the fund's declared record first, then the
+        # ex-date TMX reports on the quote; nothing is assumed
+        upcoming = sorted(d["exDate"] for d in public.get(sym, []) if d["exDate"] > today)
+        if upcoming:
+            return upcoming[0]
+        q = quotes.get(sym) or {}
+        ex = _s(q.get("exDividendDate"))[:10]
+        return ex if ex > today else ""
+
     def last_price(p):
         q = quotes.get(p["symbol"]) or {}
         px = _num(q.get("price"), None)
@@ -2414,6 +2424,7 @@ def cashflow_view(base, f, positions_all):
                 "ytd": sum_for(p["symbol"], lambda x: x["date"][:4] == this_year),
                 "ttm": sum_for(p["symbol"], lambda x: x["date"][:7] >= cut),
                 "all": sum_for(p["symbol"], lambda x: True),
+                "nextExDate": next_ex_date(p["symbol"]),
                 "yob": (r["per"] * p["qty"]) if r else None,
                 "annual": (r["annual"] * p["qty"]) if (r and r["annual"] is not None) else None,
                 "yoc": (r["annual"] / avg) if (r and r["annual"] is not None and avg) else None,
