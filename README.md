@@ -4,6 +4,16 @@ A local-first trading journal for Wealthsimple users. It runs on your own comput
 
 Use at your own risk. The app has you sign in to the real Wealthsimple website in order to sync. The author is not responsible for your use or misuse of the app or any consequences thereof.
 
+## What's supported
+
+- Stocks and ETFs on Canadian and US exchanges, in CAD and USD
+- Options, including covered calls, rolls, expiries and assignments
+- Crypto, including staking rewards
+- Dividends and distributions, interest, and withholding tax
+- Any number of Wealthsimple accounts, self-directed or managed
+
+Futures are not supported yet.
+
 ## Requirements
 
 - Python 3.9 or newer
