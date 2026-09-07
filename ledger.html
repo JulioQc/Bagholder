@@ -416,6 +416,7 @@ function syncLine() {
   const s = state.status;
   if (s.protocol && s.protocol !== PROTOCOL) return '<span class="status-err">Restart Bagholder to finish the update</span>';
   if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login…';
+  if (state.busy === "refresh") return '<span class="spin"></span>Refreshing session…';
   if (s.syncing) return '<span class="spin"></span>' + esc(s.syncStep || "Syncing…");
   if (s.error) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
   if (!s.connected) return "Not connected";
@@ -1340,7 +1341,7 @@ function syncNow() {
 }
 function refreshSession() {
   state.menuOpen = false; state.busy = "refresh"; renderHeaderOnly();
-  api("POST", "/api/refresh").then((r) => { state.busy = ""; state.notice = r && r.ok ? "Session refreshed" : ((r && r.error) || "Refresh failed"); pollStatus(); setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000); });
+  api("POST", "/api/refresh").then((r) => { state.busy = ""; state.notice = r && r.ok ? "Session refreshed" : ((r && r.error) || "Refresh failed"); renderHeaderOnly(); pollStatus(); setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000); });
 }
 function disconnect() {
   state.menuOpen = false;
