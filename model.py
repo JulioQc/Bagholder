@@ -1727,11 +1727,16 @@ def year_return(series, year, today):
     to = min("%s-12-31" % year, today)
     if not series:
         return None
+    # A balance under 1% of the account's peak is pre-history (a few dollars
+    # parked before the real start): a chain that began there would turn the
+    # first big deposit into a wild return, so the chain starts at the first
+    # point that clears the floor, and the year is measured from there.
+    floor = max(p["v"] for p in series) * 0.01
     start_day = shift_date(cal, -1)
     start = _nav_on(series, start_day)
     after = start_day
-    if not (start and start > 0):
-        first = next((p for p in series if cal <= p["d"] <= to), None)
+    if not (start and start > floor):
+        first = next((p for p in series if cal <= p["d"] <= to and p["v"] > floor), None)
         if not first:
             return None
         start = first["v"]
@@ -1760,11 +1765,13 @@ def year_return(series, year, today):
     return {"r": r, "from": span_from, "to": to, "days": days_between(span_from, to)}
 
 
-def benchmark_return(bench, year, today):
+def benchmark_return(bench, year, today, start=None):
+    """The index over the same span the account's year covers: the calendar year,
+    or from `start` when the account was funded part way through it."""
     if not bench:
         return None
     days = sorted(bench)
-    cal = "%s-01-01" % year
+    cal = _s(start)[:10] or "%s-01-01" % year
     to = min("%s-12-31" % year, today)
     prev = None
     end = None
@@ -1811,7 +1818,7 @@ def yearly_returns(series, bench, today):
                 "to": yr["to"],
                 "flow": flow,
                 "endV": end_v,
-                "spR": benchmark_return(bench, y, today),
+                "spR": benchmark_return(bench, y, today, yr["from"] if yr["from"] != "%s-01-01" % y else None),
             }
         )
     return out

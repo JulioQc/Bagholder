@@ -754,11 +754,39 @@ class ViewTest(unittest.TestCase):
             {"date": "2020-12-22", "equity": 0, "netDeposits": 0},
             {"date": "2020-12-23", "equity": 100, "netDeposits": 100},
             {"date": "2020-12-31", "equity": 101, "netDeposits": 100},
+            {"date": "2023-06-30", "equity": 45000, "netDeposits": 40000},
             {"date": "2023-12-31", "equity": 50000, "netDeposits": 40000},
             {"date": "2024-12-31", "equity": 60000, "netDeposits": 40000},
         ])
-        years = [y["year"] for y in model.yearly_returns(series, {}, "2025-01-01")]
-        self.assertEqual(years, ["2023", "2024"])
+        years = model.yearly_returns(series, {}, "2025-01-01")
+        self.assertEqual([y["year"] for y in years], ["2023", "2024"])
+        self.assertEqual(years[0]["from"], "2023-06-30", "2023 is measured from the first funded point, not from the $101 of 2020")
+        self.assertAlmostEqual(years[0]["r"], 50000 / 45000 - 1, places=6)
+
+    def test_year_starts_where_the_account_was_really_funded(self):
+        # a few dollars parked in September, the real money a week later: the year's
+        # chain must start at the funded point, not at the $1,666 base that would
+        # turn the deposit's timing into a -61% week
+        series = model.equity_series([
+            {"date": "2023-09-06", "equity": 0, "netDeposits": 15},
+            {"date": "2023-09-13", "equity": 1666, "netDeposits": 1682},
+            {"date": "2023-09-20", "equity": 111771, "netDeposits": 112806},
+            {"date": "2023-10-04", "equity": 116832, "netDeposits": 119270},
+            {"date": "2023-12-27", "equity": 135232, "netDeposits": 125411},
+            {"date": "2024-06-30", "equity": 174611, "netDeposits": 125411},
+            {"date": "2024-12-31", "equity": 170000, "netDeposits": 125411},
+        ])
+        yr = model.year_return(series, "2023", "2025-01-01")
+        self.assertEqual(yr["from"], "2023-09-20")
+        # from 111,771 with 12,605 more deposited to 135,232: about +9.5%
+        self.assertAlmostEqual(yr["r"], (116832 - 111771 - 6464) / 111771 * 1 + 0, delta=0.2)
+        self.assertGreater(yr["r"], 0.05)
+        self.assertLess(yr["r"], 0.15)
+        bench = {"2022-12-30": 3800.0, "2023-09-19": 4400.0, "2023-12-29": 4770.0, "2024-12-31": 5880.0}
+        years = model.yearly_returns(series, bench, "2025-01-01")
+        by = {y["year"]: y for y in years}
+        self.assertAlmostEqual(by["2023"]["spR"], 4770 / 4400 - 1, places=6, msg="the index is measured over the same span as the account")
+        self.assertAlmostEqual(by["2024"]["spR"], 5880 / 4770 - 1, places=6)
 
     def test_filters_are_cleaned(self):
         f = model.clean_filters({"lists": {"account": ["A", 3, ""]}, "ranges": {"hold": {"op": "<", "v": "7"}}, "preset": "bogus", "years": [2025, "abcd"], "from": "2026-1-1", "to": "2026-02-01"})

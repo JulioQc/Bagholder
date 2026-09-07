@@ -72,7 +72,7 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 ### Equity and returns
 
 - **Equity series.** Daily net liquidation value from Wealthsimple, all accounts combined, or one account when the account filter selects exactly one.
-- **Yearly return.** Daily returns net of deposits and withdrawals, chain-linked over the calendar year. A year in which the account never exceeded 1 % of its all-time peak is ignored as pre-history.
+- **Yearly return.** Daily returns net of deposits and withdrawals, chain-linked over the calendar year. A balance under 1 % of the account's all-time peak is pre-history: a year that never clears it is not shown, and a year in which the account first clears it part way through is measured from that first point, so the first real deposit is never read as a return. The S&P 500 is measured over the same span as the account's year.
 - **S&P 500.** FRED daily close, same calendar span, Stooq as fallback.
 - **Avg annualized.** Yearly returns compounded and annualized over the days they cover; years shorter than 30 days are skipped.
 - **Max drawdown.** Largest peak-to-trough fall of the flow-adjusted equity index, so money moved in or out is neither a gain nor a loss. Reported as a percentage, the CAD equivalent at the peak, and the trough date.
