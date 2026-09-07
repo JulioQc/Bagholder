@@ -213,9 +213,9 @@ Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
 
 Avg and Market belong to the row's own position, matched by position id, never by symbol.
 
-**Allocation and Distribution history** share one row, the Allocation card a third of the width on the left, the history two thirds on the right, both 380px tall with their contents scrolling inside.
+**Allocation and Distribution history** share one row, the Allocation card about 38% of the width on the left, the history the rest on the right, both 380px tall with their contents scrolling inside. The history's Account cell truncates with an ellipsis at 200px so a long account name cannot push the table past its card.
 
-**Allocation.** A donut of the income holdings in scope, each holding's share of the whole by market value or by projected monthly income, chosen with a Market / Projected switch that is remembered on this machine. Slices are ordered largest first and coloured from an eight-colour palette defined per theme. The centre reads the total, or the hovered slice's value, symbol and share; the legend lists symbol and share. No browser tooltips.
+**Allocation.** A donut of the income holdings in scope, each holding's share of the whole by market value or by projected monthly income, chosen with a Market / Projected switch that is remembered on this machine. Slices are ordered largest first and coloured from an eight-colour palette defined per theme. The donut fills the card's height; the centre reads the total, or the hovered slice's value, symbol and share; the legend beside it is an aligned grid of symbol, value and share, vertically centred on the donut. No browser tooltips.
 
 **Distribution history.** Date · Symbol · Type · Account · Qty · Distribution · Amount, newest first, amounts in native currency, scrolling inside its card.
 
