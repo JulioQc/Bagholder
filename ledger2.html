@@ -176,8 +176,7 @@ function money(v, ccy, dp) {
   if (v == null || !isFinite(v)) return "—";
   dp = dp == null ? 2 : dp;
   const sign = v < 0 ? "−" : "";
-  const pre = ccy === "USD" ? "US$" : "$";
-  return sign + pre + n2(Math.abs(v), dp);
+  return sign + "$" + n2(Math.abs(v), dp);
 }
 function money0(v, ccy) { return money(v, ccy, 0); }
 function signedMoney(v, ccy, dp) { if (v == null || !isFinite(v)) return "—"; return (v >= 0 ? "+" : "") + money(v, ccy, dp); }
@@ -660,18 +659,18 @@ function tradeSortValue(t, key) {
 function tradesTableHtml(m) {
   const cols = [
     { key: "entryDate", label: "Open", padRight: "12px" }, { key: "exitDate", label: "Close" }, { key: "symbol", label: "Symbol" },
-    { key: "qty", label: "Qty", align: "right" }, { key: "entry", label: "Entry", align: "right" }, { key: "exit", label: "Exit", align: "right" },
+    { key: "currency", label: "FX" }, { key: "qty", label: "Qty", align: "right" }, { key: "entry", label: "Entry", align: "right" }, { key: "exit", label: "Exit", align: "right" },
     { key: "pnl", label: "P&L", align: "right" }, { key: "pnlPct", label: "P&L %", align: "right" }, { key: "holdDays", label: "Hold", align: "right" },
     { key: "grade", label: "Grade", padLeft: "22px" }, { key: "tags", label: "Tags" },
   ];
   const s = state.sort.trades;
   const rows = sortRows(m.trades || [], s.key, s.dir, tradeSortValue);
-  return '<div class="card elev-sm" style="min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Trades</h5><span class="muted" style="font-size:11px">' + rows.length + " of " + m.tradeTotal + ' closed trades · P&amp;L in trade currency</span></div>' +
+  return '<div class="card elev-sm" style="min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Trades</h5></div>' +
     '<div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:760px"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
     rows.map((t) => '<tr class="tab" style="cursor:pointer" data-act="selectTrade" data-arg=\'' + attr({ id: t.id }) + "'>" +
       '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + (t.status === "open" ? ' <span title="Position still open; realized legs so far" style="font-size:9px;letter-spacing:.06em;color:var(--accent-300);background:var(--accent-900);border-radius:4px;padding:1px 4px;vertical-align:middle">OPEN</span>' : "") + "</td>" +
       '<td title="' + esc(t.symbol) + '" style="font-weight:500;font-variant-numeric:normal;max-width:186px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.symbol) + "</td>" +
-      '<td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + "</td>" +
+      '<td class="dim" style="font-variant-numeric:normal">' + esc(t.currency) + '</td><td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + "</td>" +
       '<td style="text-align:right;font-weight:500;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</td><td style="text-align:right;color:' + color(t.pnl) + '">' + pct(t.pnlPct) + "</td>" +
       '<td style="text-align:right" class="dim">' + hold(t.holdDays) + '</td><td style="white-space:nowrap;max-width:64px;padding-left:22px">' + gradeChip(t) + "</td>" +
       '<td style="font-variant-numeric:normal">' + (t.tags && t.tags.length ? '<span class="tagchip" title="' + esc(t.tags[0]) + '">' + esc(t.tags[0]) + "</span>" + (t.tags.length > 1 ? '<span class="muted" style="font-size:10.5px;margin-left:4px">+' + (t.tags.length - 1) + "</span>" : "") : '<span style="color:rgba(233,233,237,.5)">—</span>') + "</td></tr>").join("") +
