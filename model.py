@@ -2046,7 +2046,7 @@ EMPTY_FILTERS = {
     "benchmark": "SP500",
 }
 
-BENCHMARK_LABELS = {"SP500": "S&P 500", "TSX": "S&P/TSX"}
+BENCHMARK_LABELS = {"SP500": "S&P 500", "TSX": "S&P/TSX", "TSX60": "TSX 60"}
 
 PRESET_DAYS = {"1d": 1, "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365, "5y": 1826}
 

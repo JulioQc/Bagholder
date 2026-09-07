@@ -797,6 +797,7 @@ class ViewTest(unittest.TestCase):
         snapshot = {"activities": [], "accounts": [], "balances": [], "navHistory": [{"date": "2023-12-31", "equity": 100000, "netDeposits": 100000}, {"date": "2024-12-31", "equity": 120000, "netDeposits": 100000}], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
         base = model.build_base(snapshot, market_data, {}, today="2025-01-01")
         self.assertEqual(model.clean_filters({"benchmark": "tsx"})["benchmark"], "TSX")
+        self.assertEqual(model.clean_filters({"benchmark": "tsx60"})["benchmark"], "TSX60")
         self.assertEqual(model.clean_filters({"benchmark": "nope"})["benchmark"], "SP500")
         v = model.build_view(base, {})
         self.assertEqual(v["benchmark"], {"key": "SP500", "label": "S&P 500"})
@@ -804,6 +805,11 @@ class ViewTest(unittest.TestCase):
         v = model.build_view(base, {"benchmark": "TSX"})
         self.assertEqual(v["benchmark"], {"key": "TSX", "label": "S&P/TSX"})
         self.assertAlmostEqual(v["years"][-1]["spR"], 0.25, places=6)
+        market_data["benchmarks"]["TSX60"] = {"2023-12-29": 100.0, "2024-12-31": 115.0}
+        base = model.build_base(snapshot, market_data, {}, today="2025-01-01")
+        v = model.build_view(base, {"benchmark": "TSX60"})
+        self.assertEqual(v["benchmark"], {"key": "TSX60", "label": "TSX 60"})
+        self.assertAlmostEqual(v["years"][-1]["spR"], 0.15, places=6)
         self.assertAlmostEqual(v["years"][-1]["r"], 0.20, places=6, msg="the account's own return does not depend on the index")
 
     def test_ex_div_and_pay_day_next_declared_else_last_known(self):
@@ -1359,6 +1365,13 @@ class MarketParseTest(unittest.TestCase):
                     out = market.refresh_periodic(symbols=syms, now=t0)
                 self.assertEqual((out["fx"], out["benchmark"], out["distributions"]), (1, 1, 1))
                 self.assertEqual((g.call_count, f.call_count), (2, 1))
+                # Ten minutes later the TMX indices are still missing (offline above), so the
+                # indices are attempted again regardless of the six-hour clock.
+                with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                    out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(minutes=5))
+                self.assertEqual(g.call_count, 2, "a missing index does not wait for the clock")
+                store.upsert_benchmark_prices({"2026-09-04": 1500.0}, symbol="TSX")
+                store.upsert_benchmark_prices({"2026-09-04": 1500.0}, symbol="TSX60")
                 # Ten minutes later: FX and the benchmark wait for their six hours; the record is fresh.
                 with mock.patch.object(market, "_post_json", side_effect=OSError("offline")), mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
                     out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(minutes=10))
@@ -1640,15 +1653,22 @@ class MarketParseTest(unittest.TestCase):
             try:
                 tmx = {"data": {"getTimeSeriesData": [{"dateTime": "2026-09-04T16:00:00-04:00", "open": 1, "high": 1, "low": 1, "close": 36513.8, "volume": 0}, {"dateTime": "2026-09-03T16:00:00-04:00", "open": 1, "high": 1, "low": 1, "close": 36633.12, "volume": 0}]}}
                 with mock.patch.object(market, "_post_json", return_value=tmx) as p:
-                    self.assertEqual(market.refresh_tsx(), 2)
-                self.assertEqual(p.call_args.args[1]["variables"]["symbol"], "^TSX")
-                self.assertEqual(p.call_args.args[1]["variables"]["start"], "2016-01-01", "first fetch goes back to 2016")
+                    self.assertEqual(market.refresh_tsx(), 4, "two days for each of the two indices")
+                asked = [c.args[1]["variables"] for c in p.call_args_list]
+                self.assertEqual([a["symbol"] for a in asked], ["^TSX", "^TX60"], "the Composite and the 60")
+                self.assertEqual({a["start"] for a in asked}, {"2016-01-01"}, "first fetch goes back to 2016")
                 self.assertEqual(store.benchmark_prices("TSX")["2026-09-04"], 36513.8)
+                self.assertEqual(store.benchmark_prices("TSX60")["2026-09-04"], 36513.8)
                 self.assertEqual(store.benchmark_prices("SP500"), {}, "kept apart from the S&P 500")
-                self.assertEqual(sorted(store.market_data()["benchmarks"]), ["SP500", "TSX"])
+                self.assertEqual(sorted(store.market_data()["benchmarks"]), ["SP500", "TSX", "TSX60"])
+                from datetime import date as _d
+                self.assertTrue(market.benchmark_stale(_d(2026, 9, 5)), "the S&P 500 has no closes yet")
+                store.upsert_benchmark_prices({"2026-09-04": 6500.0}, symbol="SP500")
+                self.assertFalse(market.benchmark_stale(_d(2026, 9, 5)))
+                self.assertTrue(market.benchmark_stale(_d(2026, 10, 5)), "closes older than the stale window")
                 with mock.patch.object(market, "_post_json", return_value=tmx) as p:
                     market.refresh_tsx()
-                self.assertEqual(p.call_args.args[1]["variables"]["start"], "2026-08-28", "later fetches start a week before the newest stored day")
+                self.assertEqual({c.args[1]["variables"]["start"] for c in p.call_args_list}, {"2026-08-28"}, "later fetches start a week before the newest stored day")
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 

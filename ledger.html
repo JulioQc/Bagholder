@@ -187,7 +187,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
-const PROTOCOL = "2026-09-07.2"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-08.1"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -209,7 +209,7 @@ function chartTfFor(t, available) {
 function chartTf() { const t = state.sel ? tradeById(state.sel) : null; return t ? chartTfFor(t) : "1d"; }
 function setChartTf(tf) { if (state.sel) _tfByTrade[state.sel] = tf; }
 // The index the yearly returns are compared against: a preference, not a filter
-const BENCHMARKS = [["SP500", "S&P 500"], ["TSX", "S&P/TSX"]];
+const BENCHMARKS = [["SP500", "S&P 500"], ["TSX", "S&P/TSX"], ["TSX60", "TSX 60"]];
 function benchmarkPref() { const v = state.benchmark || (function () { try { return localStorage.getItem("bh2.benchmark"); } catch (e) { return ""; } })(); return BENCHMARKS.some((x) => x[0] === v) ? v : "SP500"; }
 function setBenchmark(key) { state.benchmark = key; try { localStorage.setItem("bh2.benchmark", key); } catch (e) {} loadModel(); }
 function chartBasis() { const v = state.chartBasis || (function () { try { return localStorage.getItem("bh2.chartBasis"); } catch (e) { return ""; } })(); return v === "contract" ? "contract" : "underlying"; }
