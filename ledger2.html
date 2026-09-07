@@ -679,7 +679,7 @@ function tradesTableHtml(m) {
   const s = state.sort.trades;
   const rows = sortRows(m.trades || [], s.key, s.dir, tradeSortValue);
   return '<div class="card elev-sm" style="min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Trades</h5></div>' +
-    '<div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:760px"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
+    '<div class="scroll-xy" data-keep-scroll="trades" style="flex:1;min-height:0"><table class="table" style="min-width:760px"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
     rows.map((t) => '<tr class="tab" style="cursor:pointer" data-act="selectTrade" data-arg=\'' + attr({ id: t.id }) + "'>" +
       '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + "</td>" +
       '<td title="' + esc(t.symbol) + '" style="font-weight:500;font-variant-numeric:normal;max-width:186px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.symbol) + "</td>" +
@@ -805,7 +805,7 @@ function positionsHtml(m) {
   const sum = m.positionsSummary || {};
   return '<div style="padding:20px;min-height:380px"><div style="display:flex;gap:14px;align-items:flex-start">' +
     '<div class="card elev-sm" style="flex:1;min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Positions</h5></div>' +
-    '<div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:680px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
+    '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0"><table class="table" style="min-width:680px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab' + (state.posSel === r.id ? " sel" : "") + '" style="cursor:pointer" data-act="selectPos" data-arg=\'' + attr({ id: r.id }) + "'>" +
       '<td title="' + esc(r.symbol) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
       '<td style="text-align:right">' + qty(r.qty) + '</td><td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right" title="' + (r.priceSource === "quote" ? "Quote from TMX Money" : "Last fill in your history; no quote available") + '">' + px(r.last) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center;padding:7px 24px">' + esc(r.currency) + '</td><td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
@@ -905,11 +905,14 @@ function pageHtml() {
   if (state.page === "cashflow") return cashflowHtml(m);
   return dashboardHtml(m);
 }
+const _keptScroll = {};
 function render() {
   const root = document.getElementById("app");
   const scrollY = window.scrollY;
+  root.querySelectorAll("[data-keep-scroll]").forEach((el) => { _keptScroll[el.dataset.keepScroll] = { top: el.scrollTop, left: el.scrollLeft }; });
   root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.dataOpen ? dataDialogHtml() : "");
   window.scrollTo(0, scrollY);
+  root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
   const menu = document.getElementById("tagMenu");
   if (menu) menu.innerHTML = tagMenuHtml();
 }
@@ -935,7 +938,9 @@ function applyHash() {
   state.picker = null;
   state.menuOpen = false;
   state.tagDraft = "";
+  const backToList = h.page === "trades" && !h.sel;
   render();
+  if (backToList) window.scrollTo(0, _listScrollY);
   if (state.derivedStale && !state.sel) { state.derivedStale = false; loadModel(); }
 }
 function go(page) {
@@ -947,7 +952,9 @@ function go(page) {
   render();
   if (state.derivedStale) { state.derivedStale = false; loadModel(); }
 }
+let _listScrollY = 0;
 function openTrade(id) {
+  _listScrollY = window.scrollY;
   state.sel = id;
   state.tagDraft = "";
   state.page = "trades";
@@ -1142,6 +1149,7 @@ function bind() {
   document.addEventListener("scroll", (e) => {
     const el = e.target;
     if (!(el instanceof Element) || !(el.classList.contains("scroll") || el.classList.contains("scroll-xy"))) return;
+    if (el.dataset.keepScroll) _keptScroll[el.dataset.keepScroll] = { top: el.scrollTop, left: el.scrollLeft };
     el.classList.add("scrolling");
     clearTimeout(_scrollTimers.get(el));
     _scrollTimers.set(el, setTimeout(() => el.classList.remove("scrolling"), 700));

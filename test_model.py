@@ -127,6 +127,9 @@ class FifoPortTest(unittest.TestCase):
         rolled_in = [t for t in r["closed"] if "rolled-in" in t["flags"]]
         self.assertAlmostEqual(sum(t["quantity"] for t in rolled_in), 16)
         self.assertTrue(all(t["symbol"] == "LUNR 21JAN28 12.00 CALL" for t in rolled_in))
+        # everything the buy-back closed is one position, so one trade row
+        jan28 = {t["rt"] for t in r["closed"] if t["symbol"] == "LUNR 21JAN28 12.00 CALL"}
+        self.assertEqual(len(jan28), 1)
 
     def test_credit_roll_up_moves_shorts_to_the_new_strike(self):
         # 5 short 10 calls rolled up to 12 calls for a credit (two multileg fills

@@ -761,9 +761,15 @@ def match_fifo(activities):
         symbol. When this chain has been rolled, a buy-back beyond the known
         shorts also closes the chain's older contracts (nearest expiry first):
         those are the legs the rolls moved here without posting."""
-        lots = rolled_of(a)[closing_dir]
+        pool = rolled_of(a)
+        lots = pool[closing_dir]
         key = book_key(a)
-        rt = rt_open.get(key)
+        # A rolled chain is one position from the first short to the last
+        # buy-back: everything this fill closes shares one round trip, the
+        # contract's own if it has lots, otherwise the chain's.
+        rt = fill.get("rtBefore") or pool.get("rt") or (lots and (lots[0].get("rt") or "rt:" + _s(lots[0].get("activityId")))) or None
+        if rt:
+            pool["rt"] = rt
         while remaining > EPS and lots:
             lot = lots[0]
             lot["symbol"] = _s(a.get("symbol"))
@@ -792,6 +798,8 @@ def match_fifo(activities):
                     matched = min(lot["qty"], remaining)
                     s = _make_slice(lot, fill, a, matched, _s(a.get("symbol")))
                     s["flags"] = sorted(set(s["flags"]) | {"rolled-in"})
+                    if rt:
+                        s["rt"] = rt
                     closed.append(s)
                     lot["qty"] -= matched
                     remaining -= matched
@@ -799,6 +807,8 @@ def match_fifo(activities):
                         b2.pop(0)
                 if not b2:
                     rt_open[k2] = None
+        if not pool["LONG"] and not pool["SHORT"] and not books.get(key):
+            pool["rt"] = None
         return remaining
 
     replaced = replacement_index(normalized)
@@ -861,6 +871,7 @@ def match_fifo(activities):
             entry_px = per if (direction == "SHORT") != debit else 0.0
             a["unitPrice"] = exit_px
             before = len(closed)
+            fill["rtBefore"] = rt_open.get(key) if book else None
             remaining = close_against(book, key, fill, a, fill["qty"])
             remaining = close_rolled(fill, a, remaining, direction)
             moved = fill["qty"] - remaining
@@ -869,6 +880,8 @@ def match_fifo(activities):
                 for s in closed[before:]:
                     if "rolled" not in s["flags"]:
                         s["flags"].append("rolled")
+                chain_rt = fill.get("rtBefore") or rolled_of(a).get("rt") or (closed[before]["rt"] if len(closed) > before else None)
+                rolled_of(a)["rt"] = chain_rt
                 rolled_of(a)[direction].append(
                     {
                         "qty": moved,
@@ -885,7 +898,7 @@ def match_fifo(activities):
                         "kind": "Options",
                         "activityId": _s(a.get("id")),
                         "securityId": "",
-                        "rt": None,
+                        "rt": chain_rt,
                         "flags": ["rolled-in"],
                     }
                 )
@@ -898,6 +911,7 @@ def match_fifo(activities):
                     rt_open[key] = "rt:" + _s(a.get("id"))
                 book.append({"qty": remaining, "price": per, "date": _s(a.get("transactionDate")), "when": _s(a.get("occurredAt")), "commission": 0.0, "direction": opening, "accountId": _s(a.get("accountId")), "accountType": fifo_account(a), "symbol": _s(a.get("symbol")), "name": _s(a.get("name")), "currency": _s(a.get("currency")), "kind": "Options", "activityId": _s(a.get("id")), "securityId": _s(a.get("securityId")), "rt": rt_open[key], "flags": list(a.get("flags") or [])})
             continue
+        fill["rtBefore"] = rt_open.get(key) if book else None
         remaining = close_against(book, key, fill, a, fill["qty"])
         if remaining > EPS and is_option_symbol(a.get("symbol")):
             remaining = close_rolled(fill, a, remaining, "SHORT" if fill["side"] == "BUY" else "LONG")
@@ -959,8 +973,8 @@ def match_fifo(activities):
     for key in list(books):
         apply_splits(key, "9999-12-31")
     for (acct, under, right), dirs in rolled.items():
-        for direction, lots in dirs.items():
-            for lot in lots:
+        for direction in ("LONG", "SHORT"):
+            for lot in dirs[direction]:
                 if lot["qty"] <= EPS:
                     continue
                 # the closing leg of this roll was never posted; the credit (or
