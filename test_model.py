@@ -1191,6 +1191,26 @@ class DeclaredDistributionsTest(unittest.TestCase):
                 self.assertEqual(sorted(store.distributions_fetched_at()), ["CCHI", "NEW"])
                 self.assertEqual(f.call_count, 2)
                 self.assertEqual(market.stale_symbols(syms), [])
+                # A Cboe Canada listing has a record on TMX only under its :AQL
+                # form; it is stored under the bare symbol, and TMX's delayed
+                # quote does not replace the price Cboe's own feed keeps fresh.
+                self.assertEqual(market.tmx_record_symbol("HBIX", "CBOE CANADA"), "HBIX:AQL")
+                self.assertEqual(market.tmx_record_symbol("HBIX", "NEO"), "HBIX:AQL")
+                self.assertEqual(market.tmx_record_symbol("CCHI", "TSX"), "CCHI")
+                cboe = [{"symbol": "HBIX", "exchange": "CBOE CANADA", "currency": "CAD"}]
+                store.upsert_quote("HBIX", {"price": 6.76}, source="cboe_ca")
+                asked = []
+                def post(url, body, *a, **k):
+                    asked.append((body["operationName"], body["variables"]["symbol"]))
+                    if body["operationName"] == "getQuoteBySymbol":
+                        return {"data": {"getQuoteBySymbol": {"symbol": "HBIX:AQL", "price": 6.70, "exDividendDate": "2026-08-31 00:00:00.0", "dividendFrequency": "Monthly", "dividendAmount": 0.12}}}
+                    return {"data": {"dividends": {"dividends": [{"exDate": "2026-08-31", "payableDate": "2026-09-04", "amount": 0.12, "currency": "CAD"}]}}}
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    self.assertEqual(market.refresh_distributions(cboe), 1)
+                self.assertEqual(sorted(set(s for _, s in asked)), ["HBIX:AQL"])
+                self.assertEqual([d["exDate"] for d in store.distributions().get("HBIX", [])], ["2026-08-31"])
+                self.assertEqual(store.quotes()["HBIX"]["price"], 6.76)
+                self.assertIn("HBIX", store.distributions_fetched_at())
             finally:
                 store.set_home(None)
                 os.environ.pop("BAGHOLDER_HOME", None)
