@@ -193,7 +193,7 @@ Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
 | All time | Sum received | Average per paying month |
 | Yield on cost | Annual income of all rated holdings ÷ their book cost | Received in the last twelve months, on the book cost |
 
-**Monthly distributions.** One bar per month from the first payment to the last, CAD, six axis labels, hover shows month and amount.
+**Monthly distributions.** One bar per month from the first payment to the current month (or to the end of the date filter), CAD, an empty bar for a month with nothing paid yet, six axis labels, hover shows month and amount.
 
 **Cashflow Positions.** One row per open long position in a dividend-paying symbol, per account:
 

@@ -2313,6 +2313,15 @@ def cashflow_view(base, f, positions_all):
     if recs:
         months_seen = sorted({r["date"][:7] for r in recs})
         first, last = months_seen[0], months_seen[-1]
+        # the chart runs to the current month (or the end of the date filter), with
+        # an empty bar for a month that has not paid yet
+        end_day = today
+        bounds = date_bounds(f, today)
+        if bounds:
+            end_day = min(bounds[1], today)
+        elif f["years"]:
+            end_day = min(max(f["years"]) + "-12-31", today)
+        last = max(last, end_day[:7])
         y, m = int(first[:4]), int(first[5:7])
         while True:
             k = "%04d-%02d" % (y, m)

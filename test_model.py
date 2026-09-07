@@ -806,6 +806,24 @@ class ViewTest(unittest.TestCase):
         self.assertAlmostEqual(v["years"][-1]["spR"], 0.25, places=6)
         self.assertAlmostEqual(v["years"][-1]["r"], 0.20, places=6, msg="the account's own return does not depend on the index")
 
+    def test_monthly_distributions_run_to_the_current_month(self):
+        acts = [
+            buy("b1", "RDDY", 100, 5, "2026-05-01", accountType="Cashflow"),
+            act(id="d1", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-06-06", symbol="RDDY", currency="CAD", accountType="Cashflow"),
+            act(id="d2", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-07-06", symbol="RDDY", currency="CAD", accountType="Cashflow"),
+        ]
+        snapshot = {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-09-07")
+        months = model.build_view(base, {})["cashflow"]["months"]
+        self.assertEqual([(m["key"], m["count"]) for m in months], [("2026-06", 1), ("2026-07", 1), ("2026-08", 0), ("2026-09", 0)], "empty bars up to the current month")
+        tiles = {t["label"]: t for t in model.build_view(base, {})["cashflow"]["tiles"] if "perMonth" in t}
+        self.assertEqual(tiles["2026 YTD"]["perMonth"], 20, "the monthly average counts paying months only")
+        months = model.build_view(base, {"to": "2026-08-15"})["cashflow"]["months"]
+        self.assertEqual([m["key"] for m in months], ["2026-06", "2026-07", "2026-08"], "a date filter ends the chart at its bound")
+        base25 = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2027-03-01")
+        months = model.build_view(base25, {"years": ["2026"]})["cashflow"]["months"]
+        self.assertEqual(months[-1]["key"], "2026-12", "a year filter ends the chart at December")
+
     def test_cashflow_tiles_roll_over_with_the_calendar(self):
         acts = [
             buy("b1", "RDDY", 100, 5, "2025-06-01", accountType="Cashflow"),
@@ -872,7 +890,7 @@ class CashflowTest(unittest.TestCase):
         self.assertEqual([r["kind"] for r in cf["rows"]], ["Dividend", "Dividend"])
         self.assertEqual({r["kind"] for r in cf["other"]}, {"Interest", "Withholding tax"})
         self.assertAlmostEqual(cf["total"], 7600)
-        self.assertEqual([m["key"] for m in cf["months"]], ["2026-07", "2026-08"])
+        self.assertEqual([m["key"] for m in cf["months"]], ["2026-07", "2026-08", "2026-09"], "runs to the current month")
         h = cf["holdings"][0]
         self.assertEqual(h["symbol"], "RDDY")
         self.assertEqual(h["freq"], 12)
