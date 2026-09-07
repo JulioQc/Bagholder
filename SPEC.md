@@ -154,7 +154,7 @@ Cards:
 
 Table columns in this order: Open · Close · Symbol · Exchange · Qty · Entry · Exit · FX · P&L · P&L % · Hold · Grade · Tags. Every column sorts. FX is centred; numbers are right-aligned. Column widths are fixed proportions of the table so they do not shift with content; the table scrolls sideways only when its card is narrower than 1150 px. Long symbols truncate with an ellipsis and show in full on hover. Newest close first by default.
 
-Trade detail: symbol, name and exchange; P&L and P&L % in the trade's currency; a price path through the fills with buy and sell markers; facts Open, Close, Entry, Exit, Qty, Hold, Account; an executions table with When · Side · Qty · FX · Price · Amount where Side says what the fill did in this trade (`BUY TO OPEN`, `SELL TO CLOSE`, …); and the journal with thesis, grade and tags. The browser Back button returns to the list at the same scroll position.
+Trade detail: symbol, name and exchange; P&L and P&L % in the trade's currency; a price path through the fills with buy and sell markers; facts Open, Close, Entry, Exit, Hold, Account; an executions table with When · Side · Qty · FX · Price · Amount where Side says what the fill did in this trade (`BUY TO OPEN`, `SELL TO CLOSE`, …); and the journal with thesis, grade and tags. The browser Back button returns to the list at the same scroll position.
 
 ### Positions
 
