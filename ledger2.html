@@ -668,7 +668,7 @@ function tradesTableHtml(m) {
   const cols = [
     { key: "entryDate", label: "Open", padRight: "12px" }, { key: "exitDate", label: "Close" }, { key: "symbol", label: "Symbol" },
     { key: "qty", label: "Qty", align: "right" }, { key: "entry", label: "Entry", align: "right" }, { key: "exit", label: "Exit", align: "right" },
-    { key: "currency", label: "FX", align: "center", padLeft: "24px", padRight: "24px" }, { key: "pnl", label: "P&L", align: "right" }, { key: "pnlPct", label: "P&L %", align: "right" }, { key: "holdDays", label: "Hold", align: "right" },
+    { key: "currency", label: "FX", align: "center", padLeft: "24px", padRight: "24px" }, { key: "pnl", label: "P&L", align: "right" }, { key: "holdDays", label: "Hold", align: "right" },
     { key: "grade", label: "Grade", padLeft: "22px" }, { key: "tags", label: "Tags" },
   ];
   const s = state.sort.trades;
@@ -679,7 +679,7 @@ function tradesTableHtml(m) {
       '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + "</td>" +
       '<td title="' + esc(t.symbol) + '" style="font-weight:500;font-variant-numeric:normal;max-width:186px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.symbol) + "</td>" +
       '<td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center;padding:7px 24px">' + esc(t.currency) + "</td>" +
-      '<td style="text-align:right;font-weight:500;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</td><td style="text-align:right;color:' + color(t.pnl) + '">' + pct(t.pnlPct) + "</td>" +
+      '<td style="text-align:right;white-space:nowrap;font-weight:500;color:' + color(t.pnl) + '">' + signedMoney(t.pnl, t.currency) + " (" + pct(t.pnlPct) + ")</td>" +
       '<td style="text-align:right" class="dim">' + hold(t.holdDays) + '</td><td style="white-space:nowrap;max-width:64px;padding-left:22px">' + gradeChip(t) + "</td>" +
       '<td style="font-variant-numeric:normal">' + (t.tags && t.tags.length ? '<span class="tagchip" title="' + esc(t.tags[0]) + '">' + esc(t.tags[0]) + "</span>" + (t.tags.length > 1 ? '<span class="muted" style="font-size:10.5px;margin-left:4px">+' + (t.tags.length - 1) + "</span>" : "") : '<span style="color:rgba(233,233,237,.5)">—</span>') + "</td></tr>").join("") +
     "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No trades match these filters. <a href="#" data-act="clearAll">Reset all</a></div>') + "</div></div>";
