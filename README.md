@@ -1,30 +1,62 @@
 # Bagholder
 
-A local-first trading journal for Wealthsimple users. Runs on your computer, auto-syncs trades from Wealthsimple. Activity stays on your machine.
+A local-first trading journal for Wealthsimple users. It runs on your own computer, syncs your activity from Wealthsimple, and keeps everything in a local SQLite file. Nothing is uploaded anywhere.
 
-Provides a dashboard with total realized P&L, win rate/profit factor, expectancy, biggest winners/losers, annualized performance vs S&P500, equity curve, monthly P&L with some basic sorting/filtering.
+Use at your own risk. The app has you sign in to the real Wealthsimple website in order to sync. The author is not responsible for your use or misuse of the app or any consequences thereof.
 
-Use at your own risk. The app will have you log into the actual Wealthsimple website in order to sync. I am not responsible for your use or misuse of the app or any consequences thereof.
+## Requirements
+
+- Python 3.9 or newer
+- Google Chrome (opened once so you can sign in to Wealthsimple)
+
+## Install
+
+```
+python3 -m pip install -r requirements.txt
+```
+
+On Windows use `py` instead of `python3` throughout. The one dependency is `tzdata`, which Windows needs for time zones; macOS and Linux already have it.
 
 ## Run
-
-This installs timezone data Windows does not ship (needed for America/Edmonton).
-
-```
-python -m pip install -r requirements.txt
-```
 
 ```
 python3 bagholder.py
 ```
 
-The webapp opens on `http://127.0.0.1:8765`.
+The app opens at `http://127.0.0.1:8765` in your browser. Use that address as written; `localhost` is refused on purpose, since the server only answers its own machine.
+
+## First use
+
+Open the menu at the top right and choose **Connect Wealthsimple**. A Chrome window opens on Wealthsimple's sign-in page; sign in as usual and close nothing. Bagholder picks up the session, pulls your full history, and from then on syncs every weekday after 2 PM Mountain time while it is running. The session is refreshed automatically so you are not asked to sign in again.
+
+The menu also offers:
+
+- **Add trade** for a trade entered by hand.
+- **Import CSV** for one or more Wealthsimple activity or statement exports.
+- **Load folder** to watch a folder of CSV exports; new or changed files are imported every ten minutes.
+- **Export trades CSV**, **Clear data**, and a **Theme** switch (Nocturne, Midnight, Light).
+
+## What it shows
+
+- **Dashboard**: realized P&L, win rate, profit factor, expectancy, max drawdown net of deposits and withdrawals, annualized returns vs the S&P 500, equity curve, monthly P&L, P&L by grade, P&L by symbol, and a review queue of ungraded trades.
+- **Trades**: every closed trade with its executions, a price path across the fills, and a journal with a thesis, a grade and tags. Shares, options and crypto are all matched FIFO per account; covered calls, rolls, expiries and assignments are handled.
+- **Positions**: open positions with live prices, unrealized P&L, allocation, the lots still held, and a running note that carries over to the trade when the position closes.
+- **Cashflow**: distributions by month and by holding, with yield on cost and current yield from each fund's declared distributions.
+
+A filter icon next to the menu narrows every page at once by date, account, symbol, grade, tag, side, kind, exchange, price, hold time, P&L or quantity.
+
+Per-trade figures are in the trade's currency. Anything that adds trades together is in CAD, converted on the fill dates.
 
 ## Data
 
-Login session and journal data are stored in `~/.bagholder/`. Activities, accounts, balances, and equity history live in `~/.bagholder/bagholder.db`.
+Everything lives in `~/.bagholder/` (`%USERPROFILE%\.bagholder` on Windows): the database `bagholder.db` and the Wealthsimple session. Back up by copying the folder. **Clear data** in the menu wipes it and signs you out.
 
-![App demo](screenshot.png)
-![Executions Sidebar](screenshot-executions.png)
-![Trades](screenshot-tradelist.png)
-![Filter Toggle](screenshot-filtertoggle.png)
+Market data the app needs but Wealthsimple does not provide is fetched over HTTPS and cached in the same database: USD/CAD rates from the Bank of Canada, S&P 500 closes from FRED, and prices and declared distributions from TMX Money.
+
+## For developers
+
+```
+python3 -m unittest test_store test_model
+```
+
+The derived numbers are computed in `model.py` and served as one JSON document at `GET /api/model`; `ledger.html` renders them.

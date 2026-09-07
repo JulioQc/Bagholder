@@ -14,7 +14,10 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+FX_PAIR = "USDCAD"
+BENCHMARK_SYMBOL = "SP500"
+JOURNAL_META = "journal_v2"
 OPTION_UNIT_PRICE_SCALE_META = "option_unit_price_scale_v1"
 ACTIVITY_PULL_TZ = ZoneInfo("America/Edmonton")
 ACTIVITY_PULL_WEEKDAYS = (0, 1, 2, 3, 4)
@@ -159,10 +162,46 @@ def _init_schema(conn):
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS fx_rates (
+            pair TEXT NOT NULL,
+            date TEXT NOT NULL,
+            rate REAL NOT NULL,
+            PRIMARY KEY (pair, date)
+        );
+
+        CREATE TABLE IF NOT EXISTS benchmark_prices (
+            symbol TEXT NOT NULL,
+            date TEXT NOT NULL,
+            close REAL NOT NULL,
+            PRIMARY KEY (symbol, date)
+        );
+
+        CREATE TABLE IF NOT EXISTS distributions (
+            symbol TEXT NOT NULL,
+            ex_date TEXT NOT NULL,
+            pay_date TEXT,
+            amount REAL NOT NULL,
+            currency TEXT,
+            source TEXT NOT NULL DEFAULT 'tmx',
+            PRIMARY KEY (symbol, ex_date, source)
+        );
+
+        CREATE TABLE IF NOT EXISTS quotes (
+            symbol TEXT PRIMARY KEY,
+            price REAL,
+            dividend_amount REAL,
+            dividend_frequency TEXT,
+            ex_dividend_date TEXT,
+            source TEXT,
+            fetched_at TEXT
+        );
         """
     )
     _migrate_nav_history(conn)
     _ensure_activity_security_id(conn)
+    _migrate_spy_meta(conn)
+    _ensure_quote_columns(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES (?, ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -239,6 +278,60 @@ def _relabel_option_trades(conn):
         "WHERE UPPER(REPLACE(IFNULL(raw_type,''), '-', '_')) = 'OPTIONS_SELL' "
         "AND UPPER(REPLACE(IFNULL(activity_sub_type,''), '-', '_')) "
         "NOT IN ('SELL', 'SELLTOOPEN', 'STO', 'SELLTOCLOSE', 'STC', 'COVER')"
+    )
+    _relabel_option_closes(conn)
+
+
+def _relabel_option_closes(conn):
+    """OPTIONS_MULTILEG / *EXPIR* / *ASSIGN* close and open semantics.
+
+    Sync never replaces existing rows. Re-touch even if PR #22 already
+    set category trade/option_event with the old close-only labels.
+    """
+    raw = "UPPER(REPLACE(IFNULL(raw_type,''), '-', '_'))"
+    conn.execute(
+        "UPDATE activities SET "
+        "activity_type = 'OPTIONS_BUY', "
+        "activity_sub_type = 'BUYTOCLOSE', "
+        "category = 'trade' "
+        f"WHERE {raw} LIKE '%MULTILEG%' "
+        "AND IFNULL(net_cash_amount, 0) < 0"
+    )
+    conn.execute(
+        "UPDATE activities SET "
+        "activity_type = 'OPTIONS_SELL', "
+        "activity_sub_type = 'SELLTOOPEN', "
+        "category = 'trade' "
+        f"WHERE {raw} LIKE '%MULTILEG%' "
+        "AND IFNULL(net_cash_amount, 0) >= 0"
+    )
+    conn.execute(
+        "UPDATE activities SET "
+        "activity_type = 'ASSIGN', "
+        "activity_sub_type = 'BUYTOCLOSE', "
+        "category = 'option_event', "
+        "quantity = ABS(quantity), "
+        "unit_price = 0 "
+        f"WHERE {raw} LIKE '%ASSIGN%'"
+    )
+    conn.execute(
+        "UPDATE activities SET "
+        "activity_type = 'EXPIR', "
+        "activity_sub_type = 'BUY', "
+        "category = 'option_event', "
+        "quantity = ABS(quantity), "
+        "unit_price = CASE WHEN ABS(IFNULL(net_cash_amount, 0)) < 1e-12 THEN 0 ELSE unit_price END "
+        f"WHERE {raw} LIKE '%SHORT%EXPIR%'"
+    )
+    conn.execute(
+        "UPDATE activities SET "
+        "activity_type = 'EXPIR', "
+        "activity_sub_type = 'SELL', "
+        "category = 'option_event', "
+        "quantity = -ABS(quantity), "
+        "unit_price = CASE WHEN ABS(IFNULL(net_cash_amount, 0)) < 1e-12 THEN 0 ELSE unit_price END "
+        f"WHERE {raw} LIKE '%EXPIR%' "
+        f"AND {raw} NOT LIKE '%SHORT%'"
     )
 
 
@@ -1058,6 +1151,450 @@ def save_trade_notes(notes):
     clean = _clean_trade_notes(notes if isinstance(notes, dict) else {})
     set_meta("trade_notes", json.dumps(clean))
     return clean
+
+
+
+def _ensure_quote_columns(conn):
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(quotes)").fetchall()}
+    for col in ("price_change", "percent_change", "prev_close"):
+        if col not in cols:
+            conn.execute("ALTER TABLE quotes ADD COLUMN %s REAL" % col)
+
+
+def _migrate_spy_meta(conn):
+    """One-shot: copy the legacy meta.spy_by_date map into benchmark_prices."""
+    row = conn.execute(
+        "SELECT 1 FROM benchmark_prices WHERE symbol = ? LIMIT 1", (BENCHMARK_SYMBOL,)
+    ).fetchone()
+    if row:
+        return
+    raw = conn.execute("SELECT value FROM meta WHERE key = 'spy_by_date'").fetchone()
+    if not raw or not raw["value"]:
+        return
+    try:
+        data = json.loads(raw["value"])
+    except ValueError:
+        return
+    if not isinstance(data, dict):
+        return
+    for day, px in data.items():
+        d = _s(day).strip()[:10]
+        v = _num(px, None)
+        if len(d) != 10 or v is None or v <= 0:
+            continue
+        conn.execute(
+            "INSERT OR IGNORE INTO benchmark_prices(symbol, date, close) VALUES (?, ?, ?)",
+            (BENCHMARK_SYMBOL, d, v),
+        )
+
+
+def _clean_date_map(raw):
+    out = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, val in raw.items():
+        d = _s(key).strip()[:10]
+        if len(d) != 10 or d[4] != "-" or d[7] != "-":
+            continue
+        v = _num(val, None)
+        if v is None or v <= 0:
+            continue
+        out[d] = v
+    return out
+
+
+def fx_rates(pair=FX_PAIR):
+    """date -> units of CAD per 1 unit of the foreign currency."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            rows = conn.execute(
+                "SELECT date, rate FROM fx_rates WHERE pair = ? ORDER BY date", (pair,)
+            ).fetchall()
+            return {r["date"]: r["rate"] for r in rows}
+        finally:
+            conn.close()
+
+
+def fx_last_date(pair=FX_PAIR):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            row = conn.execute(
+                "SELECT MAX(date) AS d FROM fx_rates WHERE pair = ?", (pair,)
+            ).fetchone()
+            return (row["d"] if row else "") or ""
+        finally:
+            conn.close()
+
+
+def upsert_fx_rates(mapping, pair=FX_PAIR):
+    clean = _clean_date_map(mapping)
+    if not clean:
+        return 0
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.executemany(
+                "INSERT INTO fx_rates(pair, date, rate) VALUES (?, ?, ?) "
+                "ON CONFLICT(pair, date) DO UPDATE SET rate = excluded.rate",
+                [(pair, d, v) for d, v in sorted(clean.items())],
+            )
+            conn.commit()
+            return len(clean)
+        finally:
+            conn.close()
+
+
+def benchmark_prices(symbol=BENCHMARK_SYMBOL):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            rows = conn.execute(
+                "SELECT date, close FROM benchmark_prices WHERE symbol = ? ORDER BY date",
+                (symbol,),
+            ).fetchall()
+            return {r["date"]: r["close"] for r in rows}
+        finally:
+            conn.close()
+
+
+def benchmark_last_date(symbol=BENCHMARK_SYMBOL):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            row = conn.execute(
+                "SELECT MAX(date) AS d FROM benchmark_prices WHERE symbol = ?", (symbol,)
+            ).fetchone()
+            return (row["d"] if row else "") or ""
+        finally:
+            conn.close()
+
+
+def upsert_benchmark_prices(mapping, symbol=BENCHMARK_SYMBOL):
+    clean = _clean_date_map(mapping)
+    if not clean:
+        return 0
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.executemany(
+                "INSERT INTO benchmark_prices(symbol, date, close) VALUES (?, ?, ?) "
+                "ON CONFLICT(symbol, date) DO UPDATE SET close = excluded.close",
+                [(symbol, d, v) for d, v in sorted(clean.items())],
+            )
+            conn.commit()
+            return len(clean)
+        finally:
+            conn.close()
+
+
+def distributions():
+    """symbol -> [{exDate, payDate, amount, currency}] newest first (public record)."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            out = {}
+            for r in conn.execute("SELECT * FROM distributions ORDER BY symbol, ex_date DESC").fetchall():
+                out.setdefault(r["symbol"], []).append(
+                    {"exDate": r["ex_date"], "payDate": r["pay_date"] or "", "amount": r["amount"], "currency": r["currency"] or ""}
+                )
+            return out
+        finally:
+            conn.close()
+
+
+def upsert_distributions(symbol, rows, source="tmx"):
+    sym = _s(symbol).strip().upper()
+    if not sym:
+        return 0
+    clean = []
+    for r in rows or []:
+        ex = _s(r.get("exDate"))[:10]
+        amt = _num(r.get("amount"), None)
+        if len(ex) != 10 or amt is None or amt <= 0:
+            continue
+        clean.append((sym, ex, _s(r.get("payDate"))[:10] or None, amt, _s(r.get("currency")) or None, source))
+    if not clean:
+        return 0
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.executemany(
+                "INSERT INTO distributions(symbol, ex_date, pay_date, amount, currency, source) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(symbol, ex_date, source) DO UPDATE SET pay_date = excluded.pay_date, amount = excluded.amount, currency = excluded.currency",
+                clean,
+            )
+            conn.commit()
+            return len(clean)
+        finally:
+            conn.close()
+
+
+def quotes():
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            out = {}
+            for r in conn.execute("SELECT * FROM quotes").fetchall():
+                out[r["symbol"]] = {
+                    "price": r["price"],
+                    "priceChange": r["price_change"],
+                    "percentChange": r["percent_change"],
+                    "prevClose": r["prev_close"],
+                    "dividendAmount": r["dividend_amount"],
+                    "dividendFrequency": r["dividend_frequency"] or "",
+                    "exDividendDate": r["ex_dividend_date"] or "",
+                    "source": r["source"] or "",
+                    "fetchedAt": r["fetched_at"] or "",
+                }
+            return out
+        finally:
+            conn.close()
+
+
+def upsert_quote(symbol, rec, source="tmx"):
+    sym = _s(symbol).strip().upper()
+    if not sym or not isinstance(rec, dict):
+        return
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute(
+                "INSERT INTO quotes(symbol, price, price_change, percent_change, prev_close, dividend_amount, "
+                "dividend_frequency, ex_dividend_date, source, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(symbol) DO UPDATE SET price = excluded.price, price_change = excluded.price_change, "
+                "percent_change = excluded.percent_change, prev_close = excluded.prev_close, "
+                "dividend_amount = COALESCE(excluded.dividend_amount, quotes.dividend_amount), "
+                "dividend_frequency = CASE WHEN excluded.dividend_frequency = '' THEN quotes.dividend_frequency ELSE excluded.dividend_frequency END, "
+                "ex_dividend_date = CASE WHEN excluded.ex_dividend_date = '' THEN quotes.ex_dividend_date ELSE excluded.ex_dividend_date END, "
+                "source = excluded.source, fetched_at = excluded.fetched_at",
+                (
+                    sym,
+                    _num(rec.get("price"), None),
+                    _num(rec.get("priceChange"), None),
+                    _num(rec.get("percentChange"), None),
+                    _num(rec.get("prevClose"), None),
+                    _num(rec.get("dividendAmount"), None),
+                    _s(rec.get("dividendFrequency")),
+                    _s(rec.get("exDividendDate"))[:10],
+                    source,
+                    _s(rec.get("fetchedAt")) or _now_iso(),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def quote_fetched_at():
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            return {r["symbol"]: r["fetched_at"] or "" for r in conn.execute("SELECT symbol, fetched_at FROM quotes").fetchall()}
+        finally:
+            conn.close()
+
+
+_CANADIAN_EXCHANGES = ("TSX", "TSX-V", "TSXV", "CSE", "CBOE CANADA", "NEO", "ALPHA EXCHANGE", "")
+
+
+def dividend_symbols():
+    """Symbols that have paid a dividend, with the listing exchange when known."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            rows = conn.execute(
+                "SELECT DISTINCT a.symbol AS symbol, a.currency AS currency, s.primary_exchange AS exchange "
+                "FROM activities a LEFT JOIN securities s ON s.id = a.security_id "
+                "WHERE a.category = 'dividend' AND IFNULL(a.symbol, '') != ''"
+            ).fetchall()
+            out = []
+            seen = set()
+            for r in rows:
+                sym = _s(r["symbol"]).strip().upper()
+                if not sym or sym in seen:
+                    continue
+                seen.add(sym)
+                out.append({"symbol": sym, "currency": _s(r["currency"]), "exchange": _s(r["exchange"]).strip()})
+            return out
+        finally:
+            conn.close()
+
+
+def market_data():
+    return {"fx": fx_rates(), "benchmark": benchmark_prices(), "distributions": distributions(), "quotes": quotes()}
+
+
+_GRADES = ("A", "B", "C", "F")
+
+
+def _clean_journal_entry(val):
+    if not isinstance(val, dict):
+        return None
+    thesis = _s(val.get("thesis"))
+    grade = _s(val.get("grade")).strip().upper()
+    if grade not in _GRADES:
+        grade = ""
+    tags = []
+    raw_tags = val.get("tags")
+    if isinstance(raw_tags, str):
+        raw_tags = raw_tags.split(",")
+    if isinstance(raw_tags, list):
+        for t in raw_tags:
+            s = _s(t).strip()
+            if s and s not in tags:
+                tags.append(s)
+    if not thesis and not grade and not tags:
+        return None
+    return {"thesis": thesis, "tags": tags, "grade": grade}
+
+
+def _clean_journal(raw):
+    out = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, val in raw.items():
+        kid = _s(key).strip()
+        entry = _clean_journal_entry(val)
+        if kid and entry:
+            out[kid] = entry
+    return out
+
+
+def journal():
+    """v2 journal: {tradeId or positionId: {thesis, tags, grade}}."""
+    raw = get_meta(JOURNAL_META)
+    if not raw:
+        return {}
+    try:
+        return _clean_journal(json.loads(raw))
+    except ValueError:
+        return {}
+
+
+def save_journal(entries):
+    clean = _clean_journal(entries if isinstance(entries, dict) else {})
+    set_meta(JOURNAL_META, json.dumps(clean))
+    return clean
+
+
+def save_journal_entry(key, entry):
+    """Merge one entry. An entry with no thesis, grade, or tags deletes the key."""
+    kid = _s(key).strip()
+    if not kid:
+        return journal()
+    current = journal()
+    clean = _clean_journal_entry(entry)
+    if clean:
+        current[kid] = clean
+    else:
+        current.pop(kid, None)
+    set_meta(JOURNAL_META, json.dumps(current))
+    return current
+
+
+SYNC_META_KEYS = ("synced_at", "last_activity_pull", "security_id_backfill_done")
+
+
+def data_summary():
+    """Row counts the Data & storage dialog shows before a wipe."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            count = lambda sql: int(conn.execute(sql).fetchone()[0] or 0)
+            journal_raw = conn.execute("SELECT value FROM meta WHERE key = ?", (JOURNAL_META,)).fetchone()
+            try:
+                journal_n = len(json.loads(journal_raw["value"])) if journal_raw and journal_raw["value"] else 0
+            except ValueError:
+                journal_n = 0
+            first = conn.execute("SELECT MIN(transaction_date), MAX(transaction_date) FROM activities").fetchone()
+            return {
+                "path": str(db_path()),
+                "activities": count("SELECT COUNT(*) FROM activities"),
+                "firstActivity": first[0] or "",
+                "lastActivity": first[1] or "",
+                "accounts": count("SELECT COUNT(*) FROM accounts"),
+                "balances": count("SELECT COUNT(*) FROM balances"),
+                "navDays": count("SELECT COUNT(*) FROM nav_history"),
+                "securities": count("SELECT COUNT(*) FROM securities"),
+                "journal": journal_n,
+                "fxDays": count("SELECT COUNT(*) FROM fx_rates"),
+                "benchmarkDays": count("SELECT COUNT(*) FROM benchmark_prices"),
+                "syncedAt": get_meta("synced_at"),
+            }
+        finally:
+            conn.close()
+
+
+def clear_synced_data(keep_journal=True, keep_market=True):
+    """Wipe everything Wealthsimple sync wrote so the next sync starts from zero.
+
+    Activities, accounts, balances, NAV history, securities, manual trade
+    groups and the sync bookmarks go. The journal (grades, tags, theses) and
+    the downloaded market data are kept unless told otherwise."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            for table in ("activities", "accounts", "balances", "nav_history", "securities", "grouped_trades"):
+                conn.execute("DELETE FROM %s" % table)
+            keys = list(SYNC_META_KEYS) + ["trade_groups", "trade_notes"]
+            if not keep_journal:
+                keys.append(JOURNAL_META)
+            conn.executemany("DELETE FROM meta WHERE key = ?", [(k,) for k in keys])
+            if not keep_market:
+                conn.execute("DELETE FROM fx_rates")
+                conn.execute("DELETE FROM benchmark_prices")
+                conn.execute("DELETE FROM distributions")
+                conn.execute("DELETE FROM quotes")
+                conn.execute("DELETE FROM meta WHERE key = 'spy_by_date'")
+            conn.commit()
+        finally:
+            conn.close()
+    return data_summary()
+
+
+def data_version():
+    """Cheap fingerprint of everything the derived model depends on."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            parts = []
+            for sql in (
+                "SELECT COUNT(*), MAX(COALESCE(occurred_at, transaction_date)) FROM activities",
+                "SELECT COUNT(*), MAX(date) FROM nav_history",
+                "SELECT COUNT(*), MAX(date) FROM fx_rates",
+                "SELECT COUNT(*), MAX(date) FROM benchmark_prices",
+                "SELECT COUNT(*), MAX(ex_date) FROM distributions",
+                "SELECT COUNT(*), MAX(fetched_at) FROM quotes",
+                "SELECT COUNT(*), MAX(fetched_at) FROM securities",
+                "SELECT COUNT(*), SUM(quantity) FROM balances",
+                "SELECT COUNT(*), MAX(id) FROM accounts",
+            ):
+                row = conn.execute(sql).fetchone()
+                parts.append("%s:%s" % (row[0], row[1]))
+            for key in ("synced_at", "trade_groups", "trade_notes", JOURNAL_META):
+                row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+                val = (row["value"] if row else "") or ""
+                parts.append("%s:%s:%s" % (key, len(val), hash(val)))
+            return "|".join(parts)
+        finally:
+            conn.close()
 
 
 def _security_from_row(r):

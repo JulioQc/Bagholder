@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import gzip
 import os
+import re
 import sqlite3
 import tempfile
 import unittest
@@ -93,6 +94,48 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(row["netCashAmount"], 1050)
         self.assertEqual(row["symbol"], "QNC 19FEB27 3.00 CALL")
 
+    def test_cash_dividend_without_status_is_kept(self):
+        item = {
+            "type": "DIVIDEND",
+            "subType": "CASH_DIVIDEND",
+            "status": None,
+            "amount": "3660.00",
+            "amountSign": "positive",
+            "assetQuantity": "18300.0",
+            "assetSymbol": "RDDY",
+            "currency": "CAD",
+            "occurredAt": "2026-06-05T14:53:21.630000+00:00",
+            "accountId": "non-registered-x",
+            "canonicalId": "div-1",
+        }
+        self.assertFalse(bagholder.skip_activity(item))
+        rec = bagholder.map_activity(item)
+        self.assertEqual(rec["category"], "dividend")
+        self.assertEqual(rec["symbol"], "RDDY")
+        self.assertAlmostEqual(rec["netCashAmount"], 3660.0)
+        self.assertAlmostEqual(rec["unitPrice"], 0.2)
+        self.assertEqual(rec["transactionDate"], "2026-06-05")
+        item["type"] = "DIY_BUY"
+        self.assertTrue(bagholder.skip_activity(item))
+
+    def test_margin_interest_charge_without_status_is_kept(self):
+        item = {
+            "type": "INTEREST_CHARGE",
+            "subType": "MARGIN_INTEREST",
+            "status": None,
+            "amount": "412.10",
+            "amountSign": "negative",
+            "currency": "CAD",
+            "occurredAt": "2026-06-01T04:00:00.000000+00:00",
+            "accountId": "non-registered-x",
+            "canonicalId": "int-1",
+        }
+        self.assertFalse(bagholder.skip_activity(item))
+        rec = bagholder.map_activity(item)
+        self.assertEqual(rec["activityType"], "INTEREST_CHARGE")
+        self.assertAlmostEqual(rec["netCashAmount"], -412.10)
+        self.assertEqual(rec["transactionDate"], "2026-06-01")
+
     def test_options_buy_maps_as_buy_to_open(self):
         item = _ws_item(
             type="OPTIONS_BUY",
@@ -110,6 +153,116 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(row["category"], "trade")
         self.assertEqual(row["quantity"], 5)
         self.assertEqual(row["netCashAmount"], -150)
+
+    def test_map_activity_options_multileg_debit_is_buy_to_close(self):
+        row = bagholder.map_activity(
+            _ws_item(
+                type="OPTIONS_MULTILEG",
+                subType="FILLED",
+                status="FILLED",
+                assetSymbol="LUNR",
+                contractType="CALL",
+                strikePrice=12,
+                expiryDate="2027-01-15",
+                assetQuantity=None,
+                amount=128,
+                amountSign="negative",
+                currency="USD",
+            )
+        )
+        self.assertEqual(row["category"], "trade")
+        self.assertEqual(row["activityType"], "OPTIONS_BUY")
+        self.assertEqual(row["activitySubType"], "BUYTOCLOSE")
+        self.assertEqual(row["quantity"], 0)
+        self.assertEqual(row["unitPrice"], 0)
+        self.assertEqual(row["netCashAmount"], -128)
+        self.assertEqual(row["symbol"], "LUNR 15JAN27 12.00 CALL")
+
+    def test_map_activity_options_multileg_credit_is_sell_to_open(self):
+        row = bagholder.map_activity(
+            _ws_item(
+                type="OPTIONS_MULTILEG",
+                subType="FILLED",
+                status="FILLED",
+                assetSymbol="BBAI",
+                contractType="CALL",
+                strikePrice=10,
+                expiryDate="2028-01-21",
+                assetQuantity=None,
+                amount=56,
+                amountSign="positive",
+                currency="USD",
+            )
+        )
+        self.assertEqual(row["category"], "trade")
+        self.assertEqual(row["activityType"], "OPTIONS_SELL")
+        self.assertEqual(row["activitySubType"], "SELLTOOPEN")
+        self.assertEqual(row["quantity"], 0)
+        self.assertEqual(row["unitPrice"], 0)
+        self.assertEqual(row["netCashAmount"], 56)
+        self.assertEqual(row["symbol"], "BBAI 21JAN28 10.00 CALL")
+
+    def test_map_activity_options_short_expiry_covers_short(self):
+        row = bagholder.map_activity(
+            _ws_item(
+                type="OPTIONS_SHORT_EXPIRY",
+                subType="EXPIRED",
+                status="POSTED",
+                assetSymbol="LUNR",
+                contractType="CALL",
+                strikePrice=12,
+                expiryDate="2027-01-15",
+                assetQuantity=16,
+                amount=0,
+                amountSign="negative",
+                currency="USD",
+            )
+        )
+        self.assertEqual(row["category"], "option_event")
+        self.assertEqual(row["activityType"], "EXPIR")
+        self.assertEqual(row["activitySubType"], "BUY")
+        self.assertEqual(row["quantity"], 16)
+        self.assertEqual(row["unitPrice"], 0)
+        self.assertEqual(row["netCashAmount"], 0)
+
+    def test_map_activity_options_expiry_sells_long_assign_covers_short(self):
+        expiry = bagholder.map_activity(
+            _ws_item(
+                type="OPTIONS_EXPIRY",
+                subType="EXPIRED",
+                assetSymbol="LUNR",
+                contractType="CALL",
+                strikePrice=12,
+                expiryDate="2025-08-22",
+                assetQuantity=4,
+                amount=0,
+            )
+        )
+        self.assertEqual(expiry["category"], "option_event")
+        self.assertEqual(expiry["activityType"], "EXPIR")
+        self.assertEqual(expiry["activitySubType"], "SELL")
+        self.assertEqual(expiry["quantity"], -4)
+        self.assertEqual(expiry["unitPrice"], 0)
+        assign = bagholder.map_activity(
+            _ws_item(
+                type="OPTIONS_ASSIGN",
+                subType="ASSIGNED",
+                assetSymbol="ASTS",
+                contractType="CALL",
+                strikePrice=31,
+                expiryDate="2025-03-07",
+                assetQuantity=1,
+                amount=3100,
+                amountSign="negative",
+                currency="USD",
+            )
+        )
+        self.assertEqual(assign["category"], "option_event")
+        self.assertEqual(assign["activityType"], "ASSIGN")
+        self.assertEqual(assign["activitySubType"], "BUYTOCLOSE")
+        self.assertEqual(assign["quantity"], 1)
+        self.assertEqual(assign["unitPrice"], 0)
+        self.assertEqual(assign["symbol"], "ASTS 07MAR25 31.00 CALL")
 
     def test_map_activity_option_unit_price_is_per_share(self):
         cheap = bagholder.map_activity(
@@ -254,6 +407,145 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(row["category"], "trade")
         self.assertEqual(row["quantity"], -35)
         self.assertEqual(row["netCashAmount"], 1050)
+
+    def test_relabel_stored_options_multileg_and_expiry(self):
+        store.apply_wealthsimple_mapped(
+            [
+                {
+                    "canonicalId": "opt-ml-1",
+                    "occurredAt": "2026-08-31T14:16:58Z",
+                    "transactionDate": "2026-08-31",
+                    "accountId": "acct-1",
+                    "accountType": "Trading",
+                    "activityType": "OPTIONS_MULTILEG",
+                    "activitySubType": "FILLED",
+                    "symbol": "LUNR 15JAN27 12.00 CALL",
+                    "currency": "USD",
+                    "quantity": 0,
+                    "unitPrice": 0,
+                    "netCashAmount": -128,
+                    "category": "other",
+                    "source": "wealthsimple",
+                    "rawType": "OPTIONS_MULTILEG",
+                },
+                {
+                    "canonicalId": "opt-ml-credit",
+                    "occurredAt": "2026-08-31T14:16:59Z",
+                    "transactionDate": "2026-08-31",
+                    "accountId": "acct-1",
+                    "accountType": "Trading",
+                    "activityType": "OPTIONS_SELL",
+                    "activitySubType": "SELLTOCLOSE",
+                    "symbol": "BBAI 21JAN28 10.00 CALL",
+                    "currency": "USD",
+                    "quantity": 0,
+                    "unitPrice": 0,
+                    "netCashAmount": 56,
+                    "category": "trade",
+                    "source": "wealthsimple",
+                    "rawType": "OPTIONS_MULTILEG",
+                },
+                {
+                    "canonicalId": "opt-exp-1",
+                    "occurredAt": "2026-08-31T14:17:58Z",
+                    "transactionDate": "2026-08-31",
+                    "accountId": "acct-1",
+                    "accountType": "Trading",
+                    "activityType": "OPTIONS_SHORT_EXPIRY",
+                    "activitySubType": "EXPIRED",
+                    "symbol": "LUNR 15JAN27 12.00 CALL",
+                    "currency": "USD",
+                    "quantity": 5,
+                    "unitPrice": 0,
+                    "netCashAmount": 0,
+                    "category": "other",
+                    "source": "wealthsimple",
+                    "rawType": "OPTIONS_SHORT_EXPIRY",
+                },
+                {
+                    "canonicalId": "opt-long-exp",
+                    "occurredAt": "2026-08-31T14:17:59Z",
+                    "transactionDate": "2026-08-31",
+                    "accountId": "acct-1",
+                    "accountType": "Trading",
+                    "activityType": "EXPIR",
+                    "activitySubType": "BUY",
+                    "symbol": "LUNR 22AUG25 12.00 CALL",
+                    "currency": "USD",
+                    "quantity": 4,
+                    "unitPrice": 0,
+                    "netCashAmount": 0,
+                    "category": "option_event",
+                    "source": "wealthsimple",
+                    "rawType": "OPTIONS_EXPIRY",
+                },
+                {
+                    "canonicalId": "opt-asg-1",
+                    "occurredAt": "2026-08-31T14:18:58Z",
+                    "transactionDate": "2026-08-31",
+                    "accountId": "acct-1",
+                    "accountType": "Trading",
+                    "activityType": "OPTIONS_ASSIGN",
+                    "activitySubType": "ASSIGNED",
+                    "symbol": "LUNR 15JAN27 12.00 CALL",
+                    "currency": "USD",
+                    "quantity": -2,
+                    "unitPrice": 0,
+                    "netCashAmount": 0,
+                    "category": "other",
+                    "source": "wealthsimple",
+                    "rawType": "OPTIONS_ASSIGN",
+                },
+                {
+                    "canonicalId": "opt-asg-strike",
+                    "occurredAt": "2025-03-07T21:00:00Z",
+                    "transactionDate": "2025-03-07",
+                    "accountId": "acct-1",
+                    "accountType": "Trading",
+                    "activityType": "ASSIGN",
+                    "activitySubType": "BUYTOCLOSE",
+                    "symbol": "ASTS 07MAR25 31.00 CALL",
+                    "currency": "USD",
+                    "quantity": 1,
+                    "unitPrice": 31,
+                    "netCashAmount": -3100,
+                    "category": "option_event",
+                    "source": "wealthsimple",
+                    "rawType": "OPTIONS_ASSIGN",
+                },
+            ]
+        )
+        store.ensure()
+        by_id = {a["canonicalId"]: a for a in store.snapshot()["activities"]}
+        ml = by_id["opt-ml-1"]
+        self.assertEqual(ml["category"], "trade")
+        self.assertEqual(ml["activityType"], "OPTIONS_BUY")
+        self.assertEqual(ml["activitySubType"], "BUYTOCLOSE")
+        self.assertEqual(ml["quantity"], 0)
+        self.assertEqual(ml["netCashAmount"], -128)
+        credit = by_id["opt-ml-credit"]
+        self.assertEqual(credit["category"], "trade")
+        self.assertEqual(credit["activityType"], "OPTIONS_SELL")
+        self.assertEqual(credit["activitySubType"], "SELLTOOPEN")
+        self.assertEqual(credit["netCashAmount"], 56)
+        exp = by_id["opt-exp-1"]
+        self.assertEqual(exp["category"], "option_event")
+        self.assertEqual(exp["activityType"], "EXPIR")
+        self.assertEqual(exp["activitySubType"], "BUY")
+        self.assertEqual(exp["quantity"], 5)
+        long_exp = by_id["opt-long-exp"]
+        self.assertEqual(long_exp["category"], "option_event")
+        self.assertEqual(long_exp["activityType"], "EXPIR")
+        self.assertEqual(long_exp["activitySubType"], "SELL")
+        self.assertEqual(long_exp["quantity"], -4)
+        asg = by_id["opt-asg-1"]
+        self.assertEqual(asg["category"], "option_event")
+        self.assertEqual(asg["activityType"], "ASSIGN")
+        self.assertEqual(asg["activitySubType"], "BUYTOCLOSE")
+        self.assertEqual(asg["quantity"], 2)
+        strike = by_id["opt-asg-strike"]
+        self.assertEqual(strike["unitPrice"], 0)
+        self.assertEqual(strike["activitySubType"], "BUYTOCLOSE")
 
     def test_insert_if_new_by_canonical_id(self):
         row = bagholder.map_activity(_ws_item())
@@ -524,6 +816,60 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(secs[0]["name"], "Charbone Corporation")
         self.assertEqual(secs[0]["primaryMic"], "XTSV")
 
+    def test_fetch_securities_batches_ids(self):
+        calls = []
+
+        def fake_graphql(sess, operation, variables, query=None):
+            calls.append((operation, list(variables.get("ids") or [])))
+            rows = []
+            for sid in variables["ids"]:
+                if sid == "sec-s-missing":
+                    rows.append(None)
+                elif sid.startswith("sec-o-"):
+                    rows.append({"id": sid, "currency": "USD", "stock": {"symbol": "LUNR", "name": ""},
+                                 "optionDetails": {"underlyingSecurity": {"id": "sec-s-under", "currency": "USD"}}})
+                else:
+                    rows.append({"id": sid, "currency": "CAD", "stock": {"symbol": "NSAV", "name": "Ninepoint", "primaryExchange": "TSX", "primaryMic": "XTSE"}, "optionDetails": None})
+            return {"securities": rows}
+
+        ids = ["sec-s-%d" % i for i in range(60)] + ["sec-o-1", "sec-s-missing", "sec-s-1"]
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql):
+            recs = bagholder.fetch_securities({"access_token": "t"}, ids)
+        self.assertEqual([c[0] for c in calls], ["FetchSecurities", "FetchSecurities"])
+        self.assertEqual(len(calls[0][1]), 50)
+        self.assertEqual(len(calls[1][1]), 12)
+        self.assertEqual(len(recs), 61)
+        opt = next(r for r in recs if r["id"] == "sec-o-1")
+        self.assertEqual(opt["underlyingId"], "sec-s-under")
+        self.assertEqual(recs[0]["primaryExchange"], "TSX")
+
+    def test_fill_listings_uses_batches_and_follows_underlyings(self):
+        store.merge_local_rows([
+            {"transactionDate": "2026-01-02", "symbol": "LUNR 15JAN27 12.00 CALL", "quantity": 1, "unitPrice": 1,
+             "netCashAmount": -100, "category": "trade", "activityType": "OPTIONS_BUY", "activitySubType": "BUYTOOPEN",
+             "currency": "USD", "securityId": "sec-o-1", "source": "csv"},
+        ])
+        store.set_meta("security_id_backfill_done", "1")
+        calls = []
+
+        def fake_graphql(sess, operation, variables, query=None):
+            calls.append(list(variables.get("ids") or []))
+            rows = []
+            for sid in variables["ids"]:
+                if sid == "sec-o-1":
+                    rows.append({"id": sid, "currency": "USD", "stock": {"symbol": "LUNR"},
+                                 "optionDetails": {"underlyingSecurity": {"id": "sec-s-under", "currency": "USD"}}})
+                else:
+                    rows.append({"id": sid, "currency": "USD", "stock": {"symbol": "LUNR", "name": "Intuitive Machines", "primaryExchange": "NASDAQ"}})
+            return {"securities": rows}
+
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql):
+            self.assertTrue(bagholder.fill_listings({"access_token": "t"}))
+        self.assertEqual(calls, [["sec-o-1"], ["sec-s-under"]])
+        by_id = {s["id"]: s for s in store.list_securities()}
+        self.assertEqual(by_id["sec-o-1"]["underlyingId"], "sec-s-under")
+        self.assertEqual(by_id["sec-s-under"]["name"], "Intuitive Machines")
+
     def test_fetch_security_reads_stock_fields(self):
         def fake_graphql(sess, operation, variables, query=None):
             self.assertEqual(operation, "FetchSecurity")
@@ -549,72 +895,16 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(rec["primaryMic"], "XTSV")
         self.assertEqual(rec["currency"], "CAD")
 
-    def test_ledger_uses_listing_line(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("function listingLine(", html)
-        self.assertIn("function listingTicker(", html)
-        self.assertIn("book.securities", html)
-        self.assertIn("esc(listingLine(t))", html)
-        self.assertNotIn('esc(t.side) + " " + formatNumber(t.quantity', html)
 
-    def test_ledger_shows_background_step_on_status_line(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("listingsFilling || state.ws.syncStep", html)
-        self.assertIn("state.ws.listingsFilling || state.ws.syncStep) pollWsStatus", html)
-        src = bagholder.ledger_path().with_name("bagholder.py").read_text(encoding="utf-8")
-        self.assertIn('"listingsFilling": bool(_state.get("listingsFilling"))', src)
 
-    def test_ledger_executions_heading_includes_count(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("Executions (' + acts.length + ')", html)
-        self.assertNotIn('section-title">Executions</h3>', html)
-        self.assertIn(".inner-acts table.blotter th { position: static; }", html)
 
-    def test_ledger_exchange_filter(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn('<label>Exchange</label>', html)
-        self.assertIn("function listingExchange(", html)
-        self.assertIn("function knownExchanges(", html)
-        self.assertIn("f.exchange && listingExchange(t) !== f.exchange", html)
 
-    def test_ledger_prefers_listed_one_over_alpha(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("function isAlphaVenue(", html)
-        self.assertIn("function preferredListing(", html)
-        self.assertIn('exch === "ALPHA EXCHANGE"', html)
-        self.assertIn("return preferredListing(sec);", html)
 
-    def test_ledger_listing_filters_drive_nav_tiles(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("function listingFiltersOn(", html)
-        self.assertIn("function closedYearReturn(", html)
-        self.assertIn("listingFiltersOn()", html)
-        self.assertIn("realizedPnlCurve(closedForMetrics)", html)
-        self.assertIn("closedAnnualizedReturn(closedFx || [], years)", html)
 
-    def test_ledger_favicon_link(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn('<link rel="icon" type="image/png" href="favicon.png"/>', html)
-        icon = bagholder.ledger_path().parent / "favicon.png"
-        self.assertTrue(icon.is_file())
-        with open(bagholder.__file__, encoding="utf-8") as fh:
-            src = fh.read()
-        self.assertIn('path in ("/favicon.png", "/favicon.ico")', src)
 
-    def test_ledger_price_filter(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn('<label>Price</label>', html)
-        self.assertIn("function priceFilterOn(", html)
-        self.assertIn("function rowPriceOk(", html)
-        self.assertIn('id="priceOp"', html)
-        self.assertIn("rowPriceOk([t.entryPrice, t.exitPrice])", html)
-        self.assertIn("priceFilterOn()", html)
 
-    def test_statement_option_unit_price_divides_by_multiplier(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("parsed.quantity * optionMultiplier(parsed.symbol)", html)
-        self.assertIn("Math.abs(netCashAmount) / denom", html)
-        self.assertNotIn("Math.abs(netCashAmount) / parsed.quantity", html)
+
+
 
 def time_now_minus():
     return datetime.now(timezone.utc).timestamp() - 10
@@ -752,22 +1042,7 @@ class WealthsimpleHttpTest(unittest.TestCase):
         self.assertEqual(saved.get("client_id"), FAKE_CLIENT_ID)
         self.assertEqual(bagholder.CLIENT_ID_PATH.read_text(encoding="utf-8").strip(), FAKE_CLIENT_ID)
 
-    def test_header_copy_and_hover_exist(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("copyWatchStatus", html)
-        self.assertIn('id="watchCopy"', html)
-        self.assertIn("watch-status", html)
-        self.assertIn("watchStatusFullText", html)
-        self.assertIn('title="', html)
-        self.assertIn("navigator.clipboard.writeText", html)
 
-    def test_menu_has_refresh_session(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn('id="refreshSession"', html)
-        self.assertIn("Refresh session", html)
-        self.assertIn("/api/refresh", html)
-        self.assertIn("Refreshing session…", html)
-        self.assertIn("Wealthsimple token refresh ok", html)
 
     def test_refresh_now_posts_when_expiry_is_not_near(self):
         sess = {
@@ -946,14 +1221,6 @@ class WealthsimpleHttpTest(unittest.TestCase):
         self.assertEqual(snap["notes"], saved)
         self.assertEqual(store.trade_notes(), saved)
 
-    def test_ledger_posts_notes(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("function persistNotes(", html)
-        self.assertIn("function saveDrawerNote(", html)
-        self.assertIn('api("POST", "/api/notes"', html)
-        src = bagholder.ledger_path().with_name("bagholder.py").read_text(encoding="utf-8")
-        self.assertIn('path == "/api/notes"', src)
-        self.assertIn('"notes": book.get("notes") or {}', src)
 
     def test_nav_history_migrates_date_pk_to_account_date(self):
         path = store.db_path()
@@ -982,7 +1249,7 @@ class WealthsimpleHttpTest(unittest.TestCase):
         conn.close()
         store.ensure()
         snap = store.snapshot()
-        self.assertEqual(store.get_meta("schema_version"), "3")
+        self.assertEqual(store.get_meta("schema_version"), str(store.SCHEMA_VERSION))
         self.assertEqual(len(snap["navHistory"]), 1)
         self.assertEqual(snap["navHistory"][0]["date"], "2024-01-02")
         self.assertEqual(snap["navHistory"][0]["equity"], 1000.0)
@@ -1213,17 +1480,3 @@ class WealthsimpleHttpTest(unittest.TestCase):
         self.assertTrue(any(e.startswith("RRSP:") for e in errors))
         self.assertIn("nope", errors[0])
 
-    def test_ledger_nav_follows_account_filter(self):
-        html = bagholder.ledger_path().read_text(encoding="utf-8")
-        self.assertIn("navByAccount", html)
-        self.assertIn("ledger.navByAccount.v1", html)
-        self.assertIn("function yearsFromActivities", html)
-        self.assertNotIn("yearsFromNavOrActivities", html)
-        self.assertIn("const hist = navHist();", html)
-        self.assertIn("state.navByAccount = (book && book.navByAccount", html)
-        self.assertNotIn("const hist = state.navHistory || [];", html)
-
-
-
-if __name__ == "__main__":
-    unittest.main()

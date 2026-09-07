@@ -31,9 +31,12 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
+import csvimport
+import market
+import model
 import store
 
 # --- constants (tradesimple WealthsimpleAPIBase) ---
@@ -501,7 +504,22 @@ query FetchSecurity($securityId: ID!) {
 """.strip()
 
 
+Q_FETCH_SECURITIES = """
+query FetchSecurities($ids: [ID!]!) {
+  securities(ids: $ids) {
+    id
+    currency
+    stock { name primaryExchange primaryMic symbol }
+    optionDetails { underlyingSecurity { id currency } }
+    __typename
+  }
+}
+""".strip()
+
+SECURITY_BATCH = 50
+
 QUERIES = {
+    "FetchSecurities": Q_FETCH_SECURITIES,
     "IdentityHistoricalFinancialsQuery": Q_IDENTITY_HISTORICAL_FINANCIALS,
     "FetchAccountHistoricalFinancials": Q_FETCH_ACCOUNT_HISTORICAL_FINANCIALS,
     "FetchAllAccountFinancials": Q_FETCH_ALL_ACCOUNT_FINANCIALS,
@@ -661,6 +679,10 @@ def skip_activity(item):
     if _is_corp_share_move(item):
         if any(x in status for x in ("REJECT", "CANCEL", "FAIL", "VOID")):
             return True
+    elif typ in ("DIVIDEND", "INTEREST_CHARGE") and not status:
+        # Cash dividends and margin interest charges often arrive with no
+        # status at all; both have already hit the cash balance.
+        pass
     elif not status or status not in _KEEP_STATUS:
         return True
     # INTEREST / FPL_INTEREST must not be treated as a loan skip.
@@ -866,8 +888,14 @@ def _human_desc(item, typ, sub, symbol, qty, px, cash):
         return "Fee refund" if t == "REFUND" else "Fee"
     if t in ("STOCK_DISTRIBUTION", "STKDIS", "SPIN", "SPINOFF"):
         return f"Stock distribution: {symbol}" if symbol else "Stock distribution"
-    if t in ("EXPIR", "EXPIRY", "EXPIRE", "ASSIGN", "ASSIGNMENT", "EXERCISE"):
-        return f"{t.title()} {symbol}".strip()
+    if (
+        t in ("EXPIR", "EXPIRY", "EXPIRE", "ASSIGN", "ASSIGNMENT", "EXERCISE")
+        or "EXPIR" in t
+        or "ASSIGN" in t
+        or "EXERCISE" in t
+    ):
+        label = "Assign" if "ASSIGN" in t else ("Exercise" if "EXERCISE" in t else "Expir")
+        return f"{label} {symbol}".strip()
     if symbol:
         return f"{t}: {symbol}"
     return t.replace("_", " ").title() or "Activity"
@@ -985,13 +1013,41 @@ def map_activity(item, accounts=None):
         else:
             activity_type, activity_sub = "OPTIONS_SELL", "SELLTOOPEN"
         quantity = -abs(qty_abs)
-    elif typ in ("EXPIR", "EXPIRY", "EXPIRE", "ASSIGN", "ASSIGNMENT", "EXERCISE"):
+    elif "MULTILEG" in typ:
+        # WS filled combo / roll legs often have null assetQuantity.
+        # Credit is covered-call premium: sell-to-open a short, not close a long.
+        # Debit prefers BUYTOCLOSE; FIFO opens LONG if no short exists.
+        category = "trade"
+        if cash < 0:
+            activity_type, activity_sub = "OPTIONS_BUY", "BUYTOCLOSE"
+            quantity = abs(qty_abs)
+        else:
+            activity_type, activity_sub = "OPTIONS_SELL", "SELLTOOPEN"
+            quantity = -abs(qty_abs) if qty_abs else 0.0
+    elif (
+        typ in ("EXPIR", "EXPIRY", "EXPIRE", "ASSIGN", "ASSIGNMENT", "EXERCISE")
+        or "EXPIR" in typ
+        or "ASSIGN" in typ
+        or "EXERCISE" in typ
+    ):
         category = "option_event"
         keep = "ASSIGN" if "ASSIGN" in typ else ("EXERCISE" if "EXERCISE" in typ else "EXPIR")
         activity_type = keep
-        covering = "ASSIGN" in typ or "COVER" in _compact(sub) or _is_to_close(sub)
-        activity_sub = "BUY" if covering else "SELL"
+        short_expir = "SHORT_EXPIR" in typ or ("SHORT" in typ and "EXPIR" in typ)
+        if "ASSIGN" in typ:
+            activity_sub = "BUYTOCLOSE"
+        elif short_expir:
+            activity_sub = "BUY"
+        elif "EXPIR" in typ:
+            activity_sub = "SELL"
+        elif "COVER" in _compact(sub) or _is_to_close(sub):
+            activity_sub = "BUY"
+        else:
+            activity_sub = "SELL"
         quantity = -abs(qty_abs) if activity_sub == "SELL" else abs(qty_abs)
+        # Strike cash on ASSIGN is share delivery, not option buyback.
+        if "ASSIGN" in typ or abs(cash) < 1e-12:
+            unit_price = 0.0
         if not is_opt:
             symbol = symbol or _asset_symbol(item)
     elif typ in ("DEPOSIT", "CONTRIBUTION"):
@@ -1891,7 +1947,41 @@ def fetch_security(sess, security_id):
         data = graphql(sess, "FetchSecurity", {"securityId": sid})
     except Exception:
         return None
-    sec = (data or {}).get("security") or {}
+    return _security_record((data or {}).get("security"), sid)
+
+
+def fetch_securities(sess, security_ids):
+    """One request per SECURITY_BATCH ids. Unknown ids come back null and are
+    dropped; a failed batch falls back to one request per id."""
+    ids = []
+    seen = set()
+    for raw in security_ids or []:
+        sid = _s(raw).strip()
+        if sid and sid not in seen:
+            seen.add(sid)
+            ids.append(sid)
+    out = []
+    for i in range(0, len(ids), SECURITY_BATCH):
+        chunk = ids[i : i + SECURITY_BATCH]
+        try:
+            data = graphql(sess, "FetchSecurities", {"ids": chunk})
+            rows = (data or {}).get("securities")
+            if not isinstance(rows, list):
+                raise RuntimeError("no securities list")
+        except Exception:
+            for sid in chunk:
+                rec = fetch_security(sess, sid)
+                if rec:
+                    out.append(rec)
+            continue
+        for sec in rows:
+            rec = _security_record(sec, "")
+            if rec:
+                out.append(rec)
+    return out
+
+
+def _security_record(sec, sid):
     if not isinstance(sec, dict) or not sec:
         return None
     stock = sec.get("stock") or {}
@@ -1992,30 +2082,23 @@ def fill_listings(sess, from_sync=False):
             if walk_ok:
                 store.set_meta("security_id_backfill_done", "1")
         wanted = _collect_security_ids()
-        missing = store.missing_security_ids(wanted)
+        pending = store.missing_security_ids(wanted)
         seen = set()
-        pending = list(missing)
         to_upsert = []
-        total = len(pending)
-        if pending:
-            _set_sync_step(
-                "Looking up company names, %s left" % total if total else "Looking up company names…"
-            )
+        # Options point at an underlying security; fetch those in a second round.
         while pending:
-            left = len(pending)
-            if total:
-                _set_sync_step("Looking up company names, %s left" % left)
-            sid = pending.pop(0)
-            if not sid or sid in seen:
-                continue
-            seen.add(sid)
-            rec = fetch_security(sess, sid)
-            if not rec:
-                continue
-            to_upsert.append(rec)
-            uid = _s(rec.get("underlyingId")).strip()
-            if uid and uid not in seen:
-                pending.extend(store.missing_security_ids([uid]))
+            _set_sync_step("Looking up company names, %s left" % len(pending))
+            batch = [sid for sid in pending if sid not in seen]
+            seen.update(batch)
+            pending = []
+            if not batch:
+                break
+            recs = fetch_securities(sess, batch)
+            to_upsert.extend(recs)
+            under = [_s(r.get("underlyingId")).strip() for r in recs]
+            under = [u for u in under if u and u not in seen]
+            if under:
+                pending = store.missing_security_ids(under)
         if to_upsert:
             store.upsert_securities(to_upsert)
         return True
@@ -2935,6 +3018,79 @@ def ledger_path():
     return Path(__file__).resolve().parent / "ledger.html"
 
 
+def _payer_symbols():
+    try:
+        return model.payer_symbols()
+    except Exception:
+        return []
+
+
+def refresh_market_data():
+    """USD/CAD, S&P 500 and declared distributions for the derived model. Never raises."""
+    try:
+        out = market.refresh_all(_ssl_context(), _payer_symbols())
+        out["quotes"] = refresh_quotes()
+        if out.get("distributions") or out.get("quotes"):
+            model.invalidate()
+        return out
+    except Exception:
+        return {"fx": 0, "benchmark": 0, "distributions": 0, "quotes": 0, "skipped": True}
+
+
+def refresh_quotes():
+    """Prices for held positions, at most every QUOTE_REFRESH_MINUTES. Never raises."""
+    try:
+        n = market.refresh_quotes(model.held_symbols(), _ssl_context())
+        if n:
+            model.invalidate()
+        return n
+    except Exception:
+        return 0
+
+
+def quote_loop():
+    while not _stop.wait(60 * market.QUOTE_REFRESH_MINUTES):
+        refresh_quotes()
+
+
+WATCH_SCAN_SEC = 10 * 60
+
+
+def scan_watched_folder():
+    """Import new or changed CSVs from the watched folder. Never raises."""
+    try:
+        if not csvimport.watch_folder():
+            return None
+        result = csvimport.scan_folder()
+        if result.get("ok") and result.get("added"):
+            model.invalidate()
+        return result
+    except Exception:
+        return None
+
+
+def watch_loop():
+    scan_watched_folder()
+    while not _stop.wait(WATCH_SCAN_SEC):
+        scan_watched_folder()
+
+
+def sync_then_market():
+    ok = run_sync()
+    refresh_market_data()
+    return ok
+
+
+def _model_filters(query):
+    raw = (parse_qs(query or "").get("filters") or [""])[0]
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return None
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stderr.write("bagholder %s - %s\n" % (self.address_string(), fmt % args))
@@ -2998,7 +3154,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
-        if path in ("/", "/ledger.html"):
+        if path in ("/", "/index.html", "/ledger.html", "/v2", "/v2/"):
             if not self._gate():
                 self._send(403, {"ok": False})
                 return
@@ -3015,6 +3171,42 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(403, {"ok": False})
                 return
             self._send(200, status_payload())
+            return
+        if path == "/api/watch":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            self._send(200, csvimport.status())
+            return
+        if path == "/api/data":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            summary = store.data_summary()
+            summary["ok"] = True
+            summary["sessionPresent"] = bool(load_session())
+            self._send(200, summary)
+            return
+        if path == "/api/model":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            try:
+                if market.is_stale(symbols=_payer_symbols()):
+                    threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
+                elif market.quote_symbols_needing_refresh(model.held_symbols()):
+                    threading.Thread(target=refresh_quotes, name="bagholder-quotes", daemon=True).start()
+            except Exception:
+                pass
+            try:
+                payload = model.view(_model_filters(query))
+            except Exception as e:
+                sys.stderr.write("model failed: %r\n" % (e,))
+                self._send(500, {"ok": False, "error": "model failed: %s" % type(e).__name__})
+                return
+            payload["status"] = status_payload()
+            self._send(200, payload)
             return
         if path in ("/favicon.png", "/favicon.ico"):
             if not self._gate():
@@ -3079,8 +3271,45 @@ class Handler(BaseHTTPRequestHandler):
                 return
             with _lock:
                 _state["error"] = ""
-            threading.Thread(target=run_sync, name="bagholder-sync", daemon=True).start()
+            threading.Thread(target=sync_then_market, name="bagholder-sync", daemon=True).start()
             self._send(200, {"ok": True, "syncing": True})
+            return
+        if path == "/api/data/clear":
+            body = self._read_json()
+            body = body if isinstance(body, dict) else {}
+            with _lock:
+                if _state["syncing"]:
+                    self._send(409, {"ok": False, "error": "A sync is running. Wait for it to finish."})
+                    return
+            summary = store.clear_synced_data(
+                keep_journal=not bool(body.get("journal")),
+                keep_market=not bool(body.get("market")),
+            )
+            if body.get("session"):
+                delete_session_and_book()
+            with _lock:
+                _state["lastSync"] = ""
+                _state["error"] = ""
+            model.invalidate()
+            summary["ok"] = True
+            summary["sessionPresent"] = bool(load_session())
+            self._send(200, summary)
+            return
+        if path == "/api/journal":
+            body = self._read_json()
+            if not isinstance(body, dict) or not _s(body.get("id")).strip():
+                self._send(400, {"ok": False, "error": "id required"})
+                return
+            entries = store.save_journal_entry(
+                body.get("id"),
+                {
+                    "thesis": body.get("thesis"),
+                    "tags": body.get("tags"),
+                    "grade": body.get("grade"),
+                },
+            )
+            model.apply_journal(entries)
+            self._send(200, {"ok": True, "journal": entries})
             return
         if path == "/api/disconnect":
             self._read_json()
@@ -3090,7 +3319,46 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/book/append":
             body = self._read_json()
             result = append_manual(body)
+            model.invalidate()
             self._send(200, result)
+            return
+        if path == "/api/import":
+            body = self._read_json()
+            body = body if isinstance(body, dict) else {}
+            text = body.get("text")
+            if not isinstance(text, str) or not text.strip():
+                self._send(400, {"ok": False, "error": "text required"})
+                return
+            report = csvimport.import_text(_s(body.get("name")) or "upload.csv", text)
+            if report.get("added"):
+                model.invalidate()
+            self._send(200, report)
+            return
+        if path == "/api/watch":
+            body = self._read_json()
+            body = body if isinstance(body, dict) else {}
+            set_result = csvimport.set_watch_folder(body.get("path"))
+            if not set_result.get("ok"):
+                self._send(400, set_result)
+                return
+            result = csvimport.scan_folder(force=True)
+            if result.get("added"):
+                model.invalidate()
+            result["status"] = csvimport.status()
+            self._send(200, result)
+            return
+        if path == "/api/watch/scan":
+            self._read_json()
+            result = csvimport.scan_folder(force=True)
+            if result.get("ok") and result.get("added"):
+                model.invalidate()
+            result["status"] = csvimport.status()
+            self._send(200 if result.get("ok") else 400, result)
+            return
+        if path == "/api/watch/clear":
+            self._read_json()
+            csvimport.clear_watch_folder()
+            self._send(200, csvimport.status())
             return
         if path == "/api/groups":
             body = self._read_json()
@@ -3141,6 +3409,7 @@ def auto_sync_loop():
                 ok = run_sync(force_activity=True)
             except Exception:
                 ok = False
+            refresh_market_data()
             fail_delay = TOKEN_CHECK_SEC if ok else min(max(fail_delay, TOKEN_CHECK_SEC) * 2, 1800)
             delay = fail_delay
         else:
@@ -3167,6 +3436,9 @@ def main():
     httpd, port = bind_server()
     t = threading.Thread(target=auto_sync_loop, name="bagholder-auto-sync", daemon=True)
     t.start()
+    threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
+    threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
+    threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()
     url = "http://127.0.0.1:%s" % port
     print("Bagholder  %s" % url, flush=True)
     try:
