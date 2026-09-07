@@ -9,74 +9,90 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"/>
 <style>
+html{color-scheme:dark}
 :root{
   --bg:#161826;--surface:#232532;--n900:#292b31;--accent:#9184d9;--accent-300:#d2cefd;--accent-900:#2b2741;
-  --ink:#e9e9ed;--ink75:rgba(233,233,237,.8);--ink60:rgba(233,233,237,.68);--ink55:rgba(233,233,237,.62);
+  --ink:#e9e9ed;--ink-rgb:233,233,237;--ink75:rgba(233,233,237,.8);--ink60:rgba(233,233,237,.68);--ink55:rgba(233,233,237,.62);
   --hair:rgba(233,233,237,.14);--grid:rgba(233,233,237,.07);--pos:#6fd39b;--neg:#e0778a;--mixed:#7972a9;
   --shadow-sm:0 1px 2px rgba(0,0,0,.28);--shadow-md:0 10px 28px rgba(0,0,0,.45),0 0 0 1px rgba(233,233,237,.06);
+  --font:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--font-num:var(--font);--brand-color:var(--ink);--brand-transform:none;--brand-spacing:.02em;--outline:.1;--field:rgba(22,24,38,.55);
+}
+html[data-theme="midnight"]{
+  --bg:#0b0d12;--surface:#10131a;--n900:#171b24;--accent:#f5c842;--accent-300:#ffe08a;--accent-900:#3a3211;
+  --ink:#e6e8ee;--ink-rgb:230,232,238;--ink75:rgba(230,232,238,.8);--ink60:rgba(230,232,238,.66);--ink55:rgba(230,232,238,.6);
+  --hair:rgba(230,232,238,.16);--grid:rgba(230,232,238,.08);--pos:#3fd68a;--neg:#ff6b7a;--mixed:#6c6f8a;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);--shadow-md:0 10px 28px rgba(0,0,0,.6),0 0 0 1px rgba(230,232,238,.08);
+  --font-num:ui-monospace,"JetBrains Mono","SF Mono",Menlo,monospace;--brand-color:#f5c842;--brand-transform:uppercase;--brand-spacing:.12em;--outline:.14;--field:rgba(4,5,9,.6);
+}
+html[data-theme="light"]{color-scheme:light;
+  --bg:#f3f4f8;--surface:#ffffff;--n900:#eceef4;--accent:#6b5cd6;--accent-300:#4a3bb8;--accent-900:#e7e3fb;
+  --ink:#1b1d27;--ink-rgb:27,29,39;--ink75:rgba(27,29,39,.8);--ink60:rgba(27,29,39,.64);--ink55:rgba(27,29,39,.58);
+  --hair:rgba(27,29,39,.14);--grid:rgba(27,29,39,.07);--pos:#178a52;--neg:#c8384f;--mixed:#8c86b8;
+  --shadow-sm:0 1px 2px rgba(20,22,40,.08);--shadow-md:0 10px 28px rgba(20,22,40,.16),0 0 0 1px rgba(27,29,39,.08);
+  --outline:.12;--field:rgba(27,29,39,.04);
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);color-scheme:dark}
-body{font:400 13px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+body{font:400 13px/1.45 var(--font);-webkit-font-smoothing:antialiased;min-height:100vh}
 button{font-family:inherit}
 a{color:var(--accent)}
 h4,h5{font-weight:500;margin:0;letter-spacing:0}
 h4{font-size:20px}
 h5{font-size:14px}
-.card{background:var(--surface);border-radius:8px;box-shadow:inset 0 0 0 1px rgba(233,233,237,.1)}
-.elev-sm{box-shadow:inset 0 0 0 1px rgba(233,233,237,.1),var(--shadow-sm)}
-.elev-md{box-shadow:inset 0 0 0 1px rgba(233,233,237,.12),var(--shadow-md)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:6px;cursor:pointer;font:500 12.5px Inter,system-ui,sans-serif;padding:6px 12px;color:var(--ink);background:var(--surface);box-shadow:inset 0 0 0 1px rgba(233,233,237,.16);white-space:nowrap}
-.btn:hover{background:#2b2d3b}
-.btn-primary{background:var(--accent);color:#161826;box-shadow:none}
-.btn-primary:hover{background:#a99ce8}
-.btn-secondary{background:var(--surface);box-shadow:inset 0 0 0 1px rgba(233,233,237,.16)}
+.card{background:var(--surface);border-radius:8px;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),var(--outline))}
+.elev-sm{box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),var(--outline)),var(--shadow-sm)}
+.elev-md{box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:6px;cursor:pointer;font:500 12.5px Inter,system-ui,sans-serif;padding:6px 12px;color:var(--ink);background:var(--surface);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.16);white-space:nowrap}
+.btn:hover{background:var(--n900)}
+.btn-primary{background:var(--accent);color:var(--bg);box-shadow:none}
+.btn-primary:hover{background:var(--accent)}
+.btn-secondary{background:var(--surface);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.16)}
 .btn-icon{width:34px;height:34px;padding:0;border-radius:8px}
 .btn[disabled]{opacity:.45;cursor:default}
-.input{width:100%;border:0;border-radius:8px;background:rgba(22,24,38,.55);box-shadow:inset 0 0 0 1px rgba(233,233,237,.14);color:var(--ink);font:400 13px Inter,system-ui,sans-serif;padding:10px 12px;outline:none;min-height:40px}
-.input::placeholder{color:rgba(233,233,237,.4)}
+.input{width:100%;border:0;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);color:var(--ink);font:400 13px Inter,system-ui,sans-serif;padding:10px 12px;outline:none;min-height:40px}
+.input::placeholder{color:rgba(var(--ink-rgb),.4)}
 .input:focus{box-shadow:inset 0 0 0 1px var(--accent)}
 textarea.input{resize:none;line-height:1.5}
 .table{width:100%;border-collapse:separate;border-spacing:0}
 .table th{font:500 10.5px/18px Inter,system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:var(--ink60);text-align:left;padding:4px 5.6px 8px;background:var(--surface);user-select:none}
-.table td{padding:7px 5.6px;border-top:1px solid rgba(233,233,237,.06);font-size:12.5px;vertical-align:middle}
-.table tbody tr:hover{background:rgba(233,233,237,.08)}
-.tab{font-variant-numeric:tabular-nums}
+.table td{padding:7px 5.6px;border-top:1px solid rgba(var(--ink-rgb),.06);font-size:12.5px;vertical-align:middle}
+.table tbody tr:hover{background:rgba(var(--ink-rgb),.08)}
+.tab{font-variant-numeric:tabular-nums;font-family:var(--font-num)}
 .muted{color:var(--ink55)}
 .dim{color:var(--ink60)}
 .pos{color:var(--pos)}
 .neg{color:var(--neg)}
 .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55)}
-.seg{display:flex;gap:0;padding:0;border-radius:8px;background:rgba(22,24,38,.55);box-shadow:inset 0 0 0 1px rgba(233,233,237,.14);overflow:hidden}
-.seg-opt{flex:1;display:flex;align-items:center;justify-content:center;padding:12px 0;cursor:pointer;font-size:13px;color:var(--ink);border-left:1px solid rgba(233,233,237,.14)}
+.seg{display:flex;gap:0;padding:0;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);overflow:hidden}
+.seg-opt{flex:1;display:flex;align-items:center;justify-content:center;padding:12px 0;cursor:pointer;font-size:13px;color:var(--ink);border-left:1px solid rgba(var(--ink-rgb),.14)}
 .seg-opt:first-child{border-left:0}
-.seg-opt:hover{background:rgba(233,233,237,.06)}
+.seg-opt:hover{background:rgba(var(--ink-rgb),.06)}
 .seg-opt.on{background:var(--accent-900);color:var(--accent-300)}
 .seg-opt input{display:none}
 .scroll{overflow-y:auto;overflow-x:hidden;min-width:0}
 .scroll-xy{overflow:auto;min-width:0}
 .th-in{display:inline-flex;align-items:center;gap:4px;height:18px;line-height:18px}
 .arrow{display:block;width:9px;height:9px;overflow:hidden;font-size:9px;line-height:9px}
-.chip{display:inline-flex;align-items:center;font-size:12px;border-radius:6px;overflow:hidden;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(233,233,237,.09);white-space:nowrap}
+.chip{display:inline-flex;align-items:center;font-size:12px;border-radius:6px;overflow:hidden;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.09);white-space:nowrap}
 .chip .cf{padding:3px 7px;color:var(--ink60)}
 .chip .cv{cursor:pointer;border:0;font:400 12px Inter,system-ui,sans-serif;padding:3px 8px;background:var(--accent-900);color:var(--accent-300)}
-.chip .cv:hover{background:#423a6a}
+.chip .cv:hover{background:var(--accent-900)}
 .chip .cx{cursor:pointer;border:0;font:400 12px Inter,system-ui,sans-serif;padding:3px 7px;background:transparent;color:var(--ink60);line-height:1.4}
 .chip .cx:hover{background:rgba(224,119,138,.3)}
-.pop{position:absolute;top:42px;right:0;z-index:7;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(233,233,237,.12),var(--shadow-md)}
-.pop-row{cursor:pointer;border:0;display:flex;align-items:center;gap:8px;text-align:left;font:400 12.5px Inter,system-ui,sans-serif;padding:6px 7px;border-radius:5px;background:transparent;color:rgba(233,233,237,.85);width:100%}
-.pop-row:hover{background:rgba(233,233,237,.08)}
+.pop{position:absolute;top:42px;right:0;z-index:7;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
+.pop-row{cursor:pointer;border:0;display:flex;align-items:center;gap:8px;text-align:left;font:400 12.5px Inter,system-ui,sans-serif;padding:6px 7px;border-radius:5px;background:transparent;color:rgba(var(--ink-rgb),.85);width:100%}
+.pop-row:hover{background:rgba(var(--ink-rgb),.08)}
 .pop-row.on{background:var(--accent-900);color:var(--accent-300)}
 .pop-row.on:hover{background:rgba(145,132,217,.28)}
-.pill{cursor:pointer;border:0;font:400 11.5px Inter,system-ui,sans-serif;padding:4px 0;border-radius:6px;background:rgba(233,233,237,.06);color:rgba(233,233,237,.7);font-variant-numeric:tabular-nums}
-.pill:hover{background:rgba(233,233,237,.18)}
+.pill{cursor:pointer;border:0;font:400 11.5px Inter,system-ui,sans-serif;padding:4px 0;border-radius:6px;background:rgba(var(--ink-rgb),.06);color:rgba(var(--ink-rgb),.7);font-variant-numeric:tabular-nums}
+.pill:hover{background:rgba(var(--ink-rgb),.18)}
 .pill.on{background:var(--accent-900);color:var(--accent-300)}
-.menu{position:absolute;top:42px;right:0;z-index:5;width:max-content;min-width:170px;background:var(--surface);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:1px;box-shadow:inset 0 0 0 1px rgba(233,233,237,.12),var(--shadow-md)}
-.menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;border:0;cursor:pointer;color:rgba(233,233,237,.85);font:400 13px Inter,system-ui,sans-serif;padding:7px 9px;border-radius:6px}
-.menu button:hover{background:rgba(233,233,237,.08)}
+.menu{position:absolute;top:42px;right:0;z-index:5;width:max-content;min-width:170px;background:var(--surface);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:1px;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
+.menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;border:0;cursor:pointer;color:rgba(var(--ink-rgb),.85);font:400 13px Inter,system-ui,sans-serif;padding:7px 9px;border-radius:6px}
+.menu button:hover{background:rgba(var(--ink-rgb),.08)}
 .menu button.primary{color:var(--accent-300);font-weight:500}
 .menu button[disabled]{opacity:.4;cursor:default}
-.menu .sep{height:1px;background:rgba(233,233,237,.1);margin:4px 2px}
+.menu .sep{height:1px;background:rgba(var(--ink-rgb),.1);margin:4px 2px}
 .tabbtn{background:transparent;border:0;cursor:pointer;font:500 13px Inter,system-ui,sans-serif;padding:11px 0;flex:none;white-space:nowrap;color:var(--ink60)}
 .tabbtn:hover{color:var(--accent-300)}
 .tabbtn.on{color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)}
@@ -86,29 +102,29 @@ textarea.input{resize:none;line-height:1.5}
 .grade{display:inline-grid;place-items:center;vertical-align:middle;width:20px;height:20px;border-radius:5px;font-size:11px;line-height:1}
 .g-ab{background:rgba(111,211,155,.14);color:var(--pos)}
 .g-f{background:rgba(224,119,138,.16);color:var(--neg)}
-.g-c,.g-none{background:rgba(233,233,237,.09);color:rgba(233,233,237,.65)}
+.g-c,.g-none{background:rgba(var(--ink-rgb),.09);color:rgba(var(--ink-rgb),.65)}
 .tagchip{font-size:10.5px;padding:2px 7px;border-radius:5px;background:var(--accent-900);color:var(--accent-300);white-space:nowrap;max-width:54px;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}
-.queue-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:6px;cursor:pointer;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(233,233,237,.12)}
-.queue-row:hover{background:#31333b;box-shadow:inset 0 0 0 1px rgba(145,132,217,.4)}
+.queue-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:6px;cursor:pointer;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12)}
+.queue-row:hover{background:var(--n900);box-shadow:inset 0 0 0 1px rgba(145,132,217,.4)}
 .tip{position:absolute;top:0;padding:5px 8px;border-radius:6px;background:var(--n900);box-shadow:var(--shadow-md);pointer-events:none;white-space:nowrap;z-index:2}
 .tip .tv{font-size:13px;font-weight:500;font-variant-numeric:tabular-nums}
 .tip .tl{font-size:10px;color:var(--ink55);font-variant-numeric:tabular-nums}
-.xline{position:absolute;top:0;bottom:0;width:1px;background:rgba(233,233,237,.35);pointer-events:none}
+.xline{position:absolute;top:0;bottom:0;width:1px;background:rgba(var(--ink-rgb),.35);pointer-events:none}
 .bar-col{position:relative;flex:1;height:100%;cursor:pointer}
-.bar-col:hover{background:rgba(233,233,237,.05)}
-.rule-b{background:linear-gradient(to right,transparent,rgba(233,233,237,.14) 20px,rgba(233,233,237,.14) calc(100% - 20px),transparent) no-repeat bottom/100% 1px}
-.rule-t{background:linear-gradient(to right,transparent,rgba(233,233,237,.14) 20px,rgba(233,233,237,.14) calc(100% - 20px),transparent) no-repeat top/100% 1px}
+.bar-col:hover{background:rgba(var(--ink-rgb),.05)}
+.rule-b{background:linear-gradient(to right,transparent,rgba(var(--ink-rgb),.14) 20px,rgba(var(--ink-rgb),.14) calc(100% - 20px),transparent) no-repeat bottom/100% 1px}
+.rule-t{background:linear-gradient(to right,transparent,rgba(var(--ink-rgb),.14) 20px,rgba(var(--ink-rgb),.14) calc(100% - 20px),transparent) no-repeat top/100% 1px}
 tr.sel{box-shadow:inset 0 0 0 9999px rgba(145,132,217,.14)}
 .status-err{color:var(--neg)}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:60px 20px}
-.spin{display:inline-block;width:10px;height:10px;border:2px solid rgba(233,233,237,.25);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
+.spin{display:inline-block;width:10px;height:10px;border:2px solid rgba(var(--ink-rgb),.25);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}
 html{scrollbar-gutter:stable}
 .scroll::-webkit-scrollbar,.scroll-xy::-webkit-scrollbar{width:9px;height:9px}
 .scroll::-webkit-scrollbar-thumb,.scroll-xy::-webkit-scrollbar-thumb{background:transparent;border-radius:6px;border:2px solid transparent}
-.scroll.scrolling::-webkit-scrollbar-thumb,.scroll-xy.scrolling::-webkit-scrollbar-thumb{background:rgba(233,233,237,.22);border-color:var(--surface)}
+.scroll.scrolling::-webkit-scrollbar-thumb,.scroll-xy.scrolling::-webkit-scrollbar-thumb{background:rgba(var(--ink-rgb),.22);border-color:var(--surface)}
 .scroll,.scroll-xy{scrollbar-color:transparent transparent;scrollbar-width:thin}
-.scroll.scrolling,.scroll-xy.scrolling{scrollbar-color:rgba(233,233,237,.22) transparent}
+.scroll.scrolling,.scroll-xy.scrolling{scrollbar-color:rgba(var(--ink-rgb),.22) transparent}
 </style>
 </head>
 <body>
@@ -151,7 +167,15 @@ const state = {
   busy: "",
   notice: "",
   dataOpen: false,
+  theme: "nocturne",
 };
+const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
+function applyTheme(name) {
+  state.theme = THEMES.some((t) => t[0] === name) ? name : "nocturne";
+  if (state.theme === "nocturne") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", state.theme);
+  try { localStorage.setItem("bh2.theme", state.theme); } catch (e) {}
+}
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MON_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -246,10 +270,10 @@ function th(table, cols) {
     const on = s.key === c.key;
     const right = c.align === "right";
     return '<th data-act="sort" data-arg=\'' + attr({ table, key: c.key }) + "' style=\"white-space:nowrap;text-align:" + (c.align || "left") +
-      ";cursor:pointer;position:sticky;top:0;z-index:1;color:" + (on ? "#e9e9ed" : "rgba(233,233,237,.6)") +
+      ";cursor:pointer;position:sticky;top:0;z-index:1;color:" + (on ? "var(--ink)" : "rgba(var(--ink-rgb),.6)") +
       (c.padLeft ? ";padding-left:" + c.padLeft : "") + (c.padRight ? ";padding-right:" + c.padRight : "") + '">' +
       '<span class="th-in" style="flex-direction:' + (right ? "row-reverse" : "row") + '">' + esc(c.label) +
-      '<span class="arrow" style="color:' + (on ? "#9184d9" : "transparent") + '">' + (on && s.dir === "asc" ? "▲" : "▼") + "</span></span></th>";
+      '<span class="arrow" style="color:' + (on ? "var(--accent)" : "transparent") + '">' + (on && s.dir === "asc" ? "▲" : "▼") + "</span></span></th>";
   }).join("");
 }
 function api(method, path, body) {
@@ -350,8 +374,8 @@ function syncLine() {
 }
 function headerHtml() {
   const m = state.model;
-  return '<div id="hdr" style="display:flex;align-items:center;gap:22px;padding:12px 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(233,233,237,.08)">' +
-    '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:500;letter-spacing:.02em">Bagholder</span></div>' +
+  return '<div id="hdr" style="display:flex;align-items:center;gap:22px;padding:12px 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
+    '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span></div>' +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
     '<span style="font-size:12px;color:var(--ink55)">' + syncLine() + (state.notice ? ' <span class="status-err">· ' + esc(state.notice) + "</span>" : "") + "</span>" +
     '<div style="position:relative" data-pop="filter">' +
@@ -387,6 +411,8 @@ function menuHtml() {
     item("import", "Import CSV", null, { disabled: true }) +
     item("trash", "Clear data", "openData") +
     item("gear", "Settings", null, { disabled: true }) +
+    '<div class="sep"></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px 4px"><span class="lbl" style="margin-right:auto">Theme</span>' +
+    THEMES.map((t) => '<button class="pill' + (state.theme === t[0] ? " on" : "") + '" data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "' style=\"padding:3px 9px;font-size:11.5px;width:auto\">" + t[1] + "</button>").join("") + "</div>" +
     (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
     "</div>";
 }
@@ -439,9 +465,9 @@ function chips() {
 function tabsHtml() {
   const t = (id, label) => '<button class="tabbtn' + (state.page === id && !(id === "trades" && state.sel) ? " on" : "") + '" data-act="page" data-arg=\'' + attr({ page: id }) + "'>" + label + "</button>";
   const sel = state.page === "trades" && state.sel ? tradeById(state.sel) : null;
-  return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(233,233,237,.08)">' +
+  return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
     t("dashboard", "Dashboard") + t("trades", "Trades") + t("positions", "Positions") + t("cashflow", "Cashflow") +
-    (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(233,233,237,.4)">›</span><span title="' + esc(sel.symbol) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(sel.symbol) + "</span></div>" : "") +
+    (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(sel.symbol) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(sel.symbol) + "</span></div>" : "") +
     '<div style="margin-left:auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 0"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;overflow-x:auto;padding-bottom:1px">' +
     chips().map((c) => '<span class="chip"><span class="cf">' + esc(c.field) + '</span><button class="cv" data-act="chipEdit" data-arg=\'' + attr({ key: c.key }) + "'>" + esc(c.value) + '</button><button class="cx" aria-label="Remove filter" data-act="chipRemove" data-arg=\'' + attr({ key: c.key }) + "'>×</button></span>").join("") +
     "</div></div></div>";
@@ -470,8 +496,8 @@ function filterPopHtml() {
         const sum = x.kind === "date" ? (dateLabel() !== "All time" ? dateLabel() : "") : x.kind === "list" ? listSummary(x.key) : rangeSummary(x.key);
         return '<button class="pop-row" data-act="pickField" data-arg=\'' + attr({ key: x.key }) + "'>" + esc(x.label) + (sum ? '<span style="margin-left:auto;font-size:11px;color:var(--accent-300)">' + esc(sum) + "</span>" : "") + "</button>";
       }).join("") +
-      '<div style="height:1px;background:rgba(233,233,237,.1);margin:5px 2px"></div>' +
-      '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(233,233,237,.1)"><input id="searchInput" value="' + esc(f.search) + '" placeholder="Symbol contains…" aria-label="Search" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px Inter,system-ui;color:var(--ink)"></div>' +
+      '<div style="height:1px;background:rgba(var(--ink-rgb),.1);margin:5px 2px"></div>' +
+      '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="searchInput" value="' + esc(f.search) + '" placeholder="Symbol contains…" aria-label="Search" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px Inter,system-ui;color:var(--ink)"></div>' +
       "</div>";
   } else {
     const hasValue = active.kind === "date" ? dateLabel() !== "All time" : active.kind === "list" ? f.lists[active.key].length > 0 : f.ranges[active.key].v != null && f.ranges[active.key].v !== "";
@@ -479,7 +505,7 @@ function filterPopHtml() {
     body = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><button data-act="openFields" aria-label="Back" style="cursor:pointer;border:0;background:transparent;color:var(--ink60);font:400 13px Inter,system-ui;padding:2px 5px;border-radius:5px">←</button><span class="lbl">' + esc(active.label) + '</span><span style="margin-left:auto;font-size:11px;color:var(--ink55)">' + esc(summary) + "</span>" +
       (hasValue ? '<button data-act="clearField" data-arg=\'' + attr({ key: active.key }) + "' style=\"cursor:pointer;border:0;background:transparent;color:var(--accent);font:400 11px Inter,system-ui;padding:2px 6px;border-radius:5px\">Clear</button>" : "") + "</div>";
     if (active.kind === "list") {
-      body += (active.search ? '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;margin-bottom:6px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(233,233,237,.1)"><input id="valueQuery" value="' + esc(state.valueQuery || "") + '" placeholder="Search" aria-label="Search values" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px Inter,system-ui;color:var(--ink)"></div>' : "") +
+      body += (active.search ? '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;margin-bottom:6px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="valueQuery" value="' + esc(state.valueQuery || "") + '" placeholder="Search" aria-label="Search values" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px Inter,system-ui;color:var(--ink)"></div>' : "") +
         '<div id="popValues" class="scroll" style="max-height:260px;display:flex;flex-direction:column;gap:1px">' + popValuesHtml(active) + "</div>";
     } else if (active.kind === "date") {
       const yearsAvail = ((state.model && state.model.options && state.model.options.years) || []).slice(0, 8);
@@ -541,9 +567,9 @@ function equityCardHtml(m) {
     [[2.3, g.max], [33.8, g.max * 2 / 3], [65.4, g.max / 3], [96.9, 0]].map((t) => '<span style="position:absolute;left:0;top:' + t[0] + '%;transform:translateY(-50%)">' + tick(t[1]) + "</span>").join("") + "</div>" +
     '<div id="eqPlot" style="position:relative;flex:1;min-width:0" data-hover="eq">' +
     '<div id="eqX" class="xline" hidden></div><div id="eqDot" style="position:absolute;width:7px;height:7px;margin:-4px 0 0 -3px;border-radius:50%;background:var(--pos);box-shadow:0 0 0 2px var(--surface);pointer-events:none" hidden></div><div id="eqTip" class="tip" hidden><div class="tv pos"></div><div class="tl"></div></div>' +
-    '<svg viewBox="0 0 880 260" preserveAspectRatio="none" style="width:100%;height:260px;display:block"><defs><linearGradient id="bhEq" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6fd39b" stop-opacity=".22"/><stop offset="100%" stop-color="#6fd39b" stop-opacity="0"/></linearGradient></defs>' +
-    '<line x1="0" y1="6" x2="880" y2="6" stroke="rgba(233,233,237,.07)"/><line x1="0" y1="88" x2="880" y2="88" stroke="rgba(233,233,237,.07)"/><line x1="0" y1="170" x2="880" y2="170" stroke="rgba(233,233,237,.07)"/><line x1="0" y1="252" x2="880" y2="252" stroke="rgba(233,233,237,.14)"/>' +
-    '<path d="' + g.area + '" fill="url(#bhEq)"/><path d="' + g.path + '" fill="none" stroke="#6fd39b" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg></div></div>' +
+    '<svg viewBox="0 0 880 260" preserveAspectRatio="none" style="width:100%;height:260px;display:block"><defs><linearGradient id="bhEq" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--pos);stop-opacity:.22"/><stop offset="100%" style="stop-color:var(--pos);stop-opacity:0"/></linearGradient></defs>' +
+    '<line x1="0" y1="6" x2="880" y2="6" style="stroke:var(--grid)"/><line x1="0" y1="88" x2="880" y2="88" style="stroke:var(--grid)"/><line x1="0" y1="170" x2="880" y2="170" style="stroke:var(--grid)"/><line x1="0" y1="252" x2="880" y2="252" style="stroke:var(--hair)"/>' +
+    '<path d="' + g.area + '" fill="url(#bhEq)"/><path d="' + g.path + '" fill="none" style="stroke:var(--pos)" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg></div></div>' +
     '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink55);padding:6px 0 0 66px">' + [...new Set(axis)].map((a) => "<span>" + esc(a) + "</span>").join("") + "</div></div>";
 }
 function eqHover(e) {
@@ -636,7 +662,7 @@ function gradeCardHtml(m) {
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column"><h5>Grade vs P&amp;L</h5><div class="muted" style="font-size:11px;margin-bottom:14px">Realized P&amp;L by the grade you gave the trade</div>' +
     '<div style="position:relative;flex:1;min-height:120px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:end">' +
     g.buckets.map((b) => '<div data-act="gradeOpen" data-arg=\'' + attr({ grade: b.grade }) + "' title=\"" + esc(b.n === 0 ? "No trades" : b.n === 1 ? "Open this trade" : "Show these " + b.n + " trades") + '" style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px;height:100%;border-radius:4px;cursor:pointer" class="bar-col">' +
-      '<span class="tab" style="font-size:11px;text-align:center;color:' + (b.n === 0 ? "rgba(233,233,237,.45)" : color(b.pnl)) + '">' + (b.n ? shortMoney(b.pnl) : "—") + "</span>" +
+      '<span class="tab" style="font-size:11px;text-align:center;color:' + (b.n === 0 ? "rgba(var(--ink-rgb),.45)" : color(b.pnl)) + '">' + (b.n ? shortMoney(b.pnl) : "—") + "</span>" +
       '<div style="height:' + (b.n === 0 ? 0 : Math.max(3, Math.abs(b.pnl) / peak * 100).toFixed(1)) + "%;background:" + color(b.pnl) + ';border-radius:3px 3px 0 0"></div></div>').join("") + "</div>" +
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6px;font-size:10px;color:var(--ink55);text-align:center">' + g.buckets.map((b) => "<span>" + b.grade + " · " + b.n + "</span>").join("") + "</div></div>";
 }
@@ -654,7 +680,7 @@ function queueCardHtml(m) {
   return '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline"><h5>Review queue</h5></div><div class="muted" style="font-size:11px;margin-bottom:12px">Closed trades with no grade or thesis</div>' +
     '<div class="scroll" style="flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding-right:2px">' +
     (q.length ? q.map((r) => '<div class="queue-row" data-act="selectTrade" data-arg=\'' + attr({ id: r.id }) + "'><div style=\"min-width:0\"><div style=\"font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px\">" + esc(r.symbol) + '</div><div class="muted" style="font-size:11px">' + esc(r.date) + " · " + esc(r.missing) + '</div></div><span class="tab" style="margin-left:auto;font-size:12px;color:' + color(r.pnl) + '">' + money(r.pnl) + "</span></div>").join("")
-      : '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;padding:8px 0"><svg width="20" height="20" viewBox="0 0 256 256" fill="#6fd39b"><path d="M232.5 82.5l-128 128a12 12 0 0 1-17 0l-56-56a12 12 0 0 1 17-17L96 185l119.5-119.5a12 12 0 0 1 17 17Z"/></svg><div style="font-size:13px">Nothing left to review</div><div class="dim" style="font-size:11px">Every closed trade has a grade and a thesis</div></div>') +
+      : '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;padding:8px 0"><svg width="20" height="20" viewBox="0 0 256 256" style="fill:var(--pos)"><path d="M232.5 82.5l-128 128a12 12 0 0 1-17 0l-56-56a12 12 0 0 1 17-17L96 185l119.5-119.5a12 12 0 0 1 17 17Z"/></svg><div style="font-size:13px">Nothing left to review</div><div class="dim" style="font-size:11px">Every closed trade has a grade and a thesis</div></div>') +
     "</div></div>";
 }
 function dashboardHtml(m) {
@@ -696,7 +722,7 @@ function tradesTableHtml(m) {
       '<td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center;padding:7px 24px">' + esc(t.currency) + "</td>" +
       '<td style="text-align:right;font-weight:500;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</td><td style="text-align:right;color:' + color(t.pnl) + '">' + pct(t.pnlPct) + "</td>" +
       '<td style="text-align:right" class="dim">' + hold(t.holdDays) + '</td><td style="white-space:nowrap;max-width:64px;padding-left:22px">' + gradeChip(t) + "</td>" +
-      '<td style="font-variant-numeric:normal">' + (t.tags && t.tags.length ? '<span class="tagchip" title="' + esc(t.tags[0]) + '">' + esc(t.tags[0]) + "</span>" + (t.tags.length > 1 ? '<span class="muted" style="font-size:10.5px;margin-left:4px">+' + (t.tags.length - 1) + "</span>" : "") : '<span style="color:rgba(233,233,237,.5)">—</span>') + "</td></tr>").join("") +
+      '<td style="font-variant-numeric:normal">' + (t.tags && t.tags.length ? '<span class="tagchip" title="' + esc(t.tags[0]) + '">' + esc(t.tags[0]) + "</span>" + (t.tags.length > 1 ? '<span class="muted" style="font-size:10.5px;margin-left:4px">+' + (t.tags.length - 1) + "</span>" : "") : '<span style="color:rgba(var(--ink-rgb),.5)">—</span>') + "</td></tr>").join("") +
     "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No trades match these filters. <a href="#" data-act="clearAll">Reset all</a></div>') + "</div></div>";
 }
 function tradeChart(t) {
@@ -734,7 +760,7 @@ function tradeChart(t) {
     ticks: [0, 1, 2, 3].map((i) => hi - padY * 0.6 - (hi - lo - padY * 1.2) * (i / 3)).map((v) => ({ y: +Y(v).toFixed(1), top: (Y(v) / H * 100).toFixed(2) + "%", label: "$" + v.toFixed(dp) })),
     marks: anchors.map((a, i) => ({
       x: +(X(a.t) + anchors.filter((b, j) => j < i && b.t === a.t && b.p === a.p).length * NUDGE).toFixed(1), y: +Y(a.p).toFixed(1),
-      fill: a.buy ? "#9184d9" : "#232532", stroke: a.buy ? "#232532" : "#e9e9ed",
+      fill: a.buy ? "var(--accent)" : "var(--surface)", stroke: a.buy ? "var(--surface)" : "var(--ink)",
       title: a.raw.side + " " + qty(Math.abs(a.raw.qty)) + " @ " + px(a.raw.price) + " · " + a.raw.date,
     })),
     from: anchors[0].raw.date, to: anchors[anchors.length - 1].raw.date,
@@ -754,9 +780,9 @@ function tradeDetailHtml(t, m) {
     (flagsLine.length ? '<div class="muted" style="font-size:11px;margin-top:4px">' + flagsLine.map(esc).join(" · ") + "</div>" : "") + "</div>" +
     '<div style="margin-left:auto;text-align:right"><div class="tab" style="font-size:24px;font-weight:500;line-height:1.1;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</div><div class="tab" style="font-size:12px;color:' + color(t.pnl) + ';margin-top:2px">' + pct(t.pnlPct) + "</div></div></div>" +
     (c ? '<div class="tab"><div style="position:relative"><svg viewBox="0 0 1200 300" style="display:block;width:100%;height:auto">' +
-      c.ticks.map((k) => '<line x1="54" y1="' + k.y + '" x2="1180" y2="' + k.y + '" stroke="rgba(233,233,237,.09)"/>').join("") +
-      '<path d="' + c.path + '" fill="none" stroke="rgba(233,233,237,.42)" stroke-width="1.5" stroke-linejoin="round"/>' +
-      c.marks.map((k) => '<circle cx="' + k.x + '" cy="' + k.y + '" r="6" fill="' + k.fill + '" stroke="' + k.stroke + '" stroke-width="2"><title>' + esc(k.title) + "</title></circle>").join("") + "</svg>" +
+      c.ticks.map((k) => '<line x1="54" y1="' + k.y + '" x2="1180" y2="' + k.y + '" style="stroke:var(--grid)"/>').join("") +
+      '<path d="' + c.path + '" fill="none" style="stroke:rgba(var(--ink-rgb),.42)" stroke-width="1.5" stroke-linejoin="round"/>' +
+      c.marks.map((k) => '<circle cx="' + k.x + '" cy="' + k.y + '" r="6" style="fill:' + k.fill + ';stroke:' + k.stroke + '" stroke-width="2"><title>' + esc(k.title) + "</title></circle>").join("") + "</svg>" +
       c.ticks.map((k) => '<span style="position:absolute;right:' + c.labelRight + ";top:" + k.top + ';transform:translateY(-50%);font-size:10px;line-height:1;color:var(--ink60)">' + k.label + "</span>").join("") + "</div>" +
       '<div style="display:flex;justify-content:space-between;padding-left:' + c.plotLeft + ";padding-right:" + c.plotRight + ';margin-top:4px;font-size:10px;color:var(--ink60)"><span>' + esc(c.from) + '</span><span>' + esc(c.to) + "</span></div></div>" : "") + "</div>" +
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch;height:372px">' +
@@ -764,7 +790,7 @@ function tradeDetailHtml(t, m) {
     fact("Open", esc(t.entryDate)) + fact("Close", esc(t.exitDate)) + fact("Entry", px(t.entry)) + fact("Exit", px(t.exit)) + fact("Qty", qty(t.qty)) + fact("Hold", hold(t.holdDays)) + fact("Account", esc(t.account)) + "</div>" +
     '<div style="display:flex;align-items:baseline;gap:8px;margin:14px 0 6px"><span class="lbl">Executions (' + execs.length + ')</span></div>' +
     '<div class="scroll" style="flex:1;min-height:0"><table class="table" style="font-size:12.5px;width:100%"><thead><tr>' + th("execs", ecols) + "</tr></thead><tbody>" +
-    execs.map((e) => '<tr class="tab"><td style="padding-left:0;color:var(--ink75);white-space:nowrap">' + esc(e.date) + ' <span class="dim">' + esc(e.time) + '</span></td><td style="padding-inline:6px;font-size:11.5px;letter-spacing:.03em;color:var(--ink60)">' + esc(e.sub || e.side) + '</td><td style="text-align:right;padding-inline:6px">' + qty(e.qty) + '</td><td class="dim" style="text-align:center;padding:7px 18px;font-variant-numeric:normal">' + esc(e.currency) + '</td><td style="text-align:right;padding-inline:6px;color:var(--ink75)">' + px(e.price) + '</td><td style="text-align:right;padding-right:0;color:rgba(233,233,237,.85)">' + money(e.amount, e.currency) + "</td></tr>").join("") +
+    execs.map((e) => '<tr class="tab"><td style="padding-left:0;color:var(--ink75);white-space:nowrap">' + esc(e.date) + ' <span class="dim">' + esc(e.time) + '</span></td><td style="padding-inline:6px;font-size:11.5px;letter-spacing:.03em;color:var(--ink60)">' + esc(e.sub || e.side) + '</td><td style="text-align:right;padding-inline:6px">' + qty(e.qty) + '</td><td class="dim" style="text-align:center;padding:7px 18px;font-variant-numeric:normal">' + esc(e.currency) + '</td><td style="text-align:right;padding-inline:6px;color:var(--ink75)">' + px(e.price) + '</td><td style="text-align:right;padding-right:0;color:rgba(var(--ink-rgb),.85)">' + money(e.amount, e.currency) + "</td></tr>").join("") +
     "</tbody></table></div></div>" +
     '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div class="lbl" style="margin:0 0 6px">Thesis / notes</div>' +
     '<textarea class="input" id="thesis" data-id="' + esc(t.id) + '" placeholder="Why did you take this trade?" style="flex:1;min-height:96px;height:auto;font-size:13px">' + esc(t.thesis || "") + "</textarea>" +
@@ -772,7 +798,7 @@ function tradeDetailHtml(t, m) {
     ["A", "B", "C", "F"].map((g) => '<label class="seg-opt' + (t.grade === g ? " on" : "") + '" data-act="grade" data-arg=\'' + attr({ id: t.id, grade: g }) + "' title=\"" + (t.grade === g ? "Click again to clear the grade" : "Grade " + g) + '">' + g + "</label>").join("") + "</div></div></div>" +
     '<div style="margin-top:14px;position:relative"><div class="lbl" style="margin-bottom:6px">Tags</div>' +
     '<div class="input" data-act="focusTag" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px;height:auto;padding:6px 8px;cursor:text">' +
-    (t.tags || []).map((tg) => '<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:3px 5px 3px 9px;border-radius:6px;background:var(--accent-900);color:var(--accent-300)">' + esc(tg) + '<button data-act="removeTag" data-arg=\'' + attr({ id: t.id, tag: tg }) + "' aria-label=\"Remove tag\" style=\"display:grid;place-items:center;width:15px;height:15px;padding:0;border:0;border-radius:4px;background:rgba(233,233,237,.1);color:var(--accent-300);cursor:pointer;font-size:11px;line-height:1\">×</button></span>").join("") +
+    (t.tags || []).map((tg) => '<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:3px 5px 3px 9px;border-radius:6px;background:var(--accent-900);color:var(--accent-300)">' + esc(tg) + '<button data-act="removeTag" data-arg=\'' + attr({ id: t.id, tag: tg }) + "' aria-label=\"Remove tag\" style=\"display:grid;place-items:center;width:15px;height:15px;padding:0;border:0;border-radius:4px;background:rgba(var(--ink-rgb),.1);color:var(--accent-300);cursor:pointer;font-size:11px;line-height:1\">×</button></span>").join("") +
     '<input id="tagInput" data-id="' + esc(t.id) + '" value="' + esc(state.tagDraft) + '" placeholder="' + ((t.tags || []).length ? "Add another…" : "Add a tag…") + '" aria-label="Add tag" style="flex:1;min-width:90px;border:0;background:transparent;font:400 12.5px Inter,system-ui;color:var(--ink);outline:none" autocomplete="off"></div>' +
     '<div id="tagMenu"></div>' +
 
@@ -788,7 +814,7 @@ function tagMenuHtml() {
   if (!known.length) return "";
   const hi = Math.min(state.tagHi || 0, known.length - 1);
   return '<div style="position:absolute;left:0;right:0;bottom:100%;margin-bottom:4px;z-index:5;border-radius:8px;background:var(--n900);box-shadow:var(--shadow-md);padding:5px;display:flex;flex-direction:column;gap:1px">' +
-    known.map((tg, i) => '<button data-act="addTag" data-arg=\'' + attr({ id: t.id, tag: tg }) + "' data-mousedown=\"1\" style=\"display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer;border:0;font:400 12.5px Inter,system-ui;padding:6px 8px;border-radius:6px;background:" + (i === hi ? "rgba(145,132,217,.18)" : "transparent") + ";color:" + (i === hi ? "#d2cefd" : "rgba(233,233,237,.85)") + '">' + esc(tg) + '<span class="muted" style="margin-left:auto;font-size:10px">' + (i === hi ? "Tab ↵" : "") + "</span></button>").join("") + "</div>";
+    known.map((tg, i) => '<button data-act="addTag" data-arg=\'' + attr({ id: t.id, tag: tg }) + "' data-mousedown=\"1\" style=\"display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer;border:0;font:400 12.5px Inter,system-ui;padding:6px 8px;border-radius:6px;background:" + (i === hi ? "rgba(145,132,217,.18)" : "transparent") + ";color:" + (i === hi ? "var(--accent-300)" : "rgba(var(--ink-rgb),.85)") + '">' + esc(tg) + '<span class="muted" style="margin-left:auto;font-size:10px">' + (i === hi ? "Tab ↵" : "") + "</span></button>").join("") + "</div>";
 }
 function tagMatches() {
   const t = state.sel ? tradeById(state.sel) : null;
@@ -819,9 +845,9 @@ function positionsHtml(m) {
       '<td title="' + esc(r.symbol) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
       '<td style="text-align:right">' + qty(r.qty) + '</td><td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right" title="' + (r.priceSource === "quote" ? "Quote from TMX Money" : "Last fill in your history; no quote available") + '">' + px(r.last) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center;padding:7px 24px">' + esc(r.currency) + '</td><td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
       '<td style="text-align:right;white-space:nowrap;font-weight:500;color:' + color(r.unreal) + '">' + signedMoney(r.unreal, r.currency) + " (" + pct(r.unrealPct, 2) + ")</td>" +
-      '<td style="text-align:right" class="dim">' + hold(r.held) + '</td><td style="text-align:right;color:rgba(233,233,237,.85)">' + pctPlain(r.alloc) + "</td></tr>").join("") +
+      '<td style="text-align:right" class="dim">' + hold(r.held) + '</td><td style="text-align:right;color:rgba(var(--ink-rgb),.85)">' + pctPlain(r.alloc) + "</td></tr>").join("") +
     "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No open positions match these filters.</div>') + "</div></div>" +
-    (p ? positionPanelHtml(p) : '<div style="width:360px;flex:none;padding:22px 18px;border-radius:8px;box-shadow:inset 0 0 0 1px rgba(233,233,237,.09);font-size:12px;color:var(--ink55);line-height:1.6">Select a position to see its lots and running note.</div>') +
+    (p ? positionPanelHtml(p) : '<div style="width:360px;flex:none;padding:22px 18px;border-radius:8px;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.09);font-size:12px;color:var(--ink55);line-height:1.6">Select a position to see its lots and running note.</div>') +
     "</div></div>";
 }
 function positionPanelHtml(p) {
@@ -829,7 +855,7 @@ function positionPanelHtml(p) {
   return '<div class="card elev-md" style="width:360px;flex:none;padding:16px 18px;display:flex;flex-direction:column;min-height:0;max-height:660px"><div style="display:flex;align-items:flex-start;gap:10px"><div style="min-width:0"><h4 style="font-size:19px">' + esc(p.symbol) + '</h4><div class="muted" style="font-size:11px">' + esc(p.name || "") + (p.exchange ? " · " + esc(p.exchange) : "") + "</div></div>" +
     '<button class="btn btn-icon btn-secondary" data-act="clearPos" aria-label="Close panel" style="margin-left:auto;width:28px;height:28px;font-size:15px;line-height:1">×</button></div>' +
     '<div style="display:flex;align-items:baseline;gap:10px;margin:14px 0 12px"><span class="tab" style="font-size:28px;font-weight:500;color:' + color(p.unreal) + '">' + signedMoney(p.unreal, p.currency) + '</span><span class="tab" style="font-size:13px;color:' + color(p.unreal) + '">' + pct(p.unrealPct) + "</span></div>" +
-    '<div class="rule-t rule-b" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:12px 0;background:linear-gradient(to right,transparent,rgba(233,233,237,.14) 20px,rgba(233,233,237,.14) calc(100% - 20px),transparent) no-repeat top/100% 1px,linear-gradient(to right,transparent,rgba(233,233,237,.14) 20px,rgba(233,233,237,.14) calc(100% - 20px),transparent) no-repeat bottom/100% 1px">' +
+    '<div class="rule-t rule-b" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:12px 0;background:linear-gradient(to right,transparent,rgba(var(--ink-rgb),.14) 20px,rgba(var(--ink-rgb),.14) calc(100% - 20px),transparent) no-repeat top/100% 1px,linear-gradient(to right,transparent,rgba(var(--ink-rgb),.14) 20px,rgba(var(--ink-rgb),.14) calc(100% - 20px),transparent) no-repeat bottom/100% 1px">' +
     fact("Qty", qty(p.qty) + (p.wsQty != null && Math.abs(p.wsQty - p.qty) > 1e-6 ? ' <span class="muted" title="Wealthsimple reports a different balance">WS ' + qty(p.wsQty) + "</span>" : "")) + fact("Hold", hold(p.held)) + fact("Avg cost", px(p.avg)) + fact("Price", px(p.last)) +
     fact("Book value", money0(p.cost, p.currency)) + fact("Market value", money0(p.mv, p.currency)) + fact("FX", esc(p.currency)) + fact("Allocation", pctPlain(p.alloc)) + "</div>" +
     '<div class="scroll" style="flex:1;min-height:0;max-height:300px;margin-top:14px"><table class="table" style="font-size:12px;width:100%"><thead><tr><th style="padding-left:0;position:sticky;top:0;z-index:1">Date</th><th style="text-align:right;position:sticky;top:0;z-index:1">Qty</th><th style="text-align:right;position:sticky;top:0;z-index:1">Price</th><th style="text-align:right;padding-right:0;position:sticky;top:0;z-index:1">Amount</th></tr></thead><tbody>' +
@@ -1062,6 +1088,7 @@ function act(name, arg, ev) {
     case "disconnect": disconnect(); break;
     case "exportCsv": state.menuOpen = false; render(); exportCsv(); break;
     case "openData": openData(); break;
+    case "theme": applyTheme(arg.theme); render(); break;
     case "closeData": state.dataOpen = false; render(); break;
     case "clearData": clearData(); break;
     case "grade": { const t = tradeById(arg.id); if (!t) break; saveJournal(arg.id, { grade: t.grade === arg.grade ? "" : arg.grade }); render(); break; }
@@ -1169,6 +1196,7 @@ function bind() {
   setInterval(() => { if (!state.status.syncing) renderHeaderOnly(); }, 60000);
 }
 function boot() {
+  try { applyTheme(localStorage.getItem("bh2.theme") || "nocturne"); } catch (e) {}
   try { const s = JSON.parse(localStorage.getItem("bh2.sort") || "null"); if (s) Object.keys(state.sort).forEach((k) => { if (s[k] && s[k].key) state.sort[k] = s[k]; }); } catch (e) {}
   const h = hashState();
   state.page = h.page;
