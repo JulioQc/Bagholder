@@ -896,14 +896,16 @@ function tfPillsHtml(available, active) {
   if (!available.length) return "";
   return TIMEFRAMES.map((x) => '<button class="pill' + (x[0] === active ? " on" : "") + '"' + (available.indexOf(x[0]) < 0 ? " disabled" : "") + ' data-act="chartTf" data-arg=\'' + attr({ tf: x[0] }) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + x[1] + "</button>").join("");
 }
+function localTime(ts) { return ts - new Date(ts * 1000).getTimezoneOffset() * 60; }
 function fillMarkers(fills, bars, c, step) {
   // a fill sits on the bar that contains it: by date on daily and coarser bars,
   // by bucket on intraday ones
   const keys = bars.map((b) => (b.date != null ? b.date : b.time));
-  const keyOf = (f) => (bars.length && bars[0].date != null ? f.date : Math.floor(Date.parse(f.when) / 1000 / (step || 1)) * (step || 1));
+  const keyOf = (f) => (bars.length && bars[0].date != null ? f.date : Math.round(Date.parse(f.when) / 1000));
   const onBar = (k) => { let best = null; for (const x of keys) { if (x <= k) best = x; else break; } return best != null ? best : (keys.length ? keys[0] : k); };
+  const shown = (t) => (typeof t === "number" ? localTime(t) : t);
   return fills.map((f) => ({
-    time: bars.length ? onBar(keyOf(f)) : Math.round(Date.parse(f.when) / 1000),
+    time: shown(bars.length ? onBar(keyOf(f)) : Math.round(Date.parse(f.when) / 1000)),
     position: f.side === "BUY" ? "belowBar" : "aboveBar",
     shape: f.side === "BUY" ? "arrowUp" : "arrowDown",
     color: f.side === "BUY" ? c.up : c.down,
@@ -939,7 +941,7 @@ function mountTradeChart() {
       layout: { background: { type: "solid", color: "transparent" }, textColor: c.text, fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: false },
       grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
       rightPriceScale: { borderColor: c.grid },
-      timeScale: { borderColor: c.grid, timeVisible: step > 0, secondsVisible: false },
+      timeScale: { borderColor: c.grid, timeVisible: step > 0 || !bars.length, secondsVisible: false },
       crosshair: { mode: LW.CrosshairMode.Normal },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
@@ -949,12 +951,12 @@ function mountTradeChart() {
     let series;
     if (candles) {
       series = chart.addSeries(LW.CandlestickSeries, { upColor: c.up, downColor: c.down, borderUpColor: c.up, borderDownColor: c.down, wickUpColor: c.up, wickDownColor: c.down, priceLineVisible: false, lastValueVisible: false });
-      series.setData(bars.map((b) => ({ time: b.date != null ? b.date : b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
+      series.setData(bars.map((b) => ({ time: b.date != null ? b.date : localTime(b.time), open: b.open, high: b.high, low: b.low, close: b.close })));
     } else if (bars.length) {
       series = chart.addSeries(LW.LineSeries, { color: c.line, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      series.setData(bars.map((b) => ({ time: b.date != null ? b.date : b.time, value: b.close })));
+      series.setData(bars.map((b) => ({ time: b.date != null ? b.date : localTime(b.time), value: b.close })));
     } else {
-      const pts = fills.map((f) => ({ time: Math.round(Date.parse(f.when) / 1000), value: f.price }));
+      const pts = fills.map((f) => ({ time: localTime(Math.round(Date.parse(f.when) / 1000)), value: f.price }));
       for (let i = 1; i < pts.length; i++) if (pts[i].time <= pts[i - 1].time) pts[i].time = pts[i - 1].time + 1;
       series = chart.addSeries(LW.LineSeries, { color: c.line, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
       series.setData(pts);

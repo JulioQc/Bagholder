@@ -1288,6 +1288,64 @@ class MarketParseTest(unittest.TestCase):
         self.assertEqual(market.available_timeframes(coin, "2026-01-01", now), ["1d", "1w", "1M"], "hourly reaches back 89 days only")
         self.assertEqual(market.available_timeframes(opt, "2026-08-01", now), [])
 
+    def test_tmx_minutes_become_session_aligned_hourly_and_four_hour_bars(self):
+        from datetime import datetime, timezone
+        def row(hhmm, o, h, l, c, v=1, day="2025-11-10", off="-05:00"):
+            return {"dateTime": "%sT%s:00%s" % (day, hhmm, off), "open": o, "high": h, "low": l, "close": c, "volume": v}
+        data = {"data": {"intraday": [
+            row("09:30", 10, 11, 9, 10.5), row("09:31", 10.5, 12, 10, 11), row("10:29", 11, 11.5, 10.8, 11.2),
+            row("10:30", 11.2, 11.3, 11.1, 11.25), row("13:29", 11.25, 11.4, 11.0, 11.3),
+            row("13:30", 11.3, 11.6, 11.2, 11.5), row("15:59", 11.5, 11.7, 11.4, 11.6),
+            row("09:30", 20, 21, 19, 20.5, day="2025-11-11"),
+        ]}}
+        minutes = market.parse_tmx_minutes(data)
+        self.assertEqual(len(minutes), 8)
+        self.assertEqual(minutes[0]["minute"], 9 * 60 + 30)
+        self.assertEqual(minutes[0]["time"], int(datetime(2025, 11, 10, 14, 30, tzinfo=timezone.utc).timestamp()), "09:30 Eastern is 14:30 UTC")
+        hourly = market.aggregate_session(minutes, 60)
+        # 9:30-10:29, 10:30-11:29, 13:30-14:29 (13:29 falls in the 12:30 bar), 15:30-15:59, then the next day
+        starts = [datetime.fromtimestamp(b["time"], tz=timezone.utc).strftime("%m-%d %H:%M") for b in hourly]
+        self.assertEqual(starts, ["11-10 14:30", "11-10 15:30", "11-10 17:30", "11-10 18:30", "11-10 20:30", "11-11 14:30"])
+        first = hourly[0]
+        self.assertEqual((first["open"], first["high"], first["low"], first["close"], first["volume"]), (10, 12, 9, 11.2, 3))
+        four = market.aggregate_session(minutes, 240)
+        starts4 = [datetime.fromtimestamp(b["time"], tz=timezone.utc).strftime("%m-%d %H:%M") for b in four]
+        self.assertEqual(starts4, ["11-10 14:30", "11-10 18:30", "11-11 14:30"], "9:30-13:29 and 13:30-16:00")
+        self.assertEqual((four[0]["open"], four[0]["high"], four[0]["low"], four[0]["close"]), (10, 12, 9, 11.3))
+        self.assertEqual((four[1]["open"], four[1]["close"]), (11.3, 11.6))
+
+    def test_intraday_available_for_tmx_listings_within_a_year(self):
+        from datetime import datetime, timezone
+        now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+        tsla = {"symbol": "TSLA", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}
+        self.assertEqual(market.available_timeframes(tsla, "2025-11-01", now), ["1h", "4h", "1d", "1w", "1M"])
+        self.assertEqual(market.available_timeframes(tsla, "2025-08-01", now), ["1d", "1w", "1M"])
+        hbix = {"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD", "kind": "Shares"}
+        self.assertEqual(market.available_timeframes(hbix, "2026-08-01", now), ["1d", "1w", "1M"], "Cboe Canada has no intraday feed")
+
+    def test_intraday_bars_are_cached_per_timeframe(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                rec = {"symbol": "TSLA", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}
+                t0 = int(datetime(2025, 11, 10, 14, 30, tzinfo=timezone.utc).timestamp())
+                by_tf = {"1h": [{"time": t0, "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 3}, {"time": t0 + 3600, "open": 1.5, "high": 2, "low": 1, "close": 1.8, "volume": 4}],
+                         "4h": [{"time": t0, "open": 1, "high": 2, "low": 0.5, "close": 1.8, "volume": 7}]}
+                now = datetime(2025, 12, 1, 12, 0, tzinfo=timezone.utc)
+                with mock.patch.object(market, "fetch_intraday", return_value=(by_tf, "tmx")) as f:
+                    h = market.ensure_intraday(rec, "1h", "2025-11-01", "2025-11-20", now=now)
+                self.assertEqual([b["close"] for b in h], [1.5, 1.8])
+                self.assertEqual(h[0]["open"], 1)
+                with mock.patch.object(market, "fetch_intraday", return_value=(by_tf, "tmx")) as f:
+                    four = market.ensure_intraday(rec, "4h", "2025-11-01", "2025-11-20", now=now)
+                self.assertEqual(f.call_count, 0, "one minute fetch fills both timeframes")
+                self.assertEqual([b["close"] for b in four], [1.8])
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_history_is_cached_and_closed_days_never_rewritten(self):
         from datetime import datetime, timedelta, timezone
         with tempfile.TemporaryDirectory() as tmp:

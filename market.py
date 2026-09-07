@@ -52,6 +52,12 @@ COINGECKO_SEARCH_URL = "https://api.coingecko.com/api/v3/search?query=%s"
 COINGECKO_RANGE_URL = "https://api.coingecko.com/api/v3/coins/%s/market_chart/range?vs_currency=%s&from=%d&to=%d&interval=daily"
 COINGECKO_MAX_DAYS = 365
 COINGECKO_HOURLY_DAYS = 89
+TMX_CHART_QUERY = (
+    "query getCompanyChart($symbol: String!, $from: String!, $to: String!) "
+    "{ intraday: getChartDataBySymbol(symbol: $symbol, fromDate: $from, toDate: $to) { dateTime open high low close volume } }"
+)
+TMX_INTRADAY_DAYS = 365
+SESSION_OPEN_MINUTES = 9 * 60 + 30
 COINGECKO_HOURLY_URL = "https://api.coingecko.com/api/v3/coins/%s/market_chart/range?vs_currency=%s&from=%d&to=%d"
 TIMEFRAMES = ("1h", "4h", "1d", "1w", "1M")
 INTRADAY_SECONDS = {"1h": 3600, "4h": 14400}
@@ -742,6 +748,68 @@ def aggregate_daily(bars, tf):
     return out
 
 
+def parse_tmx_minutes(data):
+    """One-minute bars from TMX's chart feed: [{time, open, high, low, close, volume, minute}],
+    where `minute` is the exchange-local minute of day, oldest first."""
+    rows = ((data or {}).get("data") or {}).get("intraday") or []
+    out = []
+    for r in rows:
+        if not isinstance(r, dict) or not r.get("dateTime"):
+            continue
+        try:
+            dt = datetime.fromisoformat(str(r["dateTime"]))
+        except ValueError:
+            continue
+        close = _num(r.get("close"), None)
+        if not close or close <= 0:
+            continue
+        out.append({"time": int(dt.timestamp()), "day": dt.date().isoformat(), "minute": dt.hour * 60 + dt.minute, "offset": int((dt.utcoffset() or timedelta(0)).total_seconds()),
+                    "open": _num(r.get("open"), None), "high": _num(r.get("high"), None), "low": _num(r.get("low"), None), "close": close, "volume": _num(r.get("volume"), None)})
+    out.sort(key=lambda b: b["time"])
+    return out
+
+
+def aggregate_session(minutes, bucket_minutes):
+    """Bars of `bucket_minutes` aligned to the session open (9:30 exchange time),
+    from one-minute bars: open, high, low, close and volume are the bucket's first,
+    max, min, last and sum. The bar's time is the bucket's start."""
+    out = {}
+    for m in minutes:
+        rel = m["minute"] - SESSION_OPEN_MINUTES
+        if rel < 0:
+            rel = 0
+        idx = rel // bucket_minutes
+        start_minute = SESSION_OPEN_MINUTES + idx * bucket_minutes
+        key = (m["day"], idx)
+        if key not in out:
+            day = datetime.strptime(m["day"], "%Y-%m-%d")
+            start = int((day + timedelta(minutes=start_minute)).replace(tzinfo=timezone.utc).timestamp()) - m["offset"]
+            out[key] = {"time": start, "open": m["open"] if m["open"] is not None else m["close"], "high": m["high"] if m["high"] is not None else m["close"], "low": m["low"] if m["low"] is not None else m["close"], "close": m["close"], "volume": m["volume"] or 0}
+            continue
+        b = out[key]
+        b["close"] = m["close"]
+        if m["high"] is not None:
+            b["high"] = max(b["high"], m["high"])
+        if m["low"] is not None:
+            b["low"] = min(b["low"], m["low"])
+        b["volume"] = (b["volume"] or 0) + (m["volume"] or 0)
+    return [out[k] for k in sorted(out, key=lambda k: out[k]["time"])]
+
+
+def fetch_tmx_minutes(key, start, end, ssl_context=None):
+    """One-minute bars over [start, end], fetched a month at a time."""
+    out = []
+    cur = datetime.strptime(str(start)[:10], "%Y-%m-%d").date()
+    last = datetime.strptime(str(end)[:10], "%Y-%m-%d").date()
+    while cur <= last:
+        nxt = (cur.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        chunk_end = min(nxt, last)
+        data = _post_json(TMX_URL, {"operationName": "getCompanyChart", "variables": {"symbol": key, "from": cur.isoformat(), "to": chunk_end.isoformat()}, "query": TMX_CHART_QUERY}, ssl_context, _TMX_HEADERS)
+        out.extend(parse_tmx_minutes(data))
+        cur = chunk_end + timedelta(days=1)
+    return out
+
+
 def aggregate_hourly(bars, seconds):
     """Closes on a coarser intraday grid, each bucket taking its last hourly close."""
     out = {}
@@ -754,10 +822,12 @@ def aggregate_hourly(bars, seconds):
 def intraday_reach(rec, now=None):
     """Earliest date intraday bars exist for, or '' when the source has none."""
     src = history_source(rec)
-    if not src or src[0] != "coingecko":
-        return ""
     now = now or datetime.now(timezone.utc)
-    return (now.date() - timedelta(days=COINGECKO_HOURLY_DAYS)).isoformat()
+    if src and src[0] == "coingecko":
+        return (now.date() - timedelta(days=COINGECKO_HOURLY_DAYS)).isoformat()
+    if src and src[0] == "tmx":
+        return (now.date() - timedelta(days=TMX_INTRADAY_DAYS)).isoformat()
+    return ""
 
 
 def available_timeframes(rec, start, now=None):
@@ -771,32 +841,44 @@ def available_timeframes(rec, start, now=None):
     return out + ["1d", "1w", "1M"]
 
 
-def fetch_hourly(rec, start_ts, end_ts, ssl_context=None):
+def fetch_intraday(rec, start_ts, end_ts, ssl_context=None):
+    """{tf: bars} for the intraday timeframes a source provides over [start_ts, end_ts].
+    TMX: one-minute bars aggregated to session-aligned 1h and 4h. CoinGecko: hourly
+    closes, 4h taken from them on a four-hour grid."""
     src = history_source(rec)
-    if not src or src[0] != "coingecko":
-        return [], ""
-    sym, ccy = src[1].split("-", 1)
-    cid = coingecko_id(sym, ssl_context)
-    if not cid:
-        return [], ""
+    if not src:
+        return {}, ""
+    source, key = src
     try:
-        return parse_coingecko_hourly(_get_text(COINGECKO_HOURLY_URL % (cid, ccy.lower(), int(start_ts), int(end_ts)), ssl_context)), "coingecko"
+        if source == "tmx":
+            start = datetime.fromtimestamp(start_ts, tz=timezone.utc).date().isoformat()
+            end = datetime.fromtimestamp(end_ts, tz=timezone.utc).date().isoformat()
+            minutes = fetch_tmx_minutes(key, start, end, ssl_context)
+            return {"1h": aggregate_session(minutes, 60), "4h": aggregate_session(minutes, 240)}, source
+        if source == "coingecko":
+            sym, ccy = key.split("-", 1)
+            cid = coingecko_id(sym, ssl_context)
+            if not cid:
+                return {}, ""
+            hourly = parse_coingecko_hourly(_get_text(COINGECKO_HOURLY_URL % (cid, ccy.lower(), int(start_ts), int(end_ts)), ssl_context))
+            return {"1h": hourly, "4h": aggregate_hourly(hourly, 14400)}, source
     except Exception:
-        return [], ""
+        return {}, ""
+    return {}, ""
 
 
-def ensure_hourly(rec, start, end, ssl_context=None, now=None):
-    """Stored hourly closes for [start, end], fetched when never fetched for that span
-    or stale while the span reaches the present."""
+def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None):
+    """Stored bars of an intraday timeframe for [start, end], fetched when the span
+    was never fetched or the copy is stale while the span reaches the present."""
     now = now or datetime.now(timezone.utc)
     sym = tmx_symbol(rec.get("symbol"))
     reach = intraday_reach(rec, now)
-    if not sym or not reach:
+    if not sym or not reach or tf not in INTRADAY_SECONDS:
         return []
     start_day = max(str(start)[:10], reach)
     start_ts = int(datetime.strptime(start_day, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
     end_ts = min(int(datetime.strptime(str(end)[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()) + 86400, int(now.timestamp()))
-    last = store.bar_fetch(sym, "1h")
+    last = store.bar_fetch(sym, tf)
     covered = bool(last) and last["startTs"] <= start_ts
     fresh = False
     if last:
@@ -807,19 +889,19 @@ def ensure_hourly(rec, start, end, ssl_context=None, now=None):
     needs_recent = end_ts >= int(now.timestamp()) - 3 * 86400
     if not covered or (needs_recent and not fresh):
         fetch_from = start_ts if not covered else min(start_ts, last["startTs"])
-        bars, source = fetch_hourly(rec, fetch_from, int(now.timestamp()), ssl_context)
-        if bars:
-            store.upsert_price_bars(sym, "1h", bars, source)
-            store.mark_bars_fetched(sym, "1h", fetch_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return store.price_bars(sym, "1h", start_ts, end_ts)
+        by_tf, source = fetch_intraday(rec, fetch_from, int(now.timestamp()), ssl_context)
+        for k, bars in by_tf.items():
+            if bars:
+                store.upsert_price_bars(sym, k, bars, source)
+                store.mark_bars_fetched(sym, k, fetch_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return store.price_bars(sym, tf, start_ts, end_ts)
 
 
 def ensure_bars(rec, tf, start, end, ssl_context=None, now=None):
-    """Bars for one timeframe over a span. Daily from the daily store, weekly and
-    monthly aggregated from it, hourly from the intraday store, 4h aggregated from hourly."""
+    """Bars for one timeframe over a span: daily from the daily store, weekly and
+    monthly aggregated from it, 1h and 4h from the intraday store."""
     if tf in INTRADAY_SECONDS:
-        hourly = ensure_hourly(rec, start, end, ssl_context, now)
-        return hourly if tf == "1h" else aggregate_hourly(hourly, INTRADAY_SECONDS[tf])
+        return ensure_intraday(rec, tf, start, end, ssl_context, now)
     daily = ensure_history(rec, start, end, ssl_context, now)
     return daily if tf == "1d" else aggregate_daily(daily, tf)
 

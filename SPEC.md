@@ -160,10 +160,12 @@ Trade detail: symbol, name and exchange; P&L and P&L % in the trade's currency; 
 
 | Instrument | History source | Timeframes | Reach |
 |---|---|---|---|
-| Shares and ETFs on TSX, TSX-V, CSE and US exchanges | TMX Money daily series | 1D, 1W, 1M | Full listing history |
+| Shares and ETFs on TSX, TSX-V, CSE and US exchanges | TMX Money: daily series, and one-minute bars aggregated into session-aligned 1H and 4H (9:30 start, 13:30 split) | 1H and 4H for trades within the past year; 1D, 1W, 1M | Daily: full listing history. Minute: the past year |
 | Cboe Canada listings | Cboe Canada's own feed | 1D, 1W, 1M | About the last three months |
 | Crypto | CoinGecko, in the position's currency | 1H and 4H for trades within the past 89 days; 1D, 1W, 1M | The past year |
 | Options | None | Executions only | |
+
+Intraday bars and execution times are shown in the viewer's local time.
 
 The TradingView credit the library's licence requires is the "Charts by TradingView" line at the foot of the menu, not a logo on the chart.
 

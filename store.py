@@ -224,7 +224,11 @@ def _init_schema(conn):
             symbol TEXT NOT NULL,
             tf TEXT NOT NULL,
             ts INTEGER NOT NULL,
+            open REAL,
+            high REAL,
+            low REAL,
             close REAL NOT NULL,
+            volume REAL,
             source TEXT NOT NULL DEFAULT '',
             PRIMARY KEY (symbol, tf, ts)
         );
@@ -239,6 +243,7 @@ def _init_schema(conn):
         """
     )
     _migrate_nav_history(conn)
+    _ensure_bar_columns(conn)
     _ensure_activity_security_id(conn)
     _migrate_spy_meta(conn)
     _ensure_quote_columns(conn)
@@ -1534,15 +1539,27 @@ def mark_history_fetched(symbol, start, when):
             conn.close()
 
 
+def _ensure_bar_columns(conn):
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(price_bars)").fetchall()}
+    if cols and "open" not in cols:
+        conn.execute("DROP TABLE price_bars")
+        conn.execute("DELETE FROM bar_fetches")
+        conn.execute(
+            "CREATE TABLE price_bars (symbol TEXT NOT NULL, tf TEXT NOT NULL, ts INTEGER NOT NULL, open REAL, high REAL, low REAL, "
+            "close REAL NOT NULL, volume REAL, source TEXT NOT NULL DEFAULT '', PRIMARY KEY (symbol, tf, ts))"
+        )
+        conn.commit()
+
+
 def price_bars(symbol, tf, start_ts=0, end_ts=2 ** 40):
-    """Intraday closes for one symbol and timeframe, oldest first: [{time, close}]."""
+    """Intraday bars for one symbol and timeframe, oldest first: [{time, open, high, low, close, volume}]."""
     sym = _s(symbol).strip().upper()
     with _lock:
         conn = _connect()
         try:
             _init_schema(conn)
-            rows = conn.execute("SELECT ts, close FROM price_bars WHERE symbol = ? AND tf = ? AND ts >= ? AND ts <= ? ORDER BY ts", (sym, _s(tf), int(start_ts), int(end_ts))).fetchall()
-            return [{"time": r["ts"], "close": r["close"]} for r in rows]
+            rows = conn.execute("SELECT ts, open, high, low, close, volume FROM price_bars WHERE symbol = ? AND tf = ? AND ts >= ? AND ts <= ? ORDER BY ts", (sym, _s(tf), int(start_ts), int(end_ts))).fetchall()
+            return [{"time": r["ts"], "open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"]} for r in rows]
         finally:
             conn.close()
 
@@ -1550,7 +1567,12 @@ def price_bars(symbol, tf, start_ts=0, end_ts=2 ** 40):
 def upsert_price_bars(symbol, tf, bars, source=""):
     """Closed bars are written once; the newest stored bar may be replaced."""
     sym = _s(symbol).strip().upper()
-    clean = [(sym, _s(tf), int(b["time"]), float(b["close"]), _s(source)) for b in bars or [] if b.get("time") is not None and _num(b.get("close"), None) and _num(b.get("close"), None) > 0]
+    clean = []
+    for b in bars or []:
+        close = _num(b.get("close"), None)
+        if b.get("time") is None or not close or close <= 0:
+            continue
+        clean.append((sym, _s(tf), int(b["time"]), _num(b.get("open"), None), _num(b.get("high"), None), _num(b.get("low"), None), close, _num(b.get("volume"), None), _s(source)))
     if not sym or not clean:
         return 0
     with _lock:
@@ -1558,9 +1580,12 @@ def upsert_price_bars(symbol, tf, bars, source=""):
         try:
             _init_schema(conn)
             newest = conn.execute("SELECT MAX(ts) FROM price_bars WHERE symbol = ? AND tf = ?", (sym, _s(tf))).fetchone()[0]
-            conn.executemany("INSERT OR IGNORE INTO price_bars(symbol, tf, ts, close, source) VALUES (?, ?, ?, ?, ?)", clean)
+            conn.executemany("INSERT OR IGNORE INTO price_bars(symbol, tf, ts, open, high, low, close, volume, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", clean)
             if newest is not None:
-                conn.executemany("UPDATE price_bars SET close = ?, source = ? WHERE symbol = ? AND tf = ? AND ts = ?", [(c[3], c[4], c[0], c[1], c[2]) for c in clean if c[2] == newest])
+                conn.executemany(
+                    "UPDATE price_bars SET open = ?, high = ?, low = ?, close = ?, volume = ?, source = ? WHERE symbol = ? AND tf = ? AND ts = ?",
+                    [(c[3], c[4], c[5], c[6], c[7], c[8], c[0], c[1], c[2]) for c in clean if c[2] == newest],
+                )
             conn.commit()
             return len(clean)
         finally:
