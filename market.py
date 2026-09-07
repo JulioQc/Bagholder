@@ -867,9 +867,12 @@ def fetch_intraday(rec, start_ts, end_ts, ssl_context=None):
     return {}, ""
 
 
-def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None):
-    """Stored bars of an intraday timeframe for [start, end], fetched when the span
-    was never fetched or the copy is stale while the span reaches the present."""
+def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None, max_age_hours=1):
+    """Stored bars of an intraday timeframe for [start, end]. Fetched from `start`
+    when that span was never fetched; topped up from the last stored bar when the
+    span reaches the present and the copy is older than `max_age_hours`. Bars once
+    stored are kept for good, so a trade keeps its intraday chart as it ages past
+    the source's reach."""
     now = now or datetime.now(timezone.utc)
     sym = tmx_symbol(rec.get("symbol"))
     reach = intraday_reach(rec, now)
@@ -883,18 +886,56 @@ def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None):
     fresh = False
     if last:
         try:
-            fresh = now - datetime.fromisoformat(last["fetchedAt"].replace("Z", "+00:00")) < timedelta(hours=1)
+            fresh = now - datetime.fromisoformat(last["fetchedAt"].replace("Z", "+00:00")) < timedelta(hours=max_age_hours)
         except ValueError:
             fresh = False
     needs_recent = end_ts >= int(now.timestamp()) - 3 * 86400
-    if not covered or (needs_recent and not fresh):
-        fetch_from = start_ts if not covered else min(start_ts, last["startTs"])
+    fetch_from = None
+    if not covered:
+        fetch_from = start_ts
+    elif needs_recent and not fresh:
+        stored = store.price_bars(sym, tf, 0, 2 ** 40)
+        fetch_from = max(start_ts, (stored[-1]["time"] if stored else start_ts) - 2 * 86400)
+    if fetch_from is not None:
         by_tf, source = fetch_intraday(rec, fetch_from, int(now.timestamp()), ssl_context)
         for k, bars in by_tf.items():
             if bars:
                 store.upsert_price_bars(sym, k, bars, source)
-                store.mark_bars_fetched(sym, k, fetch_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+                store.mark_bars_fetched(sym, k, min(fetch_from, last["startTs"]) if last else fetch_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
     return store.price_bars(sym, tf, start_ts, end_ts)
+
+
+ARCHIVE_BATCH = 8
+ARCHIVE_TOPUP_HOURS = 20
+
+
+def archive_intraday(recs, ssl_context=None, now=None, limit=ARCHIVE_BATCH):
+    """Keep the intraday bars of recently traded or held instruments for good.
+    Each call handles at most `limit` instruments: those never fetched first, then
+    those whose copy is older than ARCHIVE_TOPUP_HOURS. Returns the symbols worked."""
+    now = now or datetime.now(timezone.utc)
+    todo = []
+    for rec in recs or []:
+        sym = tmx_symbol(rec.get("symbol"))
+        if not sym or not intraday_reach(rec, now):
+            continue
+        last = store.bar_fetch(sym, "1h")
+        age = None
+        if last:
+            try:
+                age = now - datetime.fromisoformat(last["fetchedAt"].replace("Z", "+00:00"))
+            except ValueError:
+                age = None
+        if last is None:
+            todo.append((0, sym, rec))
+        elif age is None or age > timedelta(hours=ARCHIVE_TOPUP_HOURS):
+            todo.append((1, sym, rec))
+    todo.sort(key=lambda x: (x[0], x[1]))
+    done = []
+    for _, sym, rec in todo[:limit]:
+        ensure_intraday(rec, "1h", rec.get("start") or now.date().isoformat(), now.date().isoformat(), ssl_context, now, max_age_hours=ARCHIVE_TOPUP_HOURS)
+        done.append(sym)
+    return done
 
 
 def ensure_bars(rec, tf, start, end, ssl_context=None, now=None):

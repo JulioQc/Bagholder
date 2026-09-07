@@ -167,6 +167,8 @@ Trade detail: symbol, name and exchange; P&L and P&L % in the trade's currency; 
 
 Intraday bars and execution times are shown in the viewer's local time.
 
+**Intraday archive.** The sources keep intraday bars for a limited time, so the app keeps its own. A background sweep, every five minutes, fetches the hourly and four-hour bars of every instrument traded or held in the past year, a few instruments per pass, and tops each one up once a day from its last stored bar. Bars once stored are never dropped, so a trade keeps its intraday chart however old it gets. The only trades without intraday bars are those already older than the source's reach when the app first saw them.
+
 The TradingView credit the library's licence requires is the "Charts by TradingView" line at the foot of the menu, not a logo on the chart.
 
 Bars are cached in the database. Closed days are written once and never rewritten; the newest day may be replaced. A span reaching the present is refetched once its copy is 20 hours old.

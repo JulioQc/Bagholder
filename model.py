@@ -2562,6 +2562,25 @@ def held_symbols(base=None):
     return out
 
 
+def intraday_archive_symbols(base=None, since=None):
+    """Instruments whose intraday bars are worth keeping: every symbol traded or
+    held since `since` (a date), with the earliest date bars are wanted from."""
+    base = base or base_model()
+    since = _s(since)[:10] or shift_date(base["today"], -365)
+    out = {}
+    def want(rec, start):
+        key = rec["symbol"]
+        cur = out.get(key)
+        if cur is None or start < cur["start"]:
+            out[key] = dict(rec, start=start)
+    for t in base["trades"]:
+        if t["exitDate"] >= since:
+            want({"symbol": t["symbol"], "exchange": t["exchange"], "currency": t["currency"], "kind": t["kind"]}, max(t["entryDate"], since))
+    for p in base["positions"]:
+        want({"symbol": p["symbol"], "exchange": p["exchange"], "currency": p["currency"], "kind": p["kind"]}, max(_s(p.get("opened")) or since, since))
+    return [out[k] for k in sorted(out)]
+
+
 def payer_symbols(base=None):
     """Held positions that have paid a distribution: what the public
     distribution feed is refreshed for."""

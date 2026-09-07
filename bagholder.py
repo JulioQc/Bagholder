@@ -3067,6 +3067,22 @@ def refresh_periodic_market():
         return {"fx": 0, "benchmark": 0, "distributions": 0, "skipped": True}
 
 
+def archive_intraday_bars():
+    """Keep intraday bars for everything traded or held in the past year, a few
+    instruments per call so the sources are never hammered. Never raises."""
+    try:
+        return market.archive_intraday(model.intraday_archive_symbols(), _ssl_context())
+    except Exception:
+        return []
+
+
+def archive_loop():
+    """Sweeps the archive every few minutes until every instrument is kept, then
+    tops up once a day per instrument."""
+    while not _stop.wait(5 * 60):
+        archive_intraday_bars()
+
+
 def quote_loop():
     """Prices, every QUOTE_REFRESH_MINUTES."""
     while not _stop.wait(60 * market.QUOTE_REFRESH_MINUTES):
@@ -3502,6 +3518,7 @@ def main():
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
+    threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()
     url = "http://127.0.0.1:%s" % port
     print("Bagholder  %s" % url, flush=True)

@@ -1346,6 +1346,46 @@ class MarketParseTest(unittest.TestCase):
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
+    def test_intraday_archive_covers_recent_trades_and_holdings(self):
+        acts = [
+            buy("b1", "OLD", 10, 5, "2024-01-05", accountType="TFSA"), sell("s1", "OLD", 10, 6, "2024-02-05", accountType="TFSA"),
+            buy("b2", "NEW", 10, 5, "2026-03-01", accountType="TFSA"), sell("s2", "NEW", 10, 6, "2026-04-01", accountType="TFSA"),
+            buy("b3", "NEW", 10, 5, "2026-06-01", accountType="TFSA"), sell("s3", "NEW", 10, 6, "2026-07-01", accountType="TFSA"),
+            buy("b4", "HELD", 10, 5, "2025-05-01", accountType="TFSA"),
+        ]
+        snapshot = {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-09-07")
+        recs = model.intraday_archive_symbols(base)
+        by = {r["symbol"]: r for r in recs}
+        self.assertNotIn("OLD", by, "closed long before the window")
+        self.assertEqual(by["NEW"]["start"], "2026-03-01", "earliest entry within the window")
+        self.assertEqual(by["HELD"]["start"], "2025-09-07", "an old holding is wanted from the window start")
+
+    def test_archive_sweep_is_paced_and_tops_up_incrementally(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+                recs = [{"symbol": s, "exchange": "TSX", "currency": "CAD", "kind": "Shares", "start": "2026-06-01"} for s in ("AAA", "BBB", "CCC")]
+                recs.append({"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options", "start": "2026-06-01"})
+                t0 = int(datetime(2026, 8, 3, 13, 30, tzinfo=timezone.utc).timestamp())
+                bars = {"1h": [{"time": t0, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}], "4h": [{"time": t0, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]}
+                with mock.patch.object(market, "fetch_intraday", return_value=(bars, "tmx")) as f:
+                    self.assertEqual(market.archive_intraday(recs, now=now, limit=2), ["AAA", "BBB"])
+                    self.assertEqual(f.call_count, 2)
+                    self.assertEqual(market.archive_intraday(recs, now=now, limit=2), ["CCC"], "never-fetched first, options skipped")
+                    self.assertEqual(market.archive_intraday(recs, now=now + timedelta(hours=2), limit=2), [], "fresh copies are left alone")
+                # A day later each instrument is topped up from its last stored bar, not refetched from the start.
+                with mock.patch.object(market, "fetch_intraday", return_value=(bars, "tmx")) as f:
+                    self.assertEqual(market.archive_intraday(recs, now=now + timedelta(hours=25), limit=8), ["AAA", "BBB", "CCC"])
+                    self.assertEqual(f.call_args.args[1], t0 - 2 * 86400)
+                self.assertEqual(store.bar_fetch("AAA", "1h")["startTs"], int(datetime(2026, 6, 1, tzinfo=timezone.utc).timestamp()), "the archived span still starts where it began")
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_history_is_cached_and_closed_days_never_rewritten(self):
         from datetime import datetime, timedelta, timezone
         with tempfile.TemporaryDirectory() as tmp:
