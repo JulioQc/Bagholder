@@ -382,9 +382,9 @@ let _pollTimer = 0;
 function pollStatus() {
   clearTimeout(_pollTimer);
   api("GET", "/api/status").then((st) => {
-    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable]);
+    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version]);
     applyStatus(st);
-    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable]);
+    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version]);
     if (before !== after) renderHeaderOnly();
     const fast = state.status.syncing || state.status.capturing || state.busy;
     _pollTimer = setTimeout(pollStatus, fast ? 2500 : 30000);
@@ -427,7 +427,7 @@ function syncLine() {
 function headerHtml() {
   const m = state.model;
   return '<div id="hdr" style="display:flex;align-items:center;gap:22px;padding:12px 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
-    '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span></div>' +
+    '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span>' + (state.status.version ? '<span class="muted" style="font-size:11px;margin-left:8px">v' + esc(state.status.version) + "</span>" : "") + "</div>" +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
     '<span style="font-size:12px;color:var(--ink55)">' + (state.status.updateAvailable ? '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="color:var(--accent-300);text-decoration:none;margin-right:12px">Update available</a>' : "") + syncLine() + (state.notice ? ' <span class="status-err">· ' + esc(state.notice) + "</span>" : "") + "</span>" +
     '<div style="position:relative" data-pop="filter">' +
@@ -470,7 +470,6 @@ function menuHtml() {
     '<div class="sep"></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px 4px"><span class="lbl" style="margin-right:auto">Theme</span>' +
     THEMES.map((t) => '<button class="pill' + (state.theme === t[0] ? " on" : "") + '" data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "' style=\"padding:3px 9px;font-size:11.5px;width:auto\">" + t[1] + "</button>").join("") + "</div>" +
     (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
-    '<div class="sep"></div><div style="font-size:10.5px;padding:4px 9px 2px;color:var(--ink55)">Bagholder ' + esc(state.status.version ? "v" + state.status.version : "") + "</div>" +
     "</div>";
 }
 function dataDialogHtml() {

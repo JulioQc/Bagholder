@@ -59,7 +59,7 @@ Per-trade figures are in the trade's currency. Anything that adds trades togethe
 
 ## Versions
 
-Releases on GitHub are the versions, tagged `vMAJOR.MINOR.PATCH`. The menu shows the version you are running, and once a day the app checks for a newer release and shows an **Update available** link in the header when there is one. To update, pull or download the release and restart.
+Releases on GitHub are the versions, tagged `vMAJOR.MINOR.PATCH`. The header shows the version you are running, and once a day the app checks for a newer release and shows an **Update available** link in the header when there is one. To update, pull or download the release and restart.
 
 ## Data
 
