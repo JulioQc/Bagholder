@@ -1695,7 +1695,7 @@ def dividend_symbols():
             conn.close()
 
 
-BENCHMARK_SYMBOLS = ("SP500", "TSX")
+BENCHMARK_SYMBOLS = ("SP500", "TSX", "TSX60")
 
 
 def market_data():

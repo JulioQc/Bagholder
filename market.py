@@ -222,24 +222,30 @@ def refresh_benchmark(ssl_context=None):
     return store.upsert_benchmark_prices(mapping)
 
 
-BENCHMARKS = {"SP500": "S&P 500", "TSX": "S&P/TSX"}
-TSX_SYMBOL = "^TSX"
+BENCHMARKS = {"SP500": "S&P 500", "TSX": "S&P/TSX", "TSX60": "TSX 60"}
+# Stored benchmark key -> TMX Money index symbol.
+TMX_INDICES = {"TSX": "^TSX", "TSX60": "^TX60"}
+TSX_SYMBOL = TMX_INDICES["TSX"]
 TSX_START = "2016-01-01"
 
 
-def refresh_tsx(ssl_context=None):
-    """S&P/TSX Composite closes from TMX Money's daily series, appended from a week
-    before the newest stored day."""
-    last = store.benchmark_last_date("TSX")
+def refresh_tmx_index(key, ssl_context=None):
+    """One TMX index's daily closes, appended from a week before the newest stored day."""
+    last = store.benchmark_last_date(key)
     start = (date.fromisoformat(last) - timedelta(days=7)).isoformat() if last else TSX_START
     try:
-        data = _post_json(TMX_URL, {"operationName": "getTimeSeriesData", "variables": {"symbol": TSX_SYMBOL, "freq": "day", "interval": 1, "start": start, "end": date.today().isoformat()}, "query": TMX_HISTORY_QUERY}, ssl_context, _TMX_HEADERS)
+        data = _post_json(TMX_URL, {"operationName": "getTimeSeriesData", "variables": {"symbol": TMX_INDICES[key], "freq": "day", "interval": 1, "start": start, "end": date.today().isoformat()}, "query": TMX_HISTORY_QUERY}, ssl_context, _TMX_HEADERS)
     except Exception:
         return 0
     mapping = {b["date"]: b["close"] for b in parse_tmx_history(data) if b.get("close")}
     if not mapping:
         return 0
-    return store.upsert_benchmark_prices(mapping, symbol="TSX")
+    return store.upsert_benchmark_prices(mapping, symbol=key)
+
+
+def refresh_tsx(ssl_context=None):
+    """The S&P/TSX Composite and the S&P/TSX 60 from TMX Money."""
+    return sum(refresh_tmx_index(key, ssl_context) for key in TMX_INDICES)
 
 
 def _post_json(url, payload, ssl_context=None, headers=None):
@@ -574,12 +580,24 @@ def refresh_distributions(symbols=None, ssl_context=None, force=False, now=None)
     return done
 
 
+def benchmark_stale(today=None):
+    """True when any index the page can show has no closes, or none within
+    STALE_DAYS: a newly added index is fetched on the next check, not on the
+    six-hour clock."""
+    today = today or _today()
+    limit = (today - timedelta(days=STALE_DAYS)).isoformat()
+    for sym in store.BENCHMARK_SYMBOLS:
+        last = store.benchmark_last_date(sym)
+        if not last or last < limit:
+            return True
+    return False
+
+
 def is_stale(today=None, symbols=None):
     today = today or _today()
     limit = (today - timedelta(days=STALE_DAYS)).isoformat()
     fx = store.fx_last_date()
-    bench = store.benchmark_last_date()
-    if (not fx or fx < limit) or (not bench or bench < limit):
+    if (not fx or fx < limit) or benchmark_stale(today):
         return True
     return bool(stale_symbols(symbols or []))
 
@@ -1112,7 +1130,7 @@ def refresh_periodic(ssl_context=None, symbols=None, now=None):
             age = now - datetime.fromisoformat(last.replace("Z", "+00:00")) if last else None
         except ValueError:
             age = None
-        if age is None or age > timedelta(hours=MARKET_ATTEMPT_HOURS) or fx_day_published_but_missing(now):
+        if age is None or age > timedelta(hours=MARKET_ATTEMPT_HOURS) or fx_day_published_but_missing(now) or benchmark_stale(now.date()):
             store.set_meta("market_attempt_at", now.strftime("%Y-%m-%dT%H:%M:%SZ"))
             out["fx"] = refresh_fx(ssl_context)
             out["benchmark"] = refresh_benchmark(ssl_context) + refresh_tsx(ssl_context)
