@@ -1314,6 +1314,17 @@ class MarketParseTest(unittest.TestCase):
         self.assertEqual((four[0]["open"], four[0]["high"], four[0]["low"], four[0]["close"]), (10, 12, 9, 11.3))
         self.assertEqual((four[1]["open"], four[1]["close"]), (11.3, 11.6))
 
+    def test_option_trades_are_charted_on_their_underlying(self):
+        from datetime import datetime, timezone
+        opt = {"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}
+        inst = market.chart_instrument(opt)
+        self.assertEqual(inst, {"symbol": "QNC", "exchange": "NYSE", "currency": "USD", "kind": "Shares"})
+        self.assertEqual(market.history_source(inst), ("tmx", "QNC:US"))
+        now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(market.available_timeframes(inst, "2026-06-01", now), ["1h", "4h", "1d", "1w", "1M"])
+        share = {"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}
+        self.assertEqual(market.chart_instrument(share), share)
+
     def test_intraday_available_for_tmx_listings_within_a_year(self):
         from datetime import datetime, timezone
         now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
@@ -1360,6 +1371,13 @@ class MarketParseTest(unittest.TestCase):
         self.assertNotIn("OLD", by, "closed long before the window")
         self.assertEqual(by["NEW"]["start"], "2026-03-01", "earliest entry within the window")
         self.assertEqual(by["HELD"]["start"], "2025-09-07", "an old holding is wanted from the window start")
+        opt_acts = acts + [
+            act(id="o1", category="trade", activityType="BUY", rawType="OPTIONS_BUY", quantity=2, unitPrice=0.10, netCashAmount=-20, transactionDate="2026-05-05", symbol="LUNR 15JAN27 10.00 CALL", currency="USD", accountType="TFSA", securityId="sec-o-1"),
+        ]
+        base = model.build_base(dict(snapshot, activities=opt_acts), {"fx": {}, "benchmark": {}}, {}, today="2026-09-07")
+        by = {r["symbol"]: r for r in model.intraday_archive_symbols(base)}
+        self.assertIn("LUNR", by, "an option position is archived as its underlying")
+        self.assertEqual((by["LUNR"]["kind"], by["LUNR"]["start"]), ("Shares", "2026-05-05"))
 
     def test_archive_sweep_is_paced_and_tops_up_incrementally(self):
         from datetime import datetime, timedelta, timezone

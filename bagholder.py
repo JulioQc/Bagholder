@@ -3134,13 +3134,14 @@ def history_payload(query):
     tf = one("tf") or "1d"
     if not rec["symbol"] or len(start) != 10 or len(end) != 10 or tf not in market.TIMEFRAMES:
         return {"ok": False, "error": "symbol, from, to and a known tf are required"}
-    src = market.history_source(rec)
-    available = market.available_timeframes(rec, start)
+    inst = market.chart_instrument(rec)
+    src = market.history_source(inst)
+    available = market.available_timeframes(inst, start)
     try:
-        bars = market.ensure_bars(rec, tf, start, end, _ssl_context()) if (src and tf in available) else []
+        bars = market.ensure_bars(inst, tf, start, end, _ssl_context()) if (src and tf in available) else []
     except Exception:
         bars = []
-    return {"ok": True, "symbol": rec["symbol"], "source": src[0] if src else "", "tf": tf, "available": available, "bars": bars}
+    return {"ok": True, "symbol": rec["symbol"], "chartSymbol": inst["symbol"], "source": src[0] if src else "", "tf": tf, "available": available, "bars": bars}
 
 
 def _model_filters(query):

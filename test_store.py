@@ -102,8 +102,9 @@ class StoreTest(unittest.TestCase):
             weekly = bagholder.history_payload("symbol=RDDY&exchange=TSX&currency=CAD&kind=Shares&from=2026-08-25&to=2026-09-05&tf=1w")
         self.assertEqual([b["date"] for b in weekly["bars"]], ["2026-08-31"])
         self.assertFalse(bagholder.history_payload("symbol=RDDY&exchange=TSX&currency=CAD&kind=Shares&from=2026-08-25&to=2026-09-05&tf=2h")["ok"])
-        out = bagholder.history_payload("symbol=QNC%2020NOV26%203.00%20CALL&exchange=NYSE&currency=USD&kind=Options&from=2026-06-01&to=2026-09-05")
-        self.assertEqual((out["ok"], out["source"], out["bars"]), (True, "", []))
+        with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")):
+            out = bagholder.history_payload("symbol=QNC%2020NOV26%203.00%20CALL&exchange=NYSE&currency=USD&kind=Options&from=2026-06-01&to=2026-09-05")
+        self.assertEqual((out["ok"], out["source"], out["chartSymbol"], [b["close"] for b in out["bars"]]), (True, "tmx", "QNC", [4.75]), "an option is charted on its underlying")
 
     def test_options_sell_maps_as_sell_to_open(self):
         item = _ws_item(

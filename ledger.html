@@ -89,8 +89,7 @@ textarea.input{resize:none;line-height:1.5}
 .pill{cursor:pointer;border:0;font:400 11.5px Inter,system-ui,sans-serif;padding:4px 0;border-radius:6px;background:rgba(var(--ink-rgb),.06);color:rgba(var(--ink-rgb),.7);font-variant-numeric:tabular-nums}
 .pill:hover{background:rgba(var(--ink-rgb),.18)}
 .pill.on{background:var(--accent-900);color:var(--accent-300)}
-.pill:disabled{cursor:default;background:transparent;color:rgba(var(--ink-rgb),.28);text-decoration:line-through}
-.pill:disabled:hover{background:transparent}
+
 .menu{position:absolute;top:42px;right:0;z-index:5;width:max-content;min-width:170px;background:var(--surface);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:1px;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
 .menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;border:0;cursor:pointer;color:rgba(var(--ink-rgb),.85);font:400 13px Inter,system-ui,sans-serif;padding:7px 9px;border-radius:6px}
 .menu button:hover{background:rgba(var(--ink-rgb),.08)}
@@ -897,11 +896,13 @@ function loadHistory(t, tf) {
   if (_histCache[key]) return Promise.resolve(_histCache[key]);
   const sp = chartSpan(t);
   const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to + "&tf=" + tf;
-  return api("GET", "/api/history?" + q).then((r) => { const out = { bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [] }; _histCache[key] = out; return out; });
+  return api("GET", "/api/history?" + q).then((r) => { const out = { bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [], chartSymbol: (r && r.ok && r.chartSymbol) || t.symbol }; _histCache[key] = out; return out; });
 }
-function tfPillsHtml(available, active) {
+function tfPillsHtml(available, active, chartSymbol, tradeSymbol) {
   if (!available.length) return "";
-  return TIMEFRAMES.map((x) => '<button class="pill' + (x[0] === active ? " on" : "") + '"' + (available.indexOf(x[0]) < 0 ? " disabled" : "") + ' data-act="chartTf" data-arg=\'' + attr({ tf: x[0] }) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + x[1] + "</button>").join("");
+  // an option trade is charted on its underlying: say so
+  const basis = chartSymbol && chartSymbol !== tradeSymbol ? '<span class="lbl" style="margin-right:auto;align-self:center">' + esc(chartSymbol) + "</span>" : "";
+  return basis + TIMEFRAMES.filter((x) => available.indexOf(x[0]) >= 0).map((x) => '<button class="pill' + (x[0] === active ? " on" : "") + '" data-act="chartTf" data-arg=\'' + attr({ tf: x[0] }) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + x[1] + "</button>").join("");
 }
 function localTime(ts) { return ts - new Date(ts * 1000).getTimezoneOffset() * 60; }
 function fillMarkers(fills, bars, c, step) {
@@ -935,7 +936,7 @@ function mountTradeChart() {
     const tf = available.indexOf(wanted) >= 0 ? wanted : (available.indexOf("1d") >= 0 ? "1d" : "");
     if (tf && tf !== wanted) { loadHistory(t, tf).then(() => { if (state.sel === t.id) { _chart = null; mountTradeChartWith(t, tf); } }); return; }
     const pills = document.getElementById("chartTf");
-    if (pills) pills.innerHTML = tfPillsHtml(available, tf);
+    if (pills) pills.innerHTML = tfPillsHtml(available, tf, h.chartSymbol, t.symbol);
     const bars = tf ? h.bars : [];
     const step = { "1h": 3600, "4h": 14400 }[tf] || 0;
     // With real bars every execution is marked on its day, a zero-price fill

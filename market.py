@@ -645,6 +645,17 @@ def coingecko_id(symbol, ssl_context=None):
     return hits[0]["id"]
 
 
+def chart_instrument(rec):
+    """What the trade chart draws for an instrument: the instrument itself, or for an
+    option contract its underlying stock, since no source keeps contract history."""
+    if str(rec.get("kind") or "") == "Options":
+        from model import underlying_symbol
+        under = underlying_symbol(rec.get("symbol"))
+        if under and under != "—":
+            return {"symbol": under, "exchange": rec.get("exchange") or "", "currency": rec.get("currency") or "USD", "kind": "Shares"}
+    return dict(rec)
+
+
 def history_source(rec):
     """(source, key) for daily bars, or None when nothing public covers the instrument."""
     src = quote_source(rec)

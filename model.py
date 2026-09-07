@@ -2573,11 +2573,18 @@ def intraday_archive_symbols(base=None, since=None):
         cur = out.get(key)
         if cur is None or start < cur["start"]:
             out[key] = dict(rec, start=start)
+    def charted(rec):
+        # an option trade is charted on its underlying, so that is what gets kept
+        if rec["kind"] == "Options":
+            under = underlying_symbol(rec["symbol"])
+            if under and under != "—":
+                return {"symbol": under, "exchange": rec["exchange"], "currency": rec["currency"], "kind": "Shares"}
+        return rec
     for t in base["trades"]:
         if t["exitDate"] >= since:
-            want({"symbol": t["symbol"], "exchange": t["exchange"], "currency": t["currency"], "kind": t["kind"]}, max(t["entryDate"], since))
+            want(charted({"symbol": t["symbol"], "exchange": t["exchange"], "currency": t["currency"], "kind": t["kind"]}), max(t["entryDate"], since))
     for p in base["positions"]:
-        want({"symbol": p["symbol"], "exchange": p["exchange"], "currency": p["currency"], "kind": p["kind"]}, max(_s(p.get("opened")) or since, since))
+        want(charted({"symbol": p["symbol"], "exchange": p["exchange"], "currency": p["currency"], "kind": p["kind"]}), max(_s(p.get("opened")) or since, since))
     return [out[k] for k in sorted(out)]
 
 
