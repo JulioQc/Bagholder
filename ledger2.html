@@ -575,6 +575,9 @@ function monthlyCardHtml(m) {
   if (posMax > 0) { ticks.push([0, posMax]); ticks.push([posH / 2, posMax / 2]); }
   ticks.push([posH, 0]);
   if (negMax > 0) ticks.push([100, -negMax]);
+  const want = Math.min(6, ms.length);
+  const axis = [];
+  for (let i = 0; i < want; i++) axis.push(ms[Math.round(i * (ms.length - 1) / Math.max(1, want - 1))].label);
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column"><div style="display:flex;align-items:baseline;gap:12px"><h5>Monthly P&amp;L</h5></div>' +
     '<div style="display:flex;gap:10px;flex:1;min-height:150px;margin-top:12px"><div style="position:relative;width:56px;flex:none;font-size:10px;color:var(--ink55)" class="tab">' +
     ticks.map((t) => '<span style="position:absolute;left:0;top:' + t[0].toFixed(1) + '%;transform:translateY(-50%)">' + (t[1] === 0 ? "$0" : (t[1] > 0 ? "+" : "−") + "$" + Math.round(Math.abs(t[1])).toLocaleString("en-US")) + "</span>").join("") + "</div>" +
@@ -589,7 +592,7 @@ function monthlyCardHtml(m) {
           : '<div style="position:absolute;left:0;right:0;top:' + posH.toFixed(1) + "%;height:" + h.toFixed(2) + '%;background:var(--neg);border-radius:0 0 2px 2px"></div>') + "</div>";
     }).join("") : '<div class="muted empty" style="flex:1;font-size:12px">No closed trades in this range.</div>') +
     "</div></div>" +
-    '<div style="display:flex;gap:5px;font-size:10px;line-height:1.25;color:var(--ink55);padding-left:66px;margin-top:6px;text-align:center">' + ms.map((b) => '<span style="flex:1;min-width:0;overflow:hidden">' + esc(MON[+b.key.slice(5, 7) - 1]) + "<br>'" + esc(b.key.slice(2, 4)) + "</span>").join("") + "</div></div>";
+    '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink55);padding-left:66px;margin-top:6px">' + [...new Set(axis)].map((a) => "<span>" + esc(a) + "</span>").join("") + "</div></div>";
 }
 function moHover(e) {
   const m = state.model; if (!m) return;
