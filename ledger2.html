@@ -144,6 +144,7 @@ const state = {
   },
   menuOpen: false,
   picker: null,
+  valueQuery: "",
   tagDraft: "",
   tagHi: 0,
   status: { connected: false, syncing: false, capturing: false, lastSync: "", error: "", syncStep: "", email: "", activityCount: 0 },
@@ -449,6 +450,16 @@ function tabsHtml() {
 // ---------------------------------------------------------------------------
 // filter popover
 // ---------------------------------------------------------------------------
+function popValuesHtml(active) {
+  const f = state.filters;
+  const opts = ((state.model && state.model.options && state.model.options[active.opt]) || []).slice();
+  if (active.key === "tag") opts.push("untagged");
+  const q = (state.valueQuery || "").trim().toUpperCase();
+  const shown = q ? opts.filter((v) => String(v).toUpperCase().indexOf(q) >= 0) : opts;
+  if (!opts.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">Nothing to choose from yet.</div>';
+  if (!shown.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">No match.</div>';
+  return shown.map((v) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + esc(v) + "</button>").join("");
+}
 function filterPopHtml() {
   const f = state.filters;
   const active = state.picker && state.picker !== "fields" ? FIELDS.find((x) => x.key === state.picker) : null;
@@ -468,10 +479,8 @@ function filterPopHtml() {
     body = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><button data-act="openFields" aria-label="Back" style="cursor:pointer;border:0;background:transparent;color:var(--ink60);font:400 13px Inter,system-ui;padding:2px 5px;border-radius:5px">←</button><span class="lbl">' + esc(active.label) + '</span><span style="margin-left:auto;font-size:11px;color:var(--ink55)">' + esc(summary) + "</span>" +
       (hasValue ? '<button data-act="clearField" data-arg=\'' + attr({ key: active.key }) + "' style=\"cursor:pointer;border:0;background:transparent;color:var(--accent);font:400 11px Inter,system-ui;padding:2px 6px;border-radius:5px\">Clear</button>" : "") + "</div>";
     if (active.kind === "list") {
-      const opts = ((state.model && state.model.options && state.model.options[active.opt]) || []).slice();
-      if (active.key === "tag") opts.push("untagged");
-      body += '<div class="scroll" style="max-height:260px;display:flex;flex-direction:column;gap:1px">' +
-        (opts.length ? opts.map((v) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + esc(v) + "</button>").join("") : '<div class="muted" style="padding:6px 7px;font-size:12px">Nothing to choose from yet.</div>') + "</div>";
+      body += (active.search ? '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;margin-bottom:6px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(233,233,237,.1)"><input id="valueQuery" value="' + esc(state.valueQuery || "") + '" placeholder="Search" aria-label="Search values" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px Inter,system-ui;color:var(--ink)"></div>' : "") +
+        '<div id="popValues" class="scroll" style="max-height:260px;display:flex;flex-direction:column;gap:1px">' + popValuesHtml(active) + "</div>";
     } else if (active.kind === "date") {
       const yearsAvail = ((state.model && state.model.options && state.model.options.years) || []).slice(0, 8);
       body += '<div style="display:flex;gap:4px;margin-bottom:8px">' + PRESETS.map((p) => '<button class="pill' + (!f.years.length && !f.from && !f.to && f.preset === p[0] ? " on" : "") + '" style="flex:1" data-act="preset" data-arg=\'' + attr({ preset: p[0] }) + "'>" + p[1] + "</button>").join("") + "</div>" +
@@ -1035,13 +1044,13 @@ function act(name, arg, ev) {
     case "clearPos": state.posSel = null; render(); break;
     case "sort": { const s = state.sort[arg.table]; if (s.key === arg.key) s.dir = s.dir === "desc" ? "asc" : "desc"; else { s.key = arg.key; s.dir = "desc"; } try { localStorage.setItem("bh2.sort", JSON.stringify(state.sort)); } catch (e) {} render(); break; }
     case "openFields": state.picker = state.picker === "fields" ? null : "fields"; state.menuOpen = false; render(); if (state.picker) { const si = document.getElementById("searchInput"); if (si && f.search) si.focus(); } break;
-    case "pickField": state.picker = arg.key; render(); break;
+    case "pickField": state.picker = arg.key; state.valueQuery = ""; render(); if (state.picker === "symbol") { const vq = document.getElementById("valueQuery"); if (vq) vq.focus(); } break;
     case "closeFilter": state.picker = null; render(); break;
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
-    case "toggleList": { const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value); setFilters({}); break; }
+    case "toggleList": { const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value); setFilters({}); const vq = document.getElementById("valueQuery"); if (vq) { vq.focus(); vq.select(); } break; }
     case "toggleYear": { const i = f.years.indexOf(arg.year); if (i >= 0) f.years.splice(i, 1); else f.years.push(arg.year); setFilters({ from: "", to: "", preset: "all" }); break; }
     case "preset": setFilters({ preset: f.preset === arg.preset ? "all" : arg.preset, years: [], from: "", to: "" }); break;
     case "rangeOp": f.ranges[arg.key].op = arg.op; if (f.ranges[arg.key].v != null) setFilters({}); else render(); break;
@@ -1112,12 +1121,14 @@ function bind() {
       return;
     }
     if (e.target && (e.target.id === "rangeInput" || e.target.id === "searchInput") && e.key === "Enter") { e.target.blur(); }
+    if (e.target && e.target.id === "valueQuery" && e.key === "Enter") { const first = document.querySelector("#popValues [data-act=toggleList]"); if (first) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(first.dataset.arg); } catch (err) {} act("toggleList", arg); } }
   });
   document.addEventListener("input", (e) => {
     const t = e.target;
     if (t.id === "tagInput") { state.tagDraft = t.value; state.tagHi = 0; document.getElementById("tagMenu").innerHTML = tagMenuHtml(); return; }
     if (t.id === "thesis" || t.id === "posThesis") { clearTimeout(_thesisTimer); const id = t.dataset.id, v = t.value; _thesisTimer = setTimeout(() => { const o = tradeById(id) || positionById(id); if (o && o.thesis !== v) saveJournal(id, { thesis: v }, true); }, 600); return; }
     if (t.id === "rangeInput") { clearTimeout(_rangeTimer); const key = t.dataset.key, v = t.value.trim(); _rangeTimer = setTimeout(() => { state.filters.ranges[key].v = v === "" ? null : Number(v.replace(/[$,]/g, "")); if (v !== "" && isNaN(state.filters.ranges[key].v)) state.filters.ranges[key].v = null; loadModel(); }, 500); return; }
+    if (t.id === "valueQuery") { state.valueQuery = t.value; const active = FIELDS.find((x) => x.key === state.picker); const box = document.getElementById("popValues"); if (active && box) box.innerHTML = popValuesHtml(active); return; }
     if (t.id === "searchInput") { clearTimeout(_rangeTimer); const v = t.value; _rangeTimer = setTimeout(() => { state.filters.search = v.trim(); state.sel = null; loadModel(); }, 400); return; }
   });
   document.addEventListener("change", (e) => {
