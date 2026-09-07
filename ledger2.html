@@ -539,7 +539,7 @@ function eqHover(e) {
   dot.style.left = x; dot.style.top = y; dot.hidden = false;
   tip.style.left = x; tip.style.transform = "translateX(" + (i < s.length * 0.1 ? "0%" : i > s.length * 0.9 ? "-100%" : "-50%") + ")";
   tip.querySelector(".tv").textContent = money0(s[i].v);
-  tip.querySelector(".tl").textContent = stampDay(s[i].d) + (s[i].dep != null ? " · deposits " + money0(s[i].dep) : "");
+  tip.querySelector(".tl").textContent = stampDay(s[i].d);
   tip.hidden = false;
 }
 function eqLeave() { ["eqX", "eqDot", "eqTip"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = true; }); }
@@ -571,7 +571,7 @@ function monthlyCardHtml(m) {
   const want = Math.min(6, ms.length);
   const axis = [];
   for (let i = 0; i < want; i++) axis.push(ms[Math.round(i * (ms.length - 1) / Math.max(1, want - 1))].label);
-  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column"><div style="display:flex;align-items:baseline;gap:12px"><h5>Monthly P&amp;L</h5><span class="muted" style="font-size:11px">realized, CAD</span></div>' +
+  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column"><div style="display:flex;align-items:baseline;gap:12px"><h5>Monthly P&amp;L</h5></div>' +
     '<div style="display:flex;gap:10px;flex:1;min-height:150px;margin-top:12px"><div style="position:relative;width:56px;flex:none;font-size:10px;color:var(--ink55)" class="tab">' +
     ticks.map((t) => '<span style="position:absolute;left:0;top:' + t[0].toFixed(1) + '%;transform:translateY(-50%)">' + (t[1] === 0 ? "$0" : (t[1] > 0 ? "+" : "−") + "$" + Math.round(Math.abs(t[1])).toLocaleString("en-US")) + "</span>").join("") + "</div>" +
     '<div id="moPlot" style="position:relative;flex:1;min-width:0;display:flex;gap:5px;align-items:stretch" data-hover="mo">' +
@@ -623,14 +623,14 @@ function bySymbolCardHtml(m) {
   const cols = [{ key: "symbol", label: "Symbol" }, { key: "pnl", label: "P&L", align: "right" }, { key: "n", label: "Trades", align: "right" }, { key: "winRate", label: "Win rate", align: "right" }, { key: "avgHold", label: "Avg hold", align: "right" }];
   const s = state.sort.bySymbol;
   const rows = sortRows(m.bySymbol || [], s.key, s.dir, (r, k) => r[k]);
-  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px"><h5>By symbol</h5><span class="muted" style="margin-left:auto;font-size:11px">' + rows.length + (rows.length === 1 ? " symbol" : " symbols") + "</span></div>" +
+  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px"><h5>By symbol</h5></div>' +
     '<div class="scroll" style="flex:1;min-height:0"><table class="table"><thead><tr>' + th("bySymbol", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="symbolOpen" data-arg=\'' + attr({ symbol: r.symbol }) + "' title=\"" + esc(r.n === 1 ? "Open this trade" : "Show these " + r.n + " trades") + (r.legs > r.n ? " · " + r.legs + " legs" : "") + '"><td style="font-weight:500;font-variant-numeric:normal">' + esc(r.symbol) + '</td><td style="text-align:right" class="' + cls(r.pnl) + '">' + money(r.pnl) + '</td><td style="text-align:right">' + r.n + '</td><td style="text-align:right">' + pctPlain(r.winRate) + '</td><td style="text-align:right" class="dim">' + hold(r.avgHold) + "</td></tr>").join("") +
     "</tbody></table></div></div>";
 }
 function queueCardHtml(m) {
   const q = m.queue || [];
-  return '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline"><h5>Review queue</h5><span class="muted" style="margin-left:auto;font-size:11px">' + q.length + "</span></div><div class=\"muted\" style=\"font-size:11px;margin-bottom:12px\">Closed trades with no grade or thesis</div>" +
+  return '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline"><h5>Review queue</h5></div><div class="muted" style="font-size:11px;margin-bottom:12px">Closed trades with no grade or thesis</div>' +
     '<div class="scroll" style="flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding-right:2px">' +
     (q.length ? q.map((r) => '<div class="queue-row" data-act="selectTrade" data-arg=\'' + attr({ id: r.id }) + "'><div style=\"min-width:0\"><div style=\"font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px\">" + esc(r.symbol) + '</div><div class="muted" style="font-size:11px">' + esc(r.date) + " · " + esc(r.missing) + '</div></div><span class="tab" style="margin-left:auto;font-size:12px;color:' + color(r.pnl) + '">' + money(r.pnl) + "</span></div>").join("")
       : '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;padding:8px 0"><svg width="20" height="20" viewBox="0 0 256 256" fill="#6fd39b"><path d="M232.5 82.5l-128 128a12 12 0 0 1-17 0l-56-56a12 12 0 0 1 17-17L96 185l119.5-119.5a12 12 0 0 1 17 17Z"/></svg><div style="font-size:13px">Nothing left to review</div><div class="dim" style="font-size:11px">Every closed trade has a grade and a thesis</div></div>') +
