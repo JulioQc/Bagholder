@@ -57,6 +57,10 @@ A filter icon next to the menu narrows every page at once by date, account, symb
 
 Per-trade figures are in the trade's currency. Anything that adds trades together is in CAD, converted on the fill dates.
 
+## Versions
+
+Releases on GitHub are the versions, tagged `vMAJOR.MINOR.PATCH`. The menu shows the version you are running, and once a day the app checks for a newer release and shows an **Update available** link in the header when there is one. To update, pull or download the release and restart.
+
 ## Data
 
 Everything lives in `~/.bagholder/` (`%USERPROFILE%\.bagholder` on Windows): the database `bagholder.db` and the Wealthsimple session. Back up by copying the folder. **Clear data** in the menu wipes it and signs you out.

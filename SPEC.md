@@ -94,6 +94,10 @@ Each declared record carries its own fetch stamp, separate from the quote's, so 
 
 A USD transaction is converted at the Bank of Canada rate for its own date, looked up from that table when the model is built. The table is append-only, so a transaction's CAD value never changes once its day's rate is in. The Bank publishes a day's rate at 16:30 Eastern; the hourly check fetches it as soon as it is out, so a USD trade made during the day is converted at its own day's rate from that afternoon. Before that it uses the latest earlier rate.
 
+### Versions and the update check
+
+A version is a GitHub release tagged `vMAJOR.MINOR.PATCH`; commits alone are not versions. `APP_VERSION` in `bagholder.py` is bumped in the commit a release is cut from, and the menu foot shows the running version. Once a day, and at start, the app asks GitHub for the latest release; when its tag is newer than the running version the header shows an "Update available" link to that release. The request carries nothing but the app's version in its user agent; a failed check, or no release yet, is silent.
+
 ### Freshness of what is on the page
 
 The page polls the server every 30 seconds and, whenever the data version changes, which any new activity, NAV point, FX rate, benchmark close, distribution or quote does, fetches the current model and redraws in place. The browser never navigates or reloads: window and table scroll positions, the open position panel and the filter popover all stay where they were. The redraw is deferred until the next page change while a trade is open or a note is being typed, so nothing is overwritten under the user.

@@ -379,9 +379,9 @@ let _pollTimer = 0;
 function pollStatus() {
   clearTimeout(_pollTimer);
   api("GET", "/api/status").then((st) => {
-    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol]);
+    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable]);
     applyStatus(st);
-    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol]);
+    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable]);
     if (before !== after) renderHeaderOnly();
     const fast = state.status.syncing || state.status.capturing || state.busy;
     _pollTimer = setTimeout(pollStatus, fast ? 2500 : 30000);
@@ -426,7 +426,7 @@ function headerHtml() {
   return '<div id="hdr" style="display:flex;align-items:center;gap:22px;padding:12px 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
     '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span></div>' +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
-    '<span style="font-size:12px;color:var(--ink55)">' + syncLine() + (state.notice ? ' <span class="status-err">· ' + esc(state.notice) + "</span>" : "") + "</span>" +
+    '<span style="font-size:12px;color:var(--ink55)">' + (state.status.updateAvailable ? '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="color:var(--accent-300);text-decoration:none;margin-right:12px">Update available</a>' : "") + syncLine() + (state.notice ? ' <span class="status-err">· ' + esc(state.notice) + "</span>" : "") + "</span>" +
     '<div style="position:relative" data-pop="filter">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Filters" data-act="openFields"><svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M230.6 49.5A15.8 15.8 0 0 0 216 40H40a16 16 0 0 0-12.6 25.9l68.6 81.1v55a16 16 0 0 0 25.6 13.3l32-21.3a16 16 0 0 0 7.4-13.3v-33.7l68.6-81.1a15.8 15.8 0 0 0 1-15.4Z"/></svg></button>' +
     (filtersActive() ? '<span style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);pointer-events:none"></span>' : "") +
@@ -467,7 +467,7 @@ function menuHtml() {
     '<div class="sep"></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px 4px"><span class="lbl" style="margin-right:auto">Theme</span>' +
     THEMES.map((t) => '<button class="pill' + (state.theme === t[0] ? " on" : "") + '" data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "' style=\"padding:3px 9px;font-size:11.5px;width:auto\">" + t[1] + "</button>").join("") + "</div>" +
     (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
-    '<div class="sep"></div><a href="https://www.tradingview.com/" target="_blank" rel="noopener" class="muted" style="display:block;font-size:10.5px;padding:4px 9px 2px;text-decoration:none;color:var(--ink55)">Charts by TradingView</a>' +
+    '<div class="sep"></div><div style="display:flex;justify-content:space-between;gap:10px;font-size:10.5px;padding:4px 9px 2px;color:var(--ink55)"><span>Bagholder ' + esc(state.status.version ? "v" + state.status.version : "") + '</span><a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink55)">Charts by TradingView</a></div>' +
     "</div>";
 }
 function dataDialogHtml() {

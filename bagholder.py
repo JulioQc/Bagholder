@@ -518,6 +518,16 @@ query FetchSecurities($ids: [ID!]!) {
 
 SECURITY_BATCH = 50
 
+# Versions are GitHub releases tagged vMAJOR.MINOR.PATCH. APP_VERSION is bumped in
+# the commit that a release is cut from; once a day the app asks GitHub for the
+# latest release and shows an update link when that tag is newer than this copy.
+# Commits without a release never trigger it.
+APP_VERSION = "1.0.0"
+REPO = "ProfessorBagholder/Bagholder"
+REPO_URL = "https://github.com/" + REPO
+RELEASE_URL = "https://api.github.com/repos/" + REPO + "/releases/latest"
+UPDATE_CHECK_HOURS = 24
+
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
 PROTOCOL = "2026-09-07.2"
@@ -3019,6 +3029,10 @@ def status_payload():
             "dataVersion": store.data_version(),
             "protocol": PROTOCOL,
             "startedAt": STARTED_AT,
+            "version": APP_VERSION,
+            "latestVersion": str(update_status().get("latest") or ""),
+            "updateAvailable": bool(update_status().get("updateAvailable")),
+            "updateUrl": str(update_status().get("url") or REPO_URL),
         }
 
 
@@ -3098,6 +3112,7 @@ def market_loop():
     checked once an hour on their own clock, apart from prices."""
     while not _stop.wait(60 * market.MARKET_CHECK_MINUTES):
         refresh_periodic_market()
+        check_for_update_if_due()
 
 
 WATCH_SCAN_SEC = 10 * 60
@@ -3126,6 +3141,53 @@ def sync_then_market():
     ok = run_sync()
     refresh_market_data()
     return ok
+
+
+def parse_version(tag):
+    """'v1.2.3' -> (1, 2, 3); anything else -> None."""
+    m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)$", str(tag or "").strip())
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def check_for_update(now=None):
+    """Ask GitHub for the latest release and compare its tag with APP_VERSION.
+    Returns the record stored in meta: {checkedAt, ok, latest, url, updateAvailable}. Never raises."""
+    now = now or datetime.now(timezone.utc)
+    record = {"checkedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "ok": False, "latest": "", "url": REPO_URL + "/releases/latest", "updateAvailable": False}
+    try:
+        rel = _http_json("GET", RELEASE_URL, headers={"Accept": "application/vnd.github+json", "User-Agent": "Bagholder/" + APP_VERSION}, timeout=30)
+        latest = parse_version((rel or {}).get("tag_name"))
+        if latest is None:
+            raise ValueError("no release")
+        record.update({"ok": True, "latest": str(rel.get("tag_name")), "url": str(rel.get("html_url") or record["url"]), "updateAvailable": latest > parse_version(APP_VERSION)})
+    except Exception:
+        pass
+    try:
+        store.set_meta("update_check", json.dumps(record))
+    except Exception:
+        pass
+    return record
+
+
+def update_status():
+    try:
+        raw = store.get_meta("update_check")
+        rec = json.loads(raw) if raw else {}
+        return rec if isinstance(rec, dict) else {}
+    except Exception:
+        return {}
+
+
+def check_for_update_if_due(now=None):
+    now = now or datetime.now(timezone.utc)
+    rec = update_status()
+    try:
+        last = datetime.fromisoformat(str(rec.get("checkedAt") or "").replace("Z", "+00:00"))
+        if now - last < timedelta(hours=UPDATE_CHECK_HOURS):
+            return rec
+    except ValueError:
+        pass
+    return check_for_update(now)
 
 
 def history_payload(query):
@@ -3537,6 +3599,7 @@ def main():
     t = threading.Thread(target=auto_sync_loop, name="bagholder-auto-sync", daemon=True)
     t.start()
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
+    threading.Thread(target=check_for_update_if_due, name="bagholder-update-check", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()

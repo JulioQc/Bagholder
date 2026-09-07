@@ -92,6 +92,35 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(m.group(1), bagholder.PROTOCOL)
         self.assertEqual(bagholder.status_payload()["protocol"], bagholder.PROTOCOL)
 
+    def test_update_check_flags_only_a_newer_release(self):
+        from datetime import datetime, timedelta, timezone
+        self.assertIsNotNone(bagholder.parse_version(bagholder.APP_VERSION), "APP_VERSION must be MAJOR.MINOR.PATCH")
+        self.assertEqual(bagholder.parse_version("v1.2.3"), (1, 2, 3))
+        self.assertEqual(bagholder.parse_version("1.10.0"), (1, 10, 0))
+        self.assertGreater(bagholder.parse_version("v1.10.0"), bagholder.parse_version("v1.9.9"))
+        self.assertIsNone(bagholder.parse_version("latest"))
+        now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+        mine = bagholder.parse_version(bagholder.APP_VERSION)
+        newer = "v%d.%d.%d" % (mine[0], mine[1], mine[2] + 1)
+        older = "v%d.%d.%d" % (0, 9, 0)
+        with mock.patch.object(bagholder, "_http_json", return_value={"tag_name": "v" + bagholder.APP_VERSION, "html_url": "https://github.com/x/y/releases/tag/v1"}):
+            rec = bagholder.check_for_update(now)
+        self.assertEqual((rec["ok"], rec["updateAvailable"]), (True, False), "same release: no flag")
+        with mock.patch.object(bagholder, "_http_json", return_value={"tag_name": older, "html_url": "u"}):
+            self.assertFalse(bagholder.check_for_update(now)["updateAvailable"], "an older release never flags")
+        with mock.patch.object(bagholder, "_http_json", return_value={"tag_name": newer, "html_url": "https://github.com/ProfessorBagholder/Bagholder/releases/tag/" + newer}) as g:
+            rec = bagholder.check_for_update_if_due(now + timedelta(hours=1))
+            self.assertEqual(g.call_count, 0, "checked an hour ago: GitHub is not asked again")
+            rec = bagholder.check_for_update_if_due(now + timedelta(hours=25))
+        self.assertEqual((rec["updateAvailable"], rec["latest"]), (True, newer))
+        st = bagholder.status_payload()
+        self.assertEqual((st["version"], st["latestVersion"], st["updateAvailable"], st["updateUrl"]), (bagholder.APP_VERSION, newer, True, rec["url"]))
+        with mock.patch.object(bagholder, "_http_json", side_effect=OSError("offline")):
+            rec = bagholder.check_for_update(now + timedelta(hours=50))
+        self.assertEqual((rec["ok"], rec["updateAvailable"]), (False, False), "offline: silent, no flag")
+        with mock.patch.object(bagholder, "_http_json", return_value={"message": "Not Found"}):
+            self.assertFalse(bagholder.check_for_update(now)["updateAvailable"], "no release published yet: nothing to flag")
+
     def test_history_endpoint_validates_and_serves_bars(self):
         self.assertFalse(bagholder.history_payload("symbol=RDDY")["ok"])
         bars = [{"date": "2026-09-04", "open": 4.8, "high": 4.8, "low": 4.68, "close": 4.75, "volume": 1}]
