@@ -803,7 +803,7 @@ function positionsHtml(m) {
   const p = state.posSel ? positionById(state.posSel) : null;
   const sum = m.positionsSummary || {};
   return '<div style="padding:20px;min-height:380px"><div style="display:flex;gap:14px;align-items:flex-start">' +
-    '<div class="card elev-sm" style="flex:1;min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px"><h5>Positions</h5></div>' +
+    '<div class="card elev-sm" style="flex:1;min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Positions</h5></div>' +
     '<div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:680px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab' + (state.posSel === r.id ? " sel" : "") + '" style="cursor:pointer" data-act="selectPos" data-arg=\'' + attr({ id: r.id }) + "'>" +
       '<td title="' + esc(r.symbol) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
