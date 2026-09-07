@@ -1548,27 +1548,62 @@ def annualized(years):
     return {"rate": rate, "years": yrs, "count": len(used), "first": used[0], "last": used[-1]}
 
 
+def _paired_flows(series):
+    """Net deposit change per day, moved one day later when the equity
+    series only reflects the money a day after the deposit record does."""
+    n = len(series)
+    flows = [0.0] * n
+    for i in range(1, n):
+        p, prev = series[i], series[i - 1]
+        if p["dep"] is None or prev["dep"] is None:
+            continue
+        cf = p["dep"] - prev["dep"]
+        if abs(cf) < EPS:
+            continue
+        change_today = p["v"] - prev["v"]
+        if i + 1 < n:
+            change_next = series[i + 1]["v"] - p["v"]
+            if abs(change_today - cf) > abs(change_next - cf) and abs(change_today) < abs(cf) * 0.5:
+                flows[i + 1] += cf
+                continue
+        flows[i] += cf
+    return flows
+
+
 def drawdown(series):
+    """Max drawdown of the flow-adjusted equity: daily returns are taken net
+    of deposits and withdrawals and chain-linked into an index, so money
+    moved in or out of the account is not counted as a gain or a loss."""
     if not series:
         return {"pct": None, "abs": None, "at": "", "peakAt": ""}
     peak_v = max(p["v"] for p in series)
     floor = peak_v * 0.01
-    peak = 0.0
+    idx = 1.0
+    prev = None
+    peak_idx = 0.0
     peak_at = ""
+    peak_equity = 0.0
     dd = 0.0
     dd_abs = 0.0
     dd_at = ""
     dd_peak_at = ""
-    for p in series:
-        if p["v"] > peak:
-            peak = p["v"]
-            peak_at = p["d"]
-        if peak < floor or peak <= 0:
+    flows = _paired_flows(series)
+    for i, p in enumerate(series):
+        if prev is not None and prev["v"] > floor and prev["v"] > 0:
+            idx *= 1 + (p["v"] - prev["v"] - flows[i]) / prev["v"]
+        prev = p
+        if p["v"] < floor:
             continue
-        drop = (p["v"] - peak) / peak
+        if idx >= peak_idx:
+            peak_idx = idx
+            peak_at = p["d"]
+            peak_equity = p["v"]
+        if peak_idx <= 0:
+            continue
+        drop = idx / peak_idx - 1
         if drop < dd:
             dd = drop
-            dd_abs = p["v"] - peak
+            dd_abs = drop * peak_equity
             dd_at = p["d"]
             dd_peak_at = peak_at
     return {"pct": dd, "abs": dd_abs, "at": dd_at, "peakAt": dd_peak_at}

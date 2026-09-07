@@ -489,7 +489,7 @@ function kpiHtml(m) {
     tile("Profit factor", pf, "W " + money0(k.grossWin) + " · L " + money0(k.grossLoss)) +
     tile("Expectancy", k.expectancy == null ? "—" : money(k.expectancy), "avg W " + money0(k.avgWin) + " · L " + money0(k.avgLoss)) +
     tile("Max drawdown", dd.pct == null ? "—" : "−" + Math.abs(dd.pct * 100).toFixed(1) + "%", dd.pct == null ? "No NAV history" : "−$" + Math.abs(Math.round(dd.abs)).toLocaleString("en-US") + (dd.at ? " · " + stamp(dd.at) : ""), dd.pct == null ? "" : "neg") +
-    tile("Avg annualized", ann.rate == null ? "—" : pct(ann.rate), ann.rate == null ? "No NAV history" : "compounded over " + ann.count + (ann.count === 1 ? " year" : " years"), ann.rate == null ? "" : cls(ann.rate)) +
+    tile("Avg annualized", ann.rate == null ? "—" : pct(ann.rate), ann.rate == null ? "No NAV history" : "over " + ann.count + (ann.count === 1 ? " year" : " years"), ann.rate == null ? "" : cls(ann.rate)) +
     "</div>";
 }
 function niceMax(peak) {

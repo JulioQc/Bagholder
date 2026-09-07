@@ -595,6 +595,21 @@ class ViewTest(unittest.TestCase):
         self.assertEqual(dd["at"], "2026-03-31")
         self.assertIsNotNone(v["equity"]["annualized"]["rate"])
 
+    def test_drawdown_ignores_withdrawals_and_deposits(self):
+        series = model.equity_series([
+            {"date": "2026-01-01", "equity": 100000, "netDeposits": 100000},
+            {"date": "2026-01-02", "equity": 101000, "netDeposits": 100000},
+            {"date": "2026-01-03", "equity": 21000, "netDeposits": 20000},   # withdrew 80,000; no loss
+            {"date": "2026-01-04", "equity": 21210, "netDeposits": 20000},
+            {"date": "2026-01-05", "equity": 41210, "netDeposits": 40000},   # deposited 20,000
+            {"date": "2026-01-06", "equity": 37089, "netDeposits": 40000},   # a real 10% loss
+        ])
+        dd = model.drawdown(series)
+        self.assertAlmostEqual(dd["pct"], -0.1, places=4)
+        self.assertEqual(dd["at"], "2026-01-06")
+        self.assertEqual(dd["peakAt"], "2026-01-05")
+        self.assertAlmostEqual(dd["abs"], -4121, delta=1)
+
     def test_negligible_years_are_skipped(self):
         series = model.equity_series([
             {"date": "2020-12-22", "equity": 0, "netDeposits": 0},
