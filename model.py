@@ -790,6 +790,9 @@ def match_fifo(activities):
         for lot in book:
             if lot["qty"] <= 1e-6:
                 continue
+            # crypto residue from in-kind fees: a lot worth under a dollar is not a position
+            if lot["kind"] == "Crypto" and lot["qty"] * lot["price"] < 1.0:
+                continue
             open_lots.append(dict(lot))
     closed.sort(key=lambda t: (t["exitDate"], t["id"]))
     fold_option_rolls(closed, open_lots)
@@ -888,6 +891,70 @@ def option_expiry(symbol):
     except ValueError:
         return ""
     return "20%s-%02d-%s" % (m.group(3), month, m.group(1))
+
+
+def synthesize_assignment_shares(activities, securities):
+    """An assigned short option delivers shares, but Wealthsimple posts only
+    the option row (with the strike cash on it). Add the share leg: a call
+    assignment sells contracts x 100 shares at the strike, a put assignment
+    buys them."""
+    out = []
+    for a in activities:
+        if a.get("category") != "option_event" or compact(a.get("activityType")) != "ASSIGN":
+            continue
+        symbol = _s(a.get("symbol"))
+        if not is_option_symbol(symbol):
+            continue
+        contracts = abs(_num(a.get("quantity")))
+        if contracts <= 0:
+            continue
+        shares = contracts * 100
+        cash = _num(a.get("netCashAmount"))
+        strike = abs(cash) / shares if abs(cash) > EPS else 0.0
+        if strike <= 0:
+            m = re.search(r" (\d+(?:\.\d+)?) (CALL|PUT)$", _SPACE_RE.sub(" ", symbol.upper()))
+            strike = _num(m.group(1)) if m else 0.0
+        if strike <= 0:
+            continue
+        is_call = symbol.upper().rstrip().endswith("CALL") or symbol.upper().rstrip().endswith(" C")
+        sell = is_call if abs(cash) <= EPS else cash > 0
+        under = underlying_symbol(symbol)
+        sec = securities.by_id.get(_s(a.get("securityId")))
+        under_id = _s((sec or {}).get("underlyingId")) or None
+        out.append(
+            {
+                "id": "assign-shares:" + _s(a.get("id")),
+                "canonicalId": None,
+                "occurredAt": _s(a.get("occurredAt")) or _s(a.get("transactionDate")) + "T21:30:00+00:00",
+                "transactionDate": _s(a.get("transactionDate")),
+                "settlementDate": _s(a.get("transactionDate")),
+                "accountId": _s(a.get("accountId")),
+                "bookId": _s(a.get("bookId") or a.get("accountId")),
+                "fifoId": _s(a.get("fifoId") or a.get("accountId")),
+                "accountType": a.get("accountType"),
+                "activityType": "Trade",
+                "activitySubType": "SELL" if sell else "BUY",
+                "description": ("Called away" if sell else "Put to you") + ": %s %s @ %s" % (shares, under, strike),
+                "direction": "CREDIT" if sell else "DEBIT",
+                "symbol": under,
+                "name": under,
+                "currency": _s(a.get("currency")),
+                "quantity": -shares if sell else shares,
+                "unitPrice": strike,
+                "commission": 0.0,
+                "netCashAmount": shares * strike if sell else -shares * strike,
+                "category": "trade",
+                "balance": None,
+                "source": "derived",
+                "rawType": "OPTIONS_ASSIGN_SHARES",
+                "aftType": "",
+                "counterSymbol": "",
+                "securityId": under_id,
+                "kind": "Shares",
+                "flags": ["assignment"],
+            }
+        )
+    return out
 
 
 def synthesize_expiries(activities, open_lots, today):
@@ -1672,6 +1739,10 @@ def build_base(snapshot, market, journal, today=None):
     acts = normalize_activities(raw_acts)
     acts_by_id = {_s(a.get("id")): a for a in acts}
     securities = Securities(snapshot.get("securities") or [])
+    delivered = synthesize_assignment_shares(acts, securities)
+    if delivered:
+        acts = acts + delivered
+        acts_by_id = {_s(a.get("id")): a for a in acts}
     fifo = match_fifo(acts)
     synthetic = synthesize_expiries(acts, fifo["open"], today)
     if synthetic:

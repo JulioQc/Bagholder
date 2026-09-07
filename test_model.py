@@ -416,6 +416,46 @@ class ExpiryTest(unittest.TestCase):
         self.assertEqual(t["status"], "closed")
 
 
+class AssignmentTest(unittest.TestCase):
+    def test_assigned_call_delivers_the_shares(self):
+        snapshot = {
+            "activities": [
+                buy("b1", "ASTS", 300, 25.0, "2025-01-10", currency="USD", securityId="sec-s-asts"),
+                act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
+                    quantity=-3, unitPrice=1.5, netCashAmount=450, transactionDate="2025-02-10", symbol="ASTS 07MAR25 31.00 CALL", securityId="sec-o-asts"),
+                act(id="asg", category="option_event", activityType="ASSIGN", activitySubType="BUYTOCLOSE", rawType="OPTIONS_ASSIGN",
+                    quantity=3, unitPrice=0, netCashAmount=9300, transactionDate="2025-03-07", symbol="ASTS 07MAR25 31.00 CALL", securityId="sec-o-asts"),
+            ],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {},
+            "securities": [{"id": "sec-o-asts", "symbol": "ASTS", "underlyingId": "sec-s-asts"}, {"id": "sec-s-asts", "symbol": "ASTS", "name": "AST SpaceMobile", "primaryExchange": "NASDAQ"}],
+        }
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-09-06")
+        self.assertEqual(base["openLots"], [])
+        by_sym = {t["symbol"]: t for t in base["trades"]}
+        shares = by_sym["ASTS"]
+        self.assertEqual(shares["qty"], 300)
+        self.assertEqual(shares["exit"], 31.0)
+        self.assertEqual(shares["exitDate"], "2025-03-07")
+        self.assertAlmostEqual(shares["pnl"], (31 - 25) * 300)
+        self.assertIn("assignment", shares["flags"])
+        self.assertEqual(shares["name"], "AST SpaceMobile")
+        self.assertAlmostEqual(by_sym["ASTS 07MAR25 31.00 CALL"]["pnl"], 450)
+
+    def test_assigned_put_buys_the_shares(self):
+        snapshot = {
+            "activities": [
+                act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
+                    quantity=-1, unitPrice=0.5, netCashAmount=50, transactionDate="2025-11-10", symbol="BBAI 05DEC25 5.00 PUT"),
+                act(id="asg", category="option_event", activityType="ASSIGN", activitySubType="BUYTOCLOSE", rawType="OPTIONS_ASSIGN",
+                    quantity=1, unitPrice=0, netCashAmount=-500, transactionDate="2025-12-05", symbol="BBAI 05DEC25 5.00 PUT"),
+            ],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-01-01")
+        self.assertEqual([(l["symbol"], l["qty"], l["price"]) for l in base["openLots"]], [("BBAI", 100, 5.0)])
+        self.assertIn("assignment", base["openLots"][0]["flags"])
+
+
 class CryptoTest(unittest.TestCase):
     def test_crypto_buy_sell_and_reward(self):
         acts = [
