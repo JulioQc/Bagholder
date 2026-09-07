@@ -806,7 +806,7 @@ class ViewTest(unittest.TestCase):
         self.assertAlmostEqual(v["years"][-1]["spR"], 0.25, places=6)
         self.assertAlmostEqual(v["years"][-1]["r"], 0.20, places=6, msg="the account's own return does not depend on the index")
 
-    def test_next_ex_dividend_date_from_the_declared_record_then_the_quote(self):
+    def test_ex_div_and_pay_day_next_declared_else_last_known(self):
         acts = [
             buy("b1", "RDDY", 100, 5, "2026-05-01", accountType="Cashflow"),
             act(id="d1", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-08-06", symbol="RDDY", currency="CAD", accountType="Cashflow"),
@@ -819,11 +819,12 @@ class ViewTest(unittest.TestCase):
         market_data = {"fx": {}, "benchmark": {},
                        "distributions": {"RDDY": [{"exDate": "2026-09-30", "payDate": "2026-10-06", "amount": 0.15, "currency": "CAD"}, {"exDate": "2026-08-31", "payDate": "2026-09-04", "amount": 0.15, "currency": "CAD"}]},
                        "quotes": {"HHIS": {"price": 11.0, "exDividendDate": "2026-09-29"}, "HBIX": {"price": 6.7, "exDividendDate": "2026-08-29"}}}
+        market_data["distributions"]["HHIS"] = [{"exDate": "2026-08-31", "payDate": "2026-09-04", "amount": 0.27, "currency": "CAD"}]
         base = model.build_base(snapshot, market_data, {}, today="2026-09-07")
-        by = {h["symbol"]: h["nextExDate"] for h in model.build_view(base, {})["cashflow"]["holdings"]}
-        self.assertEqual(by["RDDY"], "2026-09-30", "the declared record's next ex-date")
-        self.assertEqual(by["HHIS"], "2026-09-29", "no record: the ex-date on the quote")
-        self.assertEqual(by["HBIX"], "", "a past ex-date on the quote is not an upcoming one")
+        by = {h["symbol"]: (h["nextExDate"], h["nextPayDate"], h["exUpcoming"]) for h in model.build_view(base, {})["cashflow"]["holdings"]}
+        self.assertEqual(by["RDDY"], ("2026-09-30", "2026-10-06", True), "the declared record's next distribution, with its pay date")
+        self.assertEqual(by["HHIS"], ("2026-08-31", "2026-09-04", False), "nothing declared ahead: the last known one, marked as past")
+        self.assertEqual(by["HBIX"], ("2026-08-29", "2026-08-06", False), "no record: the quote's last ex-date and the last payment received")
 
     def test_monthly_distributions_run_to_the_current_month(self):
         acts = [
