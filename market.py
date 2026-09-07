@@ -490,6 +490,8 @@ def refresh_quotes(symbols, ssl_context=None, now=None):
         if rec and rec.get("price") is not None:
             rec = dict(rec, source=source)
             store.upsert_quote(sym, rec, source=source)
+            if source == "cboe_options":
+                record_option_bars(sym, rec["price"], now)
             done += 1
     return done
 
@@ -819,6 +821,28 @@ def fetch_tmx_minutes(key, start, end, ssl_context=None):
         out.extend(parse_tmx_minutes(data))
         cur = chunk_end + timedelta(days=1)
     return out
+
+
+def session_bucket(now, bucket_minutes):
+    """Start (unix seconds) of the session-aligned bucket containing `now`, or None
+    outside the 9:30 to 16:00 Eastern session or on a weekend."""
+    et = now.astimezone(ZoneInfo("America/New_York"))
+    minute = et.hour * 60 + et.minute
+    if et.weekday() > 4 or minute < SESSION_OPEN_MINUTES or minute >= 16 * 60:
+        return None
+    idx = (minute - SESSION_OPEN_MINUTES) // bucket_minutes
+    start = et.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=SESSION_OPEN_MINUTES + idx * bucket_minutes)
+    return int(start.timestamp())
+
+
+def record_option_bars(symbol, price, now=None):
+    """Fold a contract's observed mark into its own 1h and 4h bars, since no source
+    keeps option history: the app records it while the contract is held."""
+    now = now or datetime.now(timezone.utc)
+    for tf, minutes in (("1h", 60), ("4h", 240)):
+        ts = session_bucket(now, minutes)
+        if ts is not None:
+            store.record_bar_tick(symbol, tf, ts, price)
 
 
 def aggregate_hourly(bars, seconds):

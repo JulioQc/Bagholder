@@ -1325,6 +1325,36 @@ class MarketParseTest(unittest.TestCase):
         share = {"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}
         self.assertEqual(market.chart_instrument(share), share)
 
+    def test_option_premium_is_recorded_into_session_bars(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                sym = "QNC 20NOV26 3.00 CALL"
+                # Tuesday 2026-09-08: 9:35, 10:15, 10:45 and 15:59 Eastern, then a reading after the close and one on Saturday
+                readings = [("2026-09-08T13:35:00+00:00", 0.20), ("2026-09-08T14:15:00+00:00", 0.26), ("2026-09-08T14:45:00+00:00", 0.18), ("2026-09-08T19:59:00+00:00", 0.22), ("2026-09-08T20:30:00+00:00", 9.9), ("2026-09-12T15:00:00+00:00", 9.9)]
+                for when, px in readings:
+                    market.record_option_bars(sym, px, datetime.fromisoformat(when))
+                hourly = store.price_bars(sym, "1h")
+                starts = [datetime.fromtimestamp(b["time"], tz=timezone.utc).strftime("%H:%M") for b in hourly]
+                self.assertEqual(starts, ["13:30", "14:30", "19:30"], "9:30, 10:30 and 15:30 Eastern; nothing after the close or on Saturday")
+                self.assertEqual((hourly[0]["open"], hourly[0]["high"], hourly[0]["low"], hourly[0]["close"]), (0.20, 0.26, 0.20, 0.26))
+                self.assertEqual((hourly[1]["open"], hourly[1]["close"]), (0.18, 0.18))
+                four = store.price_bars(sym, "4h")
+                self.assertEqual([datetime.fromtimestamp(b["time"], tz=timezone.utc).strftime("%H:%M") for b in four], ["13:30", "17:30"])
+                self.assertEqual((four[0]["open"], four[0]["high"], four[0]["low"], four[0]["close"]), (0.20, 0.26, 0.18, 0.18))
+                self.assertEqual(store.recorded_timeframes(sym), ["1h", "4h"])
+                # the quote loop records for option quotes it writes
+                syms = [{"symbol": sym, "exchange": "NYSE", "currency": "USD", "kind": "Options"}]
+                chain = {"QNC261120C00003000": {"bid": 0.1, "ask": 0.2, "prev_day_close": 0.15}}
+                with mock.patch.object(market, "fetch_cboe_option_chain", return_value=chain):
+                    market.refresh_quotes(syms, now=datetime(2026, 9, 9, 14, 0, tzinfo=timezone.utc))
+                self.assertAlmostEqual(store.price_bars(sym, "1h")[-1]["close"], 0.15)
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_intraday_available_for_tmx_listings_within_a_year(self):
         from datetime import datetime, timezone
         now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)

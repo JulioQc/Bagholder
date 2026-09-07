@@ -3137,11 +3137,18 @@ def history_payload(query):
     inst = market.chart_instrument(rec)
     src = market.history_source(inst)
     available = market.available_timeframes(inst, start)
+    # an option contract's own premium, recorded by the app while it was held
+    recorded = [x for x in market.TIMEFRAMES if x in store.recorded_timeframes(rec["symbol"])] if rec["kind"] == "Options" else []
+    basis = "contract" if (one("basis") == "contract" and recorded) else "underlying"
     try:
-        bars = market.ensure_bars(inst, tf, start, end, _ssl_context()) if (src and tf in available) else []
+        if basis == "contract":
+            bars = store.price_bars(rec["symbol"], tf) if tf in recorded else []
+        else:
+            bars = market.ensure_bars(inst, tf, start, end, _ssl_context()) if (src and tf in available) else []
     except Exception:
         bars = []
-    return {"ok": True, "symbol": rec["symbol"], "chartSymbol": inst["symbol"], "source": src[0] if src else "", "tf": tf, "available": available, "bars": bars}
+    return {"ok": True, "symbol": rec["symbol"], "chartSymbol": rec["symbol"] if basis == "contract" else inst["symbol"], "source": "recorded" if basis == "contract" else (src[0] if src else ""),
+            "tf": tf, "basis": basis, "available": recorded if basis == "contract" else available, "contractAvailable": recorded, "bars": bars}
 
 
 def _model_filters(query):

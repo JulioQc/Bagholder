@@ -181,6 +181,8 @@ const PROTOCOL = "2026-09-07.2"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 function chartTf() { const v = state.chartTf || (function () { try { return localStorage.getItem("bh2.chartTf"); } catch (e) { return ""; } })(); return TIMEFRAMES.some((x) => x[0] === v) ? v : "1d"; }
 function setChartTf(tf) { state.chartTf = tf; try { localStorage.setItem("bh2.chartTf", tf); } catch (e) {} }
+function chartBasis() { const v = state.chartBasis || (function () { try { return localStorage.getItem("bh2.chartBasis"); } catch (e) { return ""; } })(); return v === "contract" ? "contract" : "underlying"; }
+function setChartBasis(b) { state.chartBasis = b; try { localStorage.setItem("bh2.chartBasis", b); } catch (e) {} }
 function applyTheme(name) {
   state.theme = THEMES.some((t) => t[0] === name) ? name : "nocturne";
   if (state.theme === "nocturne") document.documentElement.removeAttribute("data-theme");
@@ -891,19 +893,28 @@ function chartSpan(t) {
   const to = new Date(Math.min(Date.now(), Date.parse(t.exitDate) + 10 * day)).toISOString().slice(0, 10);
   return { from, to };
 }
-function loadHistory(t, tf) {
-  const key = t.id + "|" + tf;
+function loadHistory(t, tf, basis) {
+  const key = t.id + "|" + tf + "|" + (basis || "");
   if (_histCache[key]) return Promise.resolve(_histCache[key]);
   const sp = chartSpan(t);
-  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to + "&tf=" + tf;
-  return api("GET", "/api/history?" + q).then((r) => { const out = { bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [], chartSymbol: (r && r.ok && r.chartSymbol) || t.symbol }; _histCache[key] = out; return out; });
+  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to + "&tf=" + tf + (basis ? "&basis=" + basis : "");
+  return api("GET", "/api/history?" + q).then((r) => { const out = { bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [], contractAvailable: (r && r.ok && r.contractAvailable) || [], basis: (r && r.ok && r.basis) || "underlying", chartSymbol: (r && r.ok && r.chartSymbol) || t.symbol }; _histCache[key] = out; return out; });
 }
-function tfPillsHtml(available, active, chartSymbol, tradeSymbol) {
-  if (!available.length) return "";
-  // an option trade is charted on its underlying: say so
-  const basis = chartSymbol && chartSymbol !== tradeSymbol ? '<span class="lbl" style="margin-right:auto;align-self:center">' + esc(chartSymbol) + "</span>" : "";
-  return basis + TIMEFRAMES.filter((x) => available.indexOf(x[0]) >= 0).map((x) => '<button class="pill' + (x[0] === active ? " on" : "") + '" data-act="chartTf" data-arg=\'' + attr({ tf: x[0] }) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + x[1] + "</button>").join("");
+function tfPillsHtml(h, active, t) {
+  if (!h.available.length) return "";
+  const pill = (on, act, arg, label) => '<button class="pill' + (on ? " on" : "") + '" data-act="' + act + '" data-arg=\'' + attr(arg) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + esc(label) + "</button>";
+  let basis = "";
+  if (t.kind === "Options") {
+    // an option trade is charted on its underlying, or on the contract's own
+    // recorded premium when the app has some
+    const under = h.basis === "contract" ? underlyingOf(t) : h.chartSymbol;
+    basis = h.contractAvailable.length
+      ? pill(h.basis !== "contract", "chartBasis", { basis: "underlying" }, under) + pill(h.basis === "contract", "chartBasis", { basis: "contract" }, "Contract") + '<span style="width:8px"></span>'
+      : '<span class="lbl" style="margin-right:auto;align-self:center">' + esc(h.chartSymbol) + "</span>";
+  }
+  return basis + TIMEFRAMES.filter((x) => h.available.indexOf(x[0]) >= 0).map((x) => pill(x[0] === active, "chartTf", { tf: x[0] }, x[1])).join("");
 }
+function underlyingOf(t) { return t.underlying || String(t.symbol || "").split(" ")[0]; }
 function localTime(ts) { return ts - new Date(ts * 1000).getTimezoneOffset() * 60; }
 function fillMarkers(fills, bars, c, step) {
   // a fill sits on the bar that contains it: by date on daily and coarser bars,
@@ -929,14 +940,16 @@ function mountTradeChart() {
   const c = chartColors();
   const LW = window.LightweightCharts;
   const wanted = chartTf();
-  loadHistory(t, wanted).then((h) => {
+  const basisWanted = t.kind === "Options" ? chartBasis() : "";
+  loadHistory(t, wanted, basisWanted).then((h) => {
     if (!document.getElementById("tradeChart") || state.sel !== t.id || _chart) return;
     const available = h.available;
-    // the remembered timeframe may not exist for this instrument: fall back to daily
-    const tf = available.indexOf(wanted) >= 0 ? wanted : (available.indexOf("1d") >= 0 ? "1d" : "");
-    if (tf && tf !== wanted) { loadHistory(t, tf).then(() => { if (state.sel === t.id) { _chart = null; mountTradeChartWith(t, tf); } }); return; }
+    // the remembered timeframe may not exist for this instrument: fall back to the
+    // coarsest available, then daily
+    const tf = available.indexOf(wanted) >= 0 ? wanted : (available.indexOf("1d") >= 0 ? "1d" : (available.length ? available[available.length - 1] : ""));
+    if (tf && tf !== wanted) { loadHistory(t, tf, basisWanted).then(() => { if (state.sel === t.id) { _chart = null; mountTradeChartWith(t, tf); } }); return; }
     const pills = document.getElementById("chartTf");
-    if (pills) pills.innerHTML = tfPillsHtml(available, tf, h.chartSymbol, t.symbol);
+    if (pills) pills.innerHTML = tfPillsHtml(h, tf, t);
     const bars = tf ? h.bars : [];
     const step = { "1h": 3600, "4h": 14400 }[tf] || 0;
     // With real bars every execution is marked on its day, a zero-price fill
@@ -1303,6 +1316,7 @@ function act(name, arg, ev) {
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
     case "chartTf": setChartTf(arg.tf); render(); break;
+    case "chartBasis": setChartBasis(arg.basis); render(); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
     case "toggleList": { const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value); setFilters({}); const vq = document.getElementById("valueQuery"); if (vq) { vq.focus(); vq.select(); } break; }

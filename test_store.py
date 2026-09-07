@@ -105,6 +105,11 @@ class StoreTest(unittest.TestCase):
         with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")):
             out = bagholder.history_payload("symbol=QNC%2020NOV26%203.00%20CALL&exchange=NYSE&currency=USD&kind=Options&from=2026-06-01&to=2026-09-05")
         self.assertEqual((out["ok"], out["source"], out["chartSymbol"], [b["close"] for b in out["bars"]]), (True, "tmx", "QNC", [4.75]), "an option is charted on its underlying")
+        self.assertEqual((out["basis"], out["contractAvailable"]), ("underlying", []))
+        store.record_bar_tick("QNC 20NOV26 3.00 CALL", "1h", 1788800400, 0.15)
+        with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")):
+            out = bagholder.history_payload("symbol=QNC%2020NOV26%203.00%20CALL&exchange=NYSE&currency=USD&kind=Options&from=2026-06-01&to=2026-09-05&tf=1h&basis=contract")
+        self.assertEqual((out["basis"], out["chartSymbol"], out["available"], out["contractAvailable"], [b["close"] for b in out["bars"]]), ("contract", "QNC 20NOV26 3.00 CALL", ["1h"], ["1h"], [0.15]))
 
     def test_options_sell_maps_as_sell_to_open(self):
         item = _ws_item(

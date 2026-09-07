@@ -163,7 +163,7 @@ Trade detail: symbol, name and exchange; P&L and P&L % in the trade's currency; 
 | Shares and ETFs on TSX, TSX-V, CSE and US exchanges | TMX Money: daily series, and one-minute bars aggregated into session-aligned 1H and 4H (9:30 start, 13:30 split) | 1H and 4H for trades within the past year; 1D, 1W, 1M | Daily: full listing history. Minute: the past year |
 | Cboe Canada listings | Cboe Canada's own feed | 1D, 1W, 1M | About the last three months |
 | Crypto | CoinGecko, in the position's currency | 1H and 4H for trades within the past 89 days; 1D, 1W, 1M | The past year |
-| Options | The underlying stock's bars, from the sources above, with the contract's executions marked by time and labelled with contract quantity and premium; the underlying's symbol is shown beside the timeframe buttons | As the underlying | As the underlying |
+| Options | The underlying stock's bars, from the sources above, with the contract's executions marked by time and labelled with contract quantity and premium; the underlying's symbol is shown beside the timeframe buttons. A second view, Contract, shows the contract's own premium: the app folds the delayed mark it fetches every minute for each held contract into 1H and 4H bars during the session, so every contract held while the app runs gets a premium chart that the archive keeps for good | Underlying: as the underlying. Contract: 1H, 4H from the day the app first held it | |
 
 Intraday bars and execution times are shown in the viewer's local time.
 
