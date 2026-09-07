@@ -1560,7 +1560,7 @@ def build_positions(open_lots, last_prices, balances, accounts, securities, jour
         last_px = last["price"] if last else (cost / (qty * mult) if qty else 0.0)
         last_at = last["date"] if last else ""
         price_source = "fill"
-        quote = quotes.get(symbol) if lots[0]["kind"] == "Shares" else None
+        quote = quotes.get(symbol)
         if quote and _num(quote.get("price"), None):
             last_px = _num(quote.get("price"))
             last_at = _s(quote.get("fetchedAt"))
@@ -2550,15 +2550,15 @@ def view(filters=None):
 
 
 def held_symbols(base=None):
-    """Held share positions (not options or crypto): what live quotes are fetched for."""
+    """Every held instrument, with what a quote source needs to price it."""
     base = base or base_model()
     out = []
     seen = set()
     for p in base["positions"]:
-        if p["kind"] != "Shares" or p["symbol"] in seen:
+        if p["symbol"] in seen:
             continue
         seen.add(p["symbol"])
-        out.append({"symbol": p["symbol"], "exchange": p["exchange"], "currency": p["currency"]})
+        out.append({"symbol": p["symbol"], "exchange": p["exchange"], "currency": p["currency"], "kind": p["kind"]})
     return out
 
 

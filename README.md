@@ -61,7 +61,7 @@ Per-trade figures are in the trade's currency. Anything that adds trades togethe
 
 Everything lives in `~/.bagholder/` (`%USERPROFILE%\.bagholder` on Windows): the database `bagholder.db` and the Wealthsimple session. Back up by copying the folder. **Clear data** in the menu wipes it and signs you out.
 
-Market data the app needs but Wealthsimple does not provide is fetched over HTTPS and cached in the same database: USD/CAD rates from the Bank of Canada, S&P 500 closes from FRED, and prices and declared distributions from TMX Money.
+Market data the app needs but Wealthsimple does not provide is fetched over HTTPS and cached in the same database: USD/CAD rates from the Bank of Canada, S&P 500 closes from FRED, prices and declared distributions from TMX Money, Cboe Canada prices from cboe.com, crypto prices from Coinbase, and US option prices from Cboe's delayed chains.
 
 ## For developers
 

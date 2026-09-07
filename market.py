@@ -13,6 +13,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import re
 import ssl
 import threading
 from datetime import date, datetime, timedelta, timezone
@@ -36,6 +37,10 @@ TMX_DIVIDENDS_QUERY = (
 )
 TMX_BATCH = 24
 QUOTE_STALE_HOURS = 20
+COINBASE_URL = "https://api.coinbase.com/v2/prices/%s/spot"
+CBOE_CA_URL = "https://www-api.cboe.com/ca/equities/securities-1/%s/quote/"
+CBOE_OPTIONS_URL = "https://cdn.cboe.com/api/global/delayed_quotes/options/%s.json"
+CBOE_CANADA_EXCHANGES = ("CBOE CANADA", "NEO")
 RECORD_STALE_HOURS = QUOTE_STALE_HOURS
 MARKET_ATTEMPT_HOURS = 6
 CANADIAN_EXCHANGES = ("TSX", "TSX-V", "TSXV", "CSE", "CBOE CANADA", "NEO", "ALPHA EXCHANGE")
@@ -304,16 +309,132 @@ def fetch_tmx_quote(tmx_sym, ssl_context=None):
         return None
 
 
+def _num(v, default=0.0):
+    try:
+        if v is None or v == "":
+            return default
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+_OCC_WORDY = re.compile(r"^([A-Z][A-Z0-9.]{0,9}) (\d{1,2})([A-Z]{3})(\d{2}) (\d+(?:\.\d+)?) (CALL|PUT|C|P)$")
+_OCC_COMPACT = re.compile(r"^([A-Z][A-Z0-9.]{0,9}) (\d{6}[CP]\d{8})$")
+_MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
+
+
+def occ_code(symbol):
+    """'QNC 20NOV26 3.00 CALL' -> 'QNC261120C00003000' (the OCC code Cboe keys its chains by)."""
+    u = re.sub(r"\s+", " ", str(symbol or "").strip().upper())
+    m = _OCC_COMPACT.match(u)
+    if m:
+        return m.group(1) + m.group(2)
+    m = _OCC_WORDY.match(u)
+    if not m or m.group(3) not in _MONTHS:
+        return ""
+    root, day, mon, yy, strike, right = m.groups()
+    return "%s%s%02d%02d%s%08d" % (root, yy, _MONTHS.index(mon) + 1, int(day), right[0], int(round(float(strike) * 1000)))
+
+
+def occ_root(code):
+    m = re.match(r"^([A-Z][A-Z0-9.]{0,9})\d{6}[CP]\d{8}$", str(code or ""))
+    return m.group(1) if m else ""
+
+
+def quote_source(rec):
+    """(source, key) for a held instrument, or None when no public source covers it.
+    tmx: TMX Money symbol. cboe_ca: Cboe Canada symbol. coinbase: 'BTC-CAD' pair in
+    the position's own currency. cboe_options: OCC code, US-listed underlyings only."""
+    kind = str(rec.get("kind") or "Shares")
+    sym = tmx_symbol(rec.get("symbol"))
+    ccy = str(rec.get("currency") or "CAD").strip().upper()
+    if not sym:
+        return None
+    if kind == "Crypto":
+        return ("coinbase", "%s-%s" % (sym, ccy))
+    if kind == "Options":
+        code = occ_code(rec.get("symbol"))
+        return ("cboe_options", code) if code and ccy == "USD" else None
+    if kind != "Shares":
+        return None
+    if str(rec.get("exchange") or "").strip().upper() in CBOE_CANADA_EXCHANGES:
+        return ("cboe_ca", sym)
+    q = tmx_quote_symbol(rec.get("symbol"), rec.get("exchange"), rec.get("currency"))
+    return ("tmx", q) if q else None
+
+
+def parse_coinbase(text, pair=""):
+    d = (json.loads(text or "{}") or {}).get("data") or {}
+    px = _num(d.get("amount"), None)
+    if not px or px <= 0:
+        return None
+    return {"price": px, "currency": str(d.get("currency") or pair.split("-")[-1])}
+
+
+def parse_cboe_ca_quote(text):
+    """Cboe Canada's own quote feed. Outside a session 'last' is 0: use the previous close."""
+    d = (json.loads(text or "{}") or {}).get("data") or {}
+    last = _num(d.get("last"), None)
+    prev = _num(d.get("prev_close"), None)
+    px = last if last and last > 0 else prev
+    if not px or px <= 0:
+        return None
+    return {"price": px, "priceChange": _num(d.get("change"), None), "percentChange": _num(d.get("change_pct"), None), "prevClose": prev, "currency": "CAD", "name": str(d.get("company_name") or "")}
+
+
+def parse_cboe_options(text):
+    """OCC code -> row for one underlying's delayed chain."""
+    d = (json.loads(text or "{}") or {}).get("data") or {}
+    return {str(o.get("option") or ""): o for o in d.get("options") or [] if isinstance(o, dict)}
+
+
+def option_mark(row):
+    """Price of one contract per share: the bid/ask midpoint while both are quoted,
+    else the last trade, else the previous close."""
+    if not isinstance(row, dict):
+        return None
+    bid, ask = _num(row.get("bid"), 0.0), _num(row.get("ask"), 0.0)
+    prev = _num(row.get("prev_day_close"), None)
+    if bid > 0 and ask > 0:
+        px = (bid + ask) / 2
+    else:
+        px = _num(row.get("last_trade_price"), None) or prev
+    if not px or px <= 0:
+        return None
+    return {"price": px, "prevClose": prev, "priceChange": (px - prev) if prev else None, "percentChange": ((px / prev - 1) * 100) if prev else None, "currency": "USD"}
+
+
+def fetch_coinbase_spot(pair, ssl_context=None):
+    try:
+        return parse_coinbase(_get_text(COINBASE_URL % pair, ssl_context), pair)
+    except Exception:
+        return None
+
+
+def fetch_cboe_ca_quote(sym, ssl_context=None):
+    try:
+        return parse_cboe_ca_quote(_get_text(CBOE_CA_URL % sym, ssl_context))
+    except Exception:
+        return None
+
+
+def fetch_cboe_option_chain(root, ssl_context=None):
+    try:
+        return parse_cboe_options(_get_text(CBOE_OPTIONS_URL % root, ssl_context))
+    except Exception:
+        return {}
+
+
 def quote_symbols_needing_refresh(symbols, now=None, max_age_minutes=QUOTE_REFRESH_MINUTES):
-    """[(stored symbol, tmx symbol)] for held listings whose quote is older than max_age."""
+    """[(stored symbol, source, key)] for held instruments whose quote is older than max_age."""
     now = now or datetime.now(timezone.utc)
     fetched = store.quote_fetched_at()
     out = []
     seen = set()
     for rec in symbols or []:
         sym = tmx_symbol(rec.get("symbol"))
-        q = tmx_quote_symbol(rec.get("symbol"), rec.get("exchange"), rec.get("currency"))
-        if not sym or not q or sym in seen:
+        src = quote_source(rec)
+        if not sym or not src or sym in seen:
             continue
         seen.add(sym)
         last = fetched.get(sym) or ""
@@ -322,17 +443,32 @@ def quote_symbols_needing_refresh(symbols, now=None, max_age_minutes=QUOTE_REFRE
         except ValueError:
             age = None
         if age is None or age > timedelta(minutes=max_age_minutes):
-            out.append((sym, q))
+            out.append((sym, src[0], src[1]))
     return out
 
 
 def refresh_quotes(symbols, ssl_context=None, now=None):
-    """Live-ish prices for held positions, at most every QUOTE_REFRESH_MINUTES."""
+    """Live-ish prices for held positions, at most every QUOTE_REFRESH_MINUTES.
+    Shares and ETFs from TMX Money or Cboe Canada, crypto from Coinbase in the
+    position's currency, US-listed options from Cboe's delayed chains."""
     done = 0
-    for sym, q in quote_symbols_needing_refresh(symbols, now=now):
-        rec = fetch_tmx_quote(q, ssl_context)
+    chains = {}
+    for sym, source, key in quote_symbols_needing_refresh(symbols, now=now):
+        rec = None
+        if source == "tmx":
+            rec = fetch_tmx_quote(key, ssl_context)
+        elif source == "cboe_ca":
+            rec = fetch_cboe_ca_quote(key, ssl_context)
+        elif source == "coinbase":
+            rec = fetch_coinbase_spot(key, ssl_context)
+        elif source == "cboe_options":
+            root = occ_root(key)
+            if root not in chains:
+                chains[root] = fetch_cboe_option_chain(root, ssl_context)
+            rec = option_mark(chains[root].get(key))
         if rec and rec.get("price") is not None:
-            store.upsert_quote(sym, rec)
+            rec = dict(rec, source=source)
+            store.upsert_quote(sym, rec, source=source)
             done += 1
     return done
 

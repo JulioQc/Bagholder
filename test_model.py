@@ -888,7 +888,76 @@ class QuoteTest(unittest.TestCase):
         self.assertEqual(p["VEQT"]["priceChange"], 0.08)
         self.assertEqual(p["HBIX"]["priceSource"], "fill")
         self.assertEqual(p["HBIX"]["last"], 7.0)
-        self.assertEqual(model.held_symbols(base), [{"symbol": "VEQT", "exchange": "", "currency": "CAD"}, {"symbol": "HBIX", "exchange": "", "currency": "CAD"}])
+        self.assertEqual(model.held_symbols(base), [{"symbol": "VEQT", "exchange": "", "currency": "CAD", "kind": "Shares"}, {"symbol": "HBIX", "exchange": "", "currency": "CAD", "kind": "Shares"}])
+
+    def test_quote_sources_cover_every_held_kind(self):
+        src = market.quote_source
+        self.assertEqual(src({"symbol": "VEQT", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}), ("tmx", "VEQT"))
+        self.assertEqual(src({"symbol": "LUNR", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}), ("tmx", "LUNR:US"))
+        self.assertEqual(src({"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD", "kind": "Shares"}), ("cboe_ca", "HBIX"))
+        self.assertEqual(src({"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}), ("coinbase", "BTC-CAD"))
+        self.assertEqual(src({"symbol": "BTC", "exchange": "Crypto", "currency": "USD", "kind": "Crypto"}), ("coinbase", "BTC-USD"))
+        self.assertEqual(src({"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}), ("cboe_options", "QNC261120C00003000"))
+        self.assertIsNone(src({"symbol": "SHOP 17OCT25 100.00 PUT", "exchange": "TSX", "currency": "CAD", "kind": "Options"}))
+        self.assertEqual(market.occ_code("LUNR 29AUG25 11.50 CALL"), "LUNR250829C00011500")
+        self.assertEqual(market.occ_code("SPY 251219P00450000"), "SPY251219P00450000")
+        self.assertEqual(market.occ_code("VEQT"), "")
+        self.assertEqual(market.occ_root("QNC261120C00003000"), "QNC")
+
+    def test_public_quote_parsers(self):
+        closed = json.dumps({"data": {"last": "0.0", "prev_close": "6.7600", "change": "0.0", "change_pct": "0.0", "company_name": "HARVEST BITCOIN ENHANCED INCOME ETF"}})
+        self.assertEqual(market.parse_cboe_ca_quote(closed)["price"], 6.76)
+        open_ = json.dumps({"data": {"last": "6.81", "prev_close": "6.7600", "change": "0.05", "change_pct": "0.74"}})
+        q = market.parse_cboe_ca_quote(open_)
+        self.assertEqual((q["price"], q["prevClose"], q["priceChange"]), (6.81, 6.76, 0.05))
+        self.assertIsNone(market.parse_cboe_ca_quote(json.dumps({"data": {"last": "0", "prev_close": "0"}})))
+        self.assertEqual(market.parse_coinbase(json.dumps({"data": {"amount": "109300.3", "base": "BTC", "currency": "CAD"}}), "BTC-CAD"), {"price": 109300.3, "currency": "CAD"})
+        self.assertIsNone(market.parse_coinbase(json.dumps({"errors": [{"id": "not_found"}]}), "XYZ-CAD"))
+        chain = json.dumps({"data": {"options": [{"option": "QNC261120C00003000", "bid": 0.0, "ask": 0.25, "last_trade_price": 0.15, "prev_day_close": 0.15}, {"option": "QNC261120C00005000", "bid": 0.1, "ask": 0.2, "last_trade_price": 0.05, "prev_day_close": 0.12}]}})
+        rows = market.parse_cboe_options(chain)
+        self.assertEqual(market.option_mark(rows["QNC261120C00003000"])["price"], 0.15)
+        self.assertAlmostEqual(market.option_mark(rows["QNC261120C00005000"])["price"], 0.15)
+        self.assertIsNone(market.option_mark(rows.get("QNC261120C00009000")))
+        self.assertIsNone(market.option_mark({"bid": 0, "ask": 0, "last_trade_price": 0, "prev_day_close": 0}))
+
+    def test_refresh_quotes_prices_crypto_and_options(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                syms = [
+                    {"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"},
+                    {"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"},
+                    {"symbol": "QNC 19FEB27 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"},
+                    {"symbol": "SHOP 17OCT25 100.00 PUT", "exchange": "TSX", "currency": "CAD", "kind": "Options"},
+                ]
+                chain = {"QNC261120C00003000": {"bid": 0.1, "ask": 0.2, "prev_day_close": 0.15}, "QNC270219C00003000": {"bid": 0, "ask": 0.5, "last_trade_price": 0.3, "prev_day_close": 0.3}}
+                with mock.patch.object(market, "fetch_coinbase_spot", return_value={"price": 109300.3, "currency": "CAD"}) as cb, mock.patch.object(market, "fetch_cboe_option_chain", return_value=chain) as oc:
+                    self.assertEqual(market.refresh_quotes(syms), 3)
+                self.assertEqual([x.args[0] for x in cb.call_args_list], ["BTC-CAD"])
+                self.assertEqual(oc.call_count, 1, "one chain fetch serves every contract on the underlying")
+                q = store.quotes()
+                self.assertEqual(q["BTC"]["price"], 109300.3)
+                self.assertAlmostEqual(q["QNC 20NOV26 3.00 CALL"]["price"], 0.15)
+                self.assertEqual(q["QNC 19FEB27 3.00 CALL"]["price"], 0.3)
+                self.assertNotIn("SHOP 17OCT25 100.00 PUT", q)
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_positions_price_crypto_and_options_from_quotes(self):
+        acts = [
+            act(id="c1", category="trade", activityType="BUY", rawType="CRYPTO_BUY", quantity=0.5, unitPrice=100000, netCashAmount=-50000, transactionDate="2026-01-05", symbol="BTC", currency="CAD", accountType="Crypto", securityId="sec-z-btc"),
+            act(id="o1", category="trade", activityType="BUY", rawType="OPTIONS_BUY", quantity=2, unitPrice=0.10, netCashAmount=-20, transactionDate="2026-02-05", symbol="QNC 20NOV26 3.00 CALL", currency="USD", accountType="TFSA", securityId="sec-o-1"),
+        ]
+        snapshot = {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
+        quotes = {"BTC": {"price": 120000.0}, "QNC 20NOV26 3.00 CALL": {"price": 0.15}}
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}, "quotes": quotes}, {}, today="2026-09-06")
+        by = {p["symbol"]: p for p in base["positions"]}
+        self.assertEqual((by["BTC"]["kind"], by["BTC"]["priceSource"], by["BTC"]["last"], by["BTC"]["mv"]), ("Crypto", "quote", 120000.0, 60000.0))
+        self.assertEqual((by["QNC 20NOV26 3.00 CALL"]["kind"], by["QNC 20NOV26 3.00 CALL"]["priceSource"], by["QNC 20NOV26 3.00 CALL"]["last"], by["QNC 20NOV26 3.00 CALL"]["mv"]), ("Options", "quote", 0.15, 30.0))
+        held = model.held_symbols(base)
+        self.assertEqual(sorted((h["symbol"], h["kind"]) for h in held), [("BTC", "Crypto"), ("QNC 20NOV26 3.00 CALL", "Options")])
 
     def test_refresh_quotes_respects_the_interval(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -898,11 +967,14 @@ class QuoteTest(unittest.TestCase):
             try:
                 from datetime import datetime, timezone
                 syms = [{"symbol": "VEQT", "exchange": "TSX", "currency": "CAD"}, {"symbol": "LUNR", "exchange": "NASDAQ", "currency": "USD"}, {"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD"}]
-                with mock.patch.object(market, "fetch_tmx_quote", return_value={"price": 10.0, "priceChange": 0.1, "percentChange": 1.0, "prevClose": 9.9, "fetchedAt": "2026-09-06T14:00:00Z"}) as f:
-                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 0, tzinfo=timezone.utc)), 2)
-                    self.assertEqual([c.args[0] for c in f.call_args_list], ["VEQT", "LUNR:US"])
+                cboe = {"price": 6.76, "prevClose": 6.76, "fetchedAt": "2026-09-06T14:00:00Z"}
+                with mock.patch.object(market, "fetch_tmx_quote", return_value={"price": 10.0, "priceChange": 0.1, "percentChange": 1.0, "prevClose": 9.9, "fetchedAt": "2026-09-06T14:00:00Z"}) as f, mock.patch.object(market, "fetch_cboe_ca_quote", return_value=cboe) as c:
+                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 0, tzinfo=timezone.utc)), 3)
+                    self.assertEqual([x.args[0] for x in f.call_args_list], ["VEQT", "LUNR:US"])
+                    self.assertEqual([x.args[0] for x in c.call_args_list], ["HBIX"])
                     self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 5, tzinfo=timezone.utc)), 0)
-                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 20, tzinfo=timezone.utc)), 2)
+                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 20, tzinfo=timezone.utc)), 3)
+                self.assertEqual(store.quotes()["HBIX"]["price"], 6.76)
                 q = store.quotes()["LUNR"]
                 self.assertEqual(q["price"], 10.0)
                 self.assertEqual(q["prevClose"], 9.9)
