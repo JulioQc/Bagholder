@@ -18,6 +18,7 @@ html{color-scheme:dark}
   --shadow-sm:0 1px 2px rgba(0,0,0,.28);--shadow-md:0 10px 28px rgba(0,0,0,.45),0 0 0 1px rgba(233,233,237,.06);
   --font:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--font-num:var(--font);--brand-color:var(--ink);--brand-transform:none;--brand-spacing:.02em;--outline:.1;--field:rgba(22,24,38,.55);
   --chip-bg:var(--accent-900);--chip-fg:var(--accent-300);--chip-hi:rgba(145,132,217,.18);
+  --pie-1:#9184d9;--pie-2:#6fd39b;--pie-3:#5fb0e6;--pie-4:#e8b36a;--pie-5:#e0778a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;
   --pos-rgb:111,211,155;--neg-rgb:224,119,138;--accent-rgb:145,132,217;--accent-bar:var(--accent);--hover:.08;--area:.22;--well:var(--n900);--well-line:.12;
 }
 html[data-theme="midnight"]{
@@ -28,6 +29,7 @@ html[data-theme="midnight"]{
   --font-num:ui-monospace,"JetBrains Mono","SF Mono",Menlo,monospace;--outline:.14;--field:rgba(4,5,9,.6);
   --chip-bg:rgba(230,232,238,.1);--chip-fg:rgba(230,232,238,.82);--chip-hi:rgba(230,232,238,.12);
   --pos-rgb:63,214,138;--neg-rgb:255,107,122;--accent-rgb:63,214,138;
+  --pie-1:#3fd68a;--pie-2:#5fb0e6;--pie-3:#9184d9;--pie-4:#e8b36a;--pie-5:#ff6b7a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;
 }
 html[data-theme="light"]{color-scheme:light;
   --mat:#e0e2ea;--bg:#eef0f5;--surface:#fafafc;--n900:#f1f2f6;--accent:#6b5cd6;--accent-300:#4a3bb8;--accent-900:#e9e6fa;--accent-bar:#a89ee6;
@@ -35,6 +37,7 @@ html[data-theme="light"]{color-scheme:light;
   --hair:rgba(27,29,39,.12);--grid:rgba(27,29,39,.06);--pos:#2e8a62;--neg:#c0505f;--mixed:#9a95c4;--pos-rgb:46,138,98;--neg-rgb:192,80,95;--accent-rgb:107,92,214;
   --shadow-sm:0 1px 2px rgba(20,22,40,.06);--shadow-md:0 10px 28px rgba(20,22,40,.14),0 0 0 1px rgba(27,29,39,.08);
   --outline:.08;--field:rgba(27,29,39,.04);--hover:.045;--area:.16;--well:transparent;--well-line:.09;
+  --pie-1:#6b5cd6;--pie-2:#2e8a62;--pie-3:#3a86c4;--pie-4:#c98a2e;--pie-5:#c0505f;--pie-6:#2f9e93;--pie-7:#9a5fbf;--pie-8:#a89a2c;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--mat);color:var(--ink);color-scheme:dark}
@@ -1195,9 +1198,62 @@ function cashflowHtml(m) {
     '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Cashflow Positions</h5><div class="scroll" style="max-height:344px"><table class="table" style="font-size:12px;table-layout:fixed"><thead><tr>' + th("yoc", ycols) + "</tr></thead><tbody>" +
     (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(h.symbol) + '</td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + px(h.avg) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.mv == null ? "—" : money0(h.mv)) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2)) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right">' + (h.annual == null ? "—" : money0(h.annual / 12)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="11" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
     "</tbody></table></div></div>" +
-    '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Distribution history</h5><div class="scroll-xy" style="max-height:420px"><table class="table" style="min-width:600px;font-size:12px"><thead><tr>' + th("cash", dcols) + "</tr></thead><tbody>" +
-    (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.kind) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="7" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
-    "</tbody></table></div></div></div>";
+    '<div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1.85fr);gap:14px;height:380px">' + pieCardHtml(holdingRows) +
+    '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><h5 style="margin-bottom:4px">Distribution history</h5><div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:600px;font-size:12px"><thead><tr>' + th("cash", dcols) + "</tr></thead><tbody>" +
+    (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.kind) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="7" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
+    "</tbody></table></div></div></div></div>";
+}
+// The pie: each income holding's share of the whole, by market value or by
+// projected monthly income. The centre reads the total, or the hovered slice.
+const PIE_BY = [["mv", "Market"], ["proj", "Projected"]];
+function pieBy() { const v = state.pieBy || (function () { try { return localStorage.getItem("bh2.pieBy"); } catch (e) { return ""; } })(); return v === "proj" ? "proj" : "mv"; }
+function setPieBy(v) { state.pieBy = v; try { localStorage.setItem("bh2.pieBy", v); } catch (e) {} }
+function pieSlices(rows) {
+  const by = pieBy();
+  const val = (h) => (by === "mv" ? (h.mv != null ? h.mv : null) : (h.annual != null ? h.annual / 12 : null));
+  const items = rows.map((h) => ({ symbol: h.symbol, account: h.account, v: val(h) })).filter((x) => x.v != null && x.v > 0).sort((a, b) => b.v - a.v);
+  const total = items.reduce((a, x) => a + x.v, 0);
+  return { by, total, items: items.map((x, i) => Object.assign(x, { share: total ? x.v / total : 0, color: "var(--pie-" + ((i % 8) + 1) + ")" })) };
+}
+function pieCardHtml(rows) {
+  const p = pieSlices(rows);
+  const pills = PIE_BY.map((x) => '<button class="pill' + (x[0] === p.by ? " on" : "") + '" data-act="pieBy" data-arg=\'' + attr({ by: x[0] }) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + x[1] + "</button>").join("");
+  const fmt = (v) => (p.by === "mv" ? money0(v) : money0(v) + "/mo");
+  const R = 44, W = 14, C = 60, SIZE = 236;
+  let acc = 0;
+  const arcs = p.items.map((x, i) => {
+    const a0 = acc * 2 * Math.PI - Math.PI / 2, a1 = (acc + x.share) * 2 * Math.PI - Math.PI / 2;
+    acc += x.share;
+    if (x.share >= 0.9999) return '<circle cx="' + C + '" cy="' + C + '" r="' + R + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '"/>';
+    const large = x.share > 0.5 ? 1 : 0;
+    const d = "M" + (C + R * Math.cos(a0)).toFixed(2) + " " + (C + R * Math.sin(a0)).toFixed(2) + " A" + R + " " + R + " 0 " + large + " 1 " + (C + R * Math.cos(a1)).toFixed(2) + " " + (C + R * Math.sin(a1)).toFixed(2);
+    return '<path d="' + d + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '" style="cursor:default"/>';
+  }).join("");
+  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5><div style="display:flex;gap:4px">' + pills + "</div></div>" +
+    (p.items.length ? '<div id="piePlot" data-hover="pie" style="display:flex;gap:22px;align-items:center;flex:1;min-height:0">' +
+      '<div style="position:relative;width:' + SIZE + 'px;height:' + SIZE + 'px;flex:none"><svg viewBox="0 0 120 120" style="width:' + SIZE + 'px;height:' + SIZE + 'px;display:block">' + arcs + "</svg>" +
+      '<div id="pieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="tab" style="font-size:17px;font-weight:500">' + fmt(p.total) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + esc(p.by === "mv" ? "market value" : "projected") + "</div></div></div>" +
+      '<div id="pieLegend" class="scroll" style="flex:1;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
+      p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.symbol) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + fmt(x.v) + '</span><span class="tab muted" style="text-align:right;white-space:nowrap;min-width:44px">' + pctPlain(x.share) + "</span></span>").join("") +
+      "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No income holdings in scope.</div>') + "</div>";
+}
+function pieHover(e) {
+  const el = e.target.closest("[data-slice]"); const plot = document.getElementById("piePlot"); if (!plot) return;
+  const i = el ? +el.dataset.slice : -1;
+  plot.querySelectorAll("svg [data-slice]").forEach((s) => { s.style.opacity = i < 0 || +s.dataset.slice === i ? "1" : ".35"; });
+  plot.querySelectorAll("#pieLegend [data-slice]").forEach((s) => { const on = i < 0 || +s.dataset.slice === i; [...s.children].forEach((c) => { c.style.opacity = on ? "1" : ".45"; }); });
+  const centre = document.getElementById("pieCentre"); if (!centre) return;
+  const p = pieSlices(cashflowHoldingRows());
+  const x = i >= 0 ? p.items[i] : null;
+  const fmt = (v) => (p.by === "mv" ? money0(v) : money0(v) + "/mo");
+  centre.innerHTML = x ? '<div class="tab" style="font-size:13px;font-weight:500">' + fmt(x.v) + '</div><div class="muted" style="font-size:10px">' + esc(x.symbol) + " · " + pctPlain(x.share) + "</div>"
+    : '<div class="tab" style="font-size:13px;font-weight:500">' + fmt(p.total) + '</div><div class="muted" style="font-size:10px">' + esc(p.by === "mv" ? "market value" : "projected") + "</div>";
+}
+function pieLeave() { pieHover({ target: document.body }); }
+function cashflowHoldingRows() {
+  const c = state.model.cashflow; const posById = {}; (state.model.positions || []).forEach((p) => { posById[p.id] = p; });
+  return (c.holdings || []).map((h) => { const p = posById[h.id]; return Object.assign({}, h, { mv: p ? p.mv : null }); });
 }
 function cfHover(e) {
   const m = state.model; if (!m) return;
@@ -1376,6 +1432,7 @@ function act(name, arg, ev) {
     case "chartTf": setChartTf(arg.tf); render(); break;
     case "chartBasis": setChartBasis(arg.basis); render(); break;
     case "benchmark": setBenchmark(arg.key); break;
+    case "pieBy": setPieBy(arg.by); render(); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
     case "toggleList": { const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value); setFilters({}); const vq = document.getElementById("valueQuery"); if (vq) { vq.focus(); vq.select(); } break; }
@@ -1489,13 +1546,13 @@ function bind() {
   document.addEventListener("mousemove", (e) => {
     const h = e.target.closest("[data-hover]");
     if (!h) return;
-    if (h.dataset.hover === "eq") eqHover(e); else if (h.dataset.hover === "mo") moHover(e); else if (h.dataset.hover === "cf") cfHover(e);
+    if (h.dataset.hover === "eq") eqHover(e); else if (h.dataset.hover === "mo") moHover(e); else if (h.dataset.hover === "cf") cfHover(e); else if (h.dataset.hover === "pie") pieHover(e);
   });
   document.addEventListener("mouseout", (e) => {
     const h = e.target.closest("[data-hover]");
     if (!h) return;
     if (e.relatedTarget && h.contains(e.relatedTarget)) return;
-    if (h.dataset.hover === "eq") eqLeave(); else if (h.dataset.hover === "mo") moLeave(); else if (h.dataset.hover === "cf") cfLeave();
+    if (h.dataset.hover === "eq") eqLeave(); else if (h.dataset.hover === "mo") moLeave(); else if (h.dataset.hover === "cf") cfLeave(); else if (h.dataset.hover === "pie") pieLeave();
   });
   const _scrollTimers = new WeakMap();
   document.addEventListener("scroll", (e) => {
