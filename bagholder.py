@@ -3018,10 +3018,6 @@ def ledger_path():
     return Path(__file__).resolve().parent / "ledger.html"
 
 
-def ledger2_path():
-    return Path(__file__).resolve().parent / "ledger2.html"
-
-
 def _payer_symbols():
     try:
         return model.payer_symbols()
@@ -3158,7 +3154,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
-        if path in ("/legacy", "/legacy/", "/ledger.html"):
+        if path in ("/", "/index.html", "/ledger.html", "/v2", "/v2/"):
             if not self._gate():
                 self._send(403, {"ok": False})
                 return
@@ -3167,18 +3163,6 @@ class Handler(BaseHTTPRequestHandler):
                 data = p.read_bytes()
             except OSError:
                 self._send(404, {"ok": False, "error": "ledger.html missing"})
-                return
-            self._send(200, data, "text/html; charset=utf-8")
-            return
-        if path in ("/", "/index.html", "/v2", "/v2/", "/ledger2.html"):
-            if not self._gate():
-                self._send(403, {"ok": False})
-                return
-            p = ledger2_path()
-            try:
-                data = p.read_bytes()
-            except OSError:
-                self._send(404, {"ok": False, "error": "ledger2.html missing"})
                 return
             self._send(200, data, "text/html; charset=utf-8")
             return

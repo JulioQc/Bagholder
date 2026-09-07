@@ -1359,7 +1359,7 @@ class ServerTest(unittest.TestCase):
         payload = json.loads(data.decode("utf-8"))
         self.assertEqual(payload["kpi"]["count"], 0)
         self.assertEqual(payload["activityCount"], 0)
-        html = bagholder.ledger2_path().read_text(encoding="utf-8")
+        html = bagholder.ledger_path().read_text(encoding="utf-8")
         self.assertIn("/api/data/clear", html)
         self.assertIn("Clear data", html)
 
@@ -1390,18 +1390,17 @@ class ServerTest(unittest.TestCase):
         self.assertTrue(json.loads(body.decode("utf-8"))["watching"])
         status, out = self._post("/api/watch/clear", {})
         self.assertFalse(out["watching"])
-        html = bagholder.ledger2_path().read_text(encoding="utf-8")
+        html = bagholder.ledger_path().read_text(encoding="utf-8")
         for needle in ("/api/import", "/api/watch", "Add trade", "Load folder"):
             self.assertIn(needle, html)
 
-    def test_root_serves_v2_and_legacy_keeps_the_classic_page(self):
+    def test_root_serves_the_page(self):
         status, body = self._get("/")
         self.assertEqual(status, 200)
         self.assertIn(b"/api/model", body)
-        self.assertNotIn(b"ledger.navByAccount.v1", body)
-        status, body = self._get("/legacy")
+        status, body = self._get("/v2")
         self.assertEqual(status, 200)
-        self.assertIn(b"ledger.navByAccount.v1", body)
+        self.assertIn(b"/api/model", body)
 
 
 if __name__ == "__main__":

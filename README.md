@@ -59,4 +59,4 @@ Market data the app needs but Wealthsimple does not provide is fetched over HTTP
 python3 -m unittest test_store test_model
 ```
 
-The derived numbers are computed in `model.py` and served as one JSON document at `GET /api/model`. The previous interface is still available at `http://127.0.0.1:8765/legacy`.
+The derived numbers are computed in `model.py` and served as one JSON document at `GET /api/model`; `ledger.html` renders them.
