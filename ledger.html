@@ -835,7 +835,7 @@ function gradeCardHtml(m) {
   const peak = Math.max.apply(null, g.buckets.map((b) => Math.abs(b.pnl)).concat([1]));
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column"><h5>Grade vs P&amp;L</h5><div class="muted" style="font-size:11px;margin-bottom:14px">Realized P&amp;L by the grade you gave the trade</div>' +
     '<div style="position:relative;flex:1;min-height:120px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:end">' +
-    g.buckets.map((b) => '<div data-act="gradeOpen" data-arg=\'' + attr({ grade: b.grade }) + '" style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px;height:100%;border-radius:4px;cursor:pointer" class="bar-col">' +
+    g.buckets.map((b) => '<div data-act="gradeOpen" data-arg=\'' + attr({ grade: b.grade }) + "' style=\"display:flex;flex-direction:column;justify-content:flex-end;gap:6px;height:100%;border-radius:4px;cursor:pointer\" class=\"bar-col\">" +
       '<span class="tab" style="font-size:11px;text-align:center;color:' + (b.n === 0 ? "rgba(var(--ink-rgb),.45)" : color(b.pnl)) + '">' + (b.n ? shortMoney(b.pnl) : "—") + "</span>" +
       '<div style="height:' + (b.n === 0 ? 0 : Math.max(3, Math.abs(b.pnl) / peak * 100).toFixed(1)) + "%;background:" + color(b.pnl) + ';border-radius:3px 3px 0 0"></div></div>').join("") + "</div>" +
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6px;font-size:10px;color:var(--ink55);text-align:center">' + g.buckets.map((b) => "<span>" + b.grade + " · " + b.n + "</span>").join("") + "</div></div>";
@@ -846,7 +846,7 @@ function bySymbolCardHtml(m) {
   const rows = sortRows(m.bySymbol || [], s.key, s.dir, (r, k) => r[k]);
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px"><h5>By symbol</h5></div>' +
     '<div class="scroll" style="flex:1;min-height:0"><table class="table"><thead><tr>' + th("bySymbol", cols) + "</tr></thead><tbody>" +
-    rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="symbolOpen" data-arg=\'' + attr({ symbol: r.symbol }) + '"><td style="font-weight:500;font-variant-numeric:normal">' + esc(r.symbol) + '</td><td style="text-align:right" class="' + cls(r.pnl) + '">' + money(r.pnl) + '</td><td style="text-align:right">' + r.n + '</td><td style="text-align:right">' + pctPlain(r.winRate) + '</td><td style="text-align:right" class="dim">' + hold(r.avgHold) + "</td></tr>").join("") +
+    rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="symbolOpen" data-arg=\'' + attr({ symbol: r.symbol }) + "'><td style=\"font-weight:500;font-variant-numeric:normal\">" + esc(r.symbol) + '</td><td style="text-align:right" class="' + cls(r.pnl) + '">' + money(r.pnl) + '</td><td style="text-align:right">' + r.n + '</td><td style="text-align:right">' + pctPlain(r.winRate) + '</td><td style="text-align:right" class="dim">' + hold(r.avgHold) + "</td></tr>").join("") +
     "</tbody></table></div></div>";
 }
 function queueCardHtml(m) {
