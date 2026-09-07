@@ -281,7 +281,7 @@ function loadModel() {
       state.loadError = "";
       state.model = m;
       if (m.status) applyStatus(m.status);
-      if (state.sel && !tradeById(state.sel)) state.sel = null;
+      if (state.sel && !tradeById(state.sel)) { state.sel = null; if (state.page === "trades") history.replaceState(null, "", "#trades"); }
       if (state.posSel && !positionById(state.posSel)) state.posSel = null;
       render();
     })
@@ -289,7 +289,7 @@ function loadModel() {
 }
 function setFilters(patch) {
   Object.assign(state.filters, patch);
-  state.sel = null;
+  if (state.sel) { state.sel = null; if (state.page === "trades") history.replaceState(null, "", "#trades"); }
   loadModel();
 }
 function applyStatus(st) {
@@ -914,6 +914,23 @@ function renderHeaderOnly() {
   tmp.innerHTML = headerHtml();
   hdr.replaceWith(tmp.firstElementChild);
 }
+const PAGES = ["dashboard", "trades", "positions", "cashflow"];
+function hashState() {
+  const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
+  const parts = raw.split("/");
+  const page = PAGES.indexOf(parts[0]) >= 0 ? parts[0] : "dashboard";
+  return { page, sel: page === "trades" && parts.length > 1 ? parts.slice(1).join("/") : null };
+}
+function applyHash() {
+  const h = hashState();
+  if (h.page === state.page && (h.sel || null) === (state.sel || null)) return;
+  state.page = h.page;
+  state.sel = h.sel && state.model && tradeById(h.sel) ? h.sel : (h.sel ? h.sel : null);
+  state.picker = null;
+  state.menuOpen = false;
+  state.tagDraft = "";
+  render();
+}
 function go(page) {
   state.page = page;
   state.picker = null;
@@ -927,7 +944,7 @@ function openTrade(id) {
   state.tagDraft = "";
   state.page = "trades";
   state.picker = null;
-  location.hash = "trades";
+  location.hash = "trades/" + encodeURIComponent(id);
   render();
   window.scrollTo(0, 0);
 }
@@ -1028,7 +1045,7 @@ function act(name, arg, ev) {
     case "removeTag": { const t = tradeById(arg.id); if (!t) break; saveJournal(arg.id, { tags: (t.tags || []).filter((x) => x !== arg.tag) }); render(); break; }
     case "addTag": { const t = tradeById(arg.id); if (!t) break; _tagPick = true; if ((t.tags || []).indexOf(arg.tag) < 0) saveJournal(arg.id, { tags: (t.tags || []).concat([arg.tag]) }); state.tagDraft = ""; render(); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); _tagPick = false; break; }
     case "focusTag": { const ti = document.getElementById("tagInput"); if (ti) ti.focus(); break; }
-    case "symbolOpen": { const r = (state.model.bySymbol || []).find((x) => x.symbol === arg.symbol); if (!r) break; if (r.tradeIds.length === 1) { openTrade(r.tradeIds[0]); break; } f.lists.symbol = [arg.symbol]; state.page = "trades"; location.hash = "trades"; setFilters({}); break; }
+    case "symbolOpen": { const r = (state.model.bySymbol || []).find((x) => x.symbol === arg.symbol); if (!r) break; if (r.tradeIds.length === 1) { openTrade(r.tradeIds[0]); break; } f.lists.symbol = [arg.symbol]; state.page = "trades"; state.sel = null; location.hash = "trades"; setFilters({}); break; }
     case "monthOpen": { const b = state.model.monthly[arg.i]; if (!b) break; if (b.tradeIds.length === 1) { openTrade(b.tradeIds[0]); break; } const y = +b.key.slice(0, 4), mo = +b.key.slice(5, 7); const last = new Date(y, mo, 0).getDate(); state.page = "trades"; location.hash = "trades"; setFilters({ preset: "all", years: [], from: b.key + "-01", to: b.key + "-" + String(last).padStart(2, "0") }); break; }
     case "gradeOpen": { const b = state.model.grades.buckets.find((x) => x.grade === arg.grade); if (!b || !b.n) break; if (b.n === 1) { openTrade(b.tradeIds[0]); break; } f.lists.grade = [arg.grade]; state.page = "trades"; location.hash = "trades"; setFilters({}); break; }
   }
@@ -1068,7 +1085,7 @@ function bind() {
     if (el) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(el.dataset.arg || "{}"); } catch (err) {} act(el.dataset.act, arg, e); }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { if (state.dataOpen) { state.dataOpen = false; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { state.sel = null; render(); } return; }
+    if (e.key === "Escape") { if (state.dataOpen) { state.dataOpen = false; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); } return; }
     if (e.target && e.target.id === "tagInput") {
       const matches = tagMatches();
       if (e.key === "Backspace" && e.target.value === "") { const t = tradeById(e.target.dataset.id); if (t && t.tags && t.tags.length) { e.preventDefault(); act("removeTag", { id: t.id, tag: t.tags[t.tags.length - 1] }); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); } return; }
@@ -1122,13 +1139,14 @@ function bind() {
     clearTimeout(_scrollTimers.get(el));
     _scrollTimers.set(el, setTimeout(() => el.classList.remove("scrolling"), 700));
   }, true);
-  window.addEventListener("hashchange", () => { const p = location.hash.replace("#", ""); if (["dashboard", "trades", "positions", "cashflow"].indexOf(p) >= 0 && p !== state.page) { state.page = p; if (p !== "trades") state.sel = null; render(); } });
+  window.addEventListener("hashchange", applyHash);
   setInterval(() => { if (!state.status.syncing) renderHeaderOnly(); }, 60000);
 }
 function boot() {
   try { const s = JSON.parse(localStorage.getItem("bh2.sort") || "null"); if (s) Object.keys(state.sort).forEach((k) => { if (s[k] && s[k].key) state.sort[k] = s[k]; }); } catch (e) {}
-  const p = location.hash.replace("#", "");
-  if (["dashboard", "trades", "positions", "cashflow"].indexOf(p) >= 0) state.page = p;
+  const h = hashState();
+  state.page = h.page;
+  state.sel = h.sel;
   bind();
   render();
   loadModel();
