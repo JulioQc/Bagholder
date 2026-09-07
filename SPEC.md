@@ -173,7 +173,7 @@ Intraday bars and execution times are shown in the viewer's local time.
 
 **Bar archive.** The sources keep bars for a limited time, so the app keeps its own. A background sweep fetches the hourly and four-hour bars of every instrument traded or held in the past year, and the daily bars of those whose source forgets them (Cboe Canada, CoinGecko), a dozen instruments per pass with passes back to back while there is a backlog and every five minutes once there is none, and tops each one up once a day from its last stored bar. A chart request never waits on this: when the bars it wants are not stored yet it shows the daily chart and switches on its own once they are. Bars once stored are never dropped, so a trade keeps its intraday chart however old it gets. The only trades without intraday bars are those already older than the source's reach when the app first saw them.
 
-The TradingView credit the library's licence requires is the "Charts by TradingView" line at the foot of the menu, not a logo on the chart.
+The TradingView credit the library's licence requires is the library's own small logo in the chart's bottom-left corner, nothing in the menu.
 
 Bars are cached in the database. Closed days are written once and never rewritten; the newest day may be replaced. A span reaching the present is refetched once its copy is 20 hours old.
 

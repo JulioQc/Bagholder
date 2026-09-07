@@ -93,6 +93,7 @@ textarea.input{resize:none;line-height:1.5}
 .pill{cursor:pointer;border:0;font:400 11.5px Inter,system-ui,sans-serif;padding:4px 0;border-radius:6px;background:rgba(var(--ink-rgb),.06);color:rgba(var(--ink-rgb),.7);font-variant-numeric:tabular-nums}
 .pill:hover{background:rgba(var(--ink-rgb),.18)}
 .pill.on{background:var(--accent-900);color:var(--accent-300)}
+#tradeChart a[href*="tradingview.com"]{left:0!important}
 
 .menu{position:absolute;top:42px;right:0;z-index:5;width:max-content;min-width:170px;background:var(--surface);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:1px;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
 .menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;border:0;cursor:pointer;color:rgba(var(--ink-rgb),.85);font:400 13px Inter,system-ui,sans-serif;padding:7px 9px;border-radius:6px}
@@ -467,7 +468,7 @@ function menuHtml() {
     '<div class="sep"></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px 4px"><span class="lbl" style="margin-right:auto">Theme</span>' +
     THEMES.map((t) => '<button class="pill' + (state.theme === t[0] ? " on" : "") + '" data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "' style=\"padding:3px 9px;font-size:11.5px;width:auto\">" + t[1] + "</button>").join("") + "</div>" +
     (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
-    '<div class="sep"></div><div style="display:flex;justify-content:space-between;gap:10px;font-size:10.5px;padding:4px 9px 2px;color:var(--ink55)"><span>Bagholder ' + esc(state.status.version ? "v" + state.status.version : "") + '</span><a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink55)">Charts by TradingView</a></div>' +
+    '<div class="sep"></div><div style="font-size:10.5px;padding:4px 9px 2px;color:var(--ink55)">Bagholder ' + esc(state.status.version ? "v" + state.status.version : "") + "</div>" +
     "</div>";
 }
 function dataDialogHtml() {
@@ -1002,7 +1003,7 @@ function drawTradeChart(host, t, h, tf, c, LW, provisional) {
     const candles = bars.length > 0 && bars.every((b) => b.open != null && b.high != null && b.low != null);
     const chart = LW.createChart(host, {
       autoSize: true,
-      layout: { background: { type: "solid", color: "transparent" }, textColor: c.text, fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: false },
+      layout: { background: { type: "solid", color: "transparent" }, textColor: c.text, fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: true },
       grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
       rightPriceScale: { borderColor: c.grid },
       timeScale: { borderColor: c.grid, timeVisible: step > 0 || !bars.length, secondsVisible: false },
