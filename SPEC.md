@@ -92,7 +92,7 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 
 Each declared record carries its own fetch stamp, separate from the quote's, so the quote loop keeping a price fresh never makes the fund's distribution history look fresh.
 
-A USD transaction is converted at the Bank of Canada rate for its own date, looked up from that table when the model is built. The table is append-only, so a transaction's CAD value never changes once its day's rate is in. Until the Bank publishes a day's rate, at 16:30 Eastern, a transaction dated that day uses the latest earlier rate.
+A USD transaction is converted at the Bank of Canada rate for its own date, looked up from that table when the model is built. The table is append-only, so a transaction's CAD value never changes once its day's rate is in. The Bank publishes a day's rate at 16:30 Eastern; the hourly check fetches it as soon as it is out, so a USD trade made during the day is converted at its own day's rate from that afternoon. Before that it uses the latest earlier rate.
 
 ### Freshness of what is on the page
 

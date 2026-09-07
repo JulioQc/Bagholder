@@ -1228,6 +1228,17 @@ class MarketParseTest(unittest.TestCase):
                 with mock.patch.object(market, "_get_text", side_effect=[boc, fred]), mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
                     out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(hours=25))
                 self.assertEqual(f.call_count, 1)
+                # Tuesday 2026-09-08 at 16:00 Eastern: the Bank has not published, and the
+                # attempt is fresh, so nothing is fetched; at 16:45 Eastern today's rate is
+                # missing from the table and is fetched at once.
+                store.set_meta("market_attempt_at", "2026-09-08T19:50:00Z")
+                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs):
+                    market.refresh_periodic(symbols=syms, now=datetime(2026, 9, 8, 20, 0, tzinfo=timezone.utc))
+                self.assertEqual(g.call_count, 0)
+                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs):
+                    market.refresh_periodic(symbols=syms, now=datetime(2026, 9, 8, 20, 45, tzinfo=timezone.utc))
+                self.assertEqual(g.call_count, 2)
+                self.assertFalse(market.fx_day_published_but_missing(datetime(2026, 9, 12, 21, 0, tzinfo=timezone.utc)), "Saturday: nothing to publish")
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 

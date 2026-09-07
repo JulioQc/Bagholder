@@ -17,6 +17,7 @@ import re
 import ssl
 import threading
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from urllib.request import Request, urlopen
 
 import store
@@ -545,6 +546,20 @@ def refresh_all(ssl_context=None, symbols=None):
             _refreshing = False
 
 
+BOC_PUBLISH_ET = (16, 30)
+
+
+def fx_day_published_but_missing(now=None):
+    """True once the Bank of Canada has published today's rate (16:30 Eastern on a
+    weekday) and the stored table does not have it yet, so a trade made today is
+    converted at its own day's rate the same afternoon."""
+    now = now or datetime.now(timezone.utc)
+    et = now.astimezone(ZoneInfo("America/Toronto"))
+    if et.weekday() > 4 or (et.hour, et.minute) < BOC_PUBLISH_ET:
+        return False
+    return (store.fx_last_date() or "") < et.date().isoformat()
+
+
 def refresh_periodic(ssl_context=None, symbols=None, now=None):
     """What the background loop runs every few minutes: USD/CAD and the
     S&P 500 at most every MARKET_ATTEMPT_HOURS, and the declared distribution
@@ -563,7 +578,7 @@ def refresh_periodic(ssl_context=None, symbols=None, now=None):
             age = now - datetime.fromisoformat(last.replace("Z", "+00:00")) if last else None
         except ValueError:
             age = None
-        if age is None or age > timedelta(hours=MARKET_ATTEMPT_HOURS):
+        if age is None or age > timedelta(hours=MARKET_ATTEMPT_HOURS) or fx_day_published_but_missing(now):
             store.set_meta("market_attempt_at", now.strftime("%Y-%m-%dT%H:%M:%SZ"))
             out["fx"] = refresh_fx(ssl_context)
             out["benchmark"] = refresh_benchmark(ssl_context)
