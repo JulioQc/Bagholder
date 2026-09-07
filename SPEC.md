@@ -96,7 +96,7 @@ A USD transaction is converted at the Bank of Canada rate for its own date, look
 
 ### Freshness of what is on the page
 
-The page polls the server every 30 seconds and reloads its model whenever the data version changes, which any new activity, NAV point, FX rate, benchmark close, distribution or quote does. The reload is deferred until the next page change while a trade is open or a note is being typed, so nothing is overwritten under the user. After a sync the reload is immediate.
+The page polls the server every 30 seconds and, whenever the data version changes, which any new activity, NAV point, FX rate, benchmark close, distribution or quote does, fetches the current model and redraws in place. The browser never navigates or reloads: window and table scroll positions, the open position panel and the filter popover all stay where they were. The redraw is deferred until the next page change while a trade is open or a note is being typed, so nothing is overwritten under the user.
 
 | Value | Feeds from | Fresh within |
 |---|---|---|

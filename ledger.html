@@ -1084,8 +1084,12 @@ function render() {
   const root = document.getElementById("app");
   const scrollY = window.scrollY;
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { _keptScroll[el.dataset.keepScroll] = { top: el.scrollTop, left: el.scrollLeft }; });
+  // Every other scrolling box (tables, lists, the filter popover) keeps its place
+  // across a redraw too, matched by position in the page.
+  const boxes = [...root.querySelectorAll(".scroll, .scroll-xy")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
   root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.dataOpen ? dataDialogHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
   window.scrollTo(0, scrollY);
+  root.querySelectorAll(".scroll, .scroll-xy").forEach((el, i) => { const b = boxes[i]; if (b && !el.dataset.keepScroll) { el.scrollTop = b.top; el.scrollLeft = b.left; } });
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
   const menu = document.getElementById("tagMenu");
   if (menu) menu.innerHTML = tagMenuHtml();
