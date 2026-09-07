@@ -96,7 +96,7 @@ A USD transaction is converted at the Bank of Canada rate for its own date, look
 
 ### Versions and the update check
 
-A version is a GitHub release tagged `vMAJOR.MINOR.PATCH`; commits alone are not versions. `APP_VERSION` in `bagholder.py` is bumped in the commit a release is cut from, and the menu foot shows the running version. Once a day, and at start, the app asks GitHub for the latest release; when its tag is newer than the running version the header shows an "Update available" link to that release. The request carries nothing but the app's version in its user agent; a failed check, or no release yet, is silent.
+A version is a GitHub release tagged `vMAJOR.MINOR.PATCH`; commits alone are not versions. `APP_VERSION` in `bagholder.py` is bumped in the commit a release is cut from, and the running version is shown in the header as small muted text to the right of the Bagholder wordmark; nothing about versions appears in the menu. Once a day, and at start, the app asks GitHub for the latest release; when its tag is newer than the running version the header shows an "Update available" link to that release. The request carries nothing but the app's version in its user agent; a failed check, or no release yet, is silent.
 
 ### Freshness of what is on the page
 
@@ -173,7 +173,7 @@ Intraday bars and execution times are shown in the viewer's local time.
 
 **Bar archive.** The sources keep bars for a limited time, so the app keeps its own. A background sweep fetches the hourly and four-hour bars of every instrument traded or held in the past year, and the daily bars of those whose source forgets them (Cboe Canada, CoinGecko), a dozen instruments per pass with passes back to back while there is a backlog and every five minutes once there is none, and tops each one up once a day from its last stored bar. A chart request never waits on this: when the bars it wants are not stored yet it shows the daily chart and switches on its own once they are. Bars once stored are never dropped, so a trade keeps its intraday chart however old it gets. The only trades without intraday bars are those already older than the source's reach when the app first saw them.
 
-The TradingView credit the library's licence requires is the "Charts by TradingView" line at the foot of the menu, not a logo on the chart.
+The TradingView credit the library's licence requires is the library's own small logo in the chart's bottom-left corner, nothing in the menu.
 
 Bars are cached in the database. Closed days are written once and never rewritten; the newest day may be replaced. A span reaching the present is refetched once its copy is 20 hours old.
 
