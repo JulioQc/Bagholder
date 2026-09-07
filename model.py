@@ -2542,7 +2542,10 @@ _cache = {"version": None, "base": None}
 
 
 def base_model(force=False):
-    version = store.data_version()
+    # today's date is part of the key: YTD tiles, the current year's return and
+    # anything else measured "to today" must roll over at midnight even when
+    # nothing in the database has changed
+    version = store.data_version() + "|" + today_local()
     with _cache_lock:
         if not force and _cache["base"] is not None and _cache["version"] == version:
             return _cache["base"]
@@ -2554,7 +2557,7 @@ def base_model(force=False):
         migrated = migrate_legacy_notes(probe["closed"], snapshot.get("tradeGroups"), snapshot.get("notes"))
         if migrated:
             journal = store.save_journal(migrated)
-            version = store.data_version()
+            version = store.data_version() + "|" + today_local()
     base = build_base(snapshot, market, journal, None)
     with _cache_lock:
         _cache["version"] = version

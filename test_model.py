@@ -806,6 +806,35 @@ class ViewTest(unittest.TestCase):
         self.assertAlmostEqual(v["years"][-1]["spR"], 0.25, places=6)
         self.assertAlmostEqual(v["years"][-1]["r"], 0.20, places=6, msg="the account's own return does not depend on the index")
 
+    def test_cashflow_tiles_roll_over_with_the_calendar(self):
+        acts = [
+            buy("b1", "RDDY", 100, 5, "2025-06-01", accountType="Cashflow"),
+            act(id="d1", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2025-07-06", symbol="RDDY", currency="CAD", accountType="Cashflow"),
+            act(id="d2", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-07-06", symbol="RDDY", currency="CAD", accountType="Cashflow"),
+        ]
+        snapshot = {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
+        labels = lambda today: [t["label"] for t in model.build_view(model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today=today), {})["cashflow"]["tiles"]]
+        self.assertEqual(labels("2026-09-07"), ["2024", "2025", "2026 YTD", "All time", "Yield on cost"])
+        self.assertEqual(labels("2027-01-01"), ["2025", "2026", "2027 YTD", "All time", "Yield on cost"])
+        totals = {t["label"]: round(t["total"]) for t in model.build_view(model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2027-01-01"), {})["cashflow"]["tiles"] if "total" in t}
+        self.assertEqual((totals["2026"], totals["2027 YTD"], totals["All time"]), (20, 0, 40))
+
+    def test_model_cache_rolls_over_at_midnight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                with mock.patch.object(model, "today_local", return_value="2026-12-31"):
+                    model.invalidate()
+                    self.assertEqual(model.base_model()["today"], "2026-12-31")
+                    self.assertIs(model.base_model(), model.base_model(), "same day: the cached base is reused")
+                with mock.patch.object(model, "today_local", return_value="2027-01-01"):
+                    self.assertEqual(model.base_model()["today"], "2027-01-01", "a new day rebuilds even though no data changed")
+            finally:
+                model.invalidate()
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_filters_are_cleaned(self):
         f = model.clean_filters({"lists": {"account": ["A", 3, ""]}, "ranges": {"hold": {"op": "<", "v": "7"}}, "preset": "bogus", "years": [2025, "abcd"], "from": "2026-1-1", "to": "2026-02-01"})
         self.assertEqual(f["lists"]["account"], ["A", "3"])

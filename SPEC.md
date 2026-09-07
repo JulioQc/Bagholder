@@ -101,7 +101,7 @@ A version is a GitHub release tagged `vMAJOR.MINOR.PATCH`; commits alone are not
 
 ### Freshness of what is on the page
 
-The page polls the server every 30 seconds and, whenever the data version changes, which any new activity, NAV point, FX rate, benchmark close, distribution or quote does, fetches the current model and redraws in place. The browser never navigates or reloads: window and table scroll positions, the open position panel and the filter popover all stay where they were. The redraw is deferred until the next page change while a trade is open or a note is being typed, so nothing is overwritten under the user.
+The page polls the server every 30 seconds and, whenever the data version changes, which any new activity, NAV point, FX rate, benchmark close, distribution or quote does, and which the turn of the calendar day does too, fetches the current model and redraws in place. So year tiles, YTD and anything measured to today roll over at midnight on their own, with or without new data. The browser never navigates or reloads: window and table scroll positions, the open position panel and the filter popover all stay where they were. The redraw is deferred until the next page change while a trade is open or a note is being typed, so nothing is overwritten under the user.
 
 | Value | Feeds from | Fresh within |
 |---|---|---|
@@ -188,7 +188,7 @@ Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
 
 | Tile | Value | Subtitle |
 |---|---|---|
-| Two years ago, last year | Sum received that year | Average per paying month |
+| Two years ago, last year, by calendar year, rolling over on January 1 | Sum received that year | Average per paying month |
 | YTD | Sum received this year | Average per paying month |
 | All time | Sum received | Average per paying month |
 | Yield on cost | Annual income of all rated holdings ÷ their book cost | Received in the last twelve months, on the book cost |

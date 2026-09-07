@@ -85,6 +85,13 @@ class StoreTest(unittest.TestCase):
         store.upsert_distributions("RDDY", [{"exDate": "2026-09-30", "payDate": "2026-10-05", "amount": 0.2, "currency": "CAD"}])
         self.assertNotEqual(v1, bagholder.status_payload()["dataVersion"])
 
+    def test_status_version_changes_with_the_date_so_the_page_refetches_at_midnight(self):
+        with mock.patch.object(bagholder.model, "today_local", return_value="2026-12-31"):
+            a = bagholder.status_payload()["dataVersion"]
+        with mock.patch.object(bagholder.model, "today_local", return_value="2027-01-01"):
+            b = bagholder.status_payload()["dataVersion"]
+        self.assertNotEqual(a, b)
+
     def test_page_and_server_agree_on_the_protocol_stamp(self):
         page = (bagholder.ledger_path()).read_text(encoding="utf-8")
         m = re.search(r'const PROTOCOL = "([^"]+)"', page)
