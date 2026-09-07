@@ -3061,8 +3061,15 @@ def refresh_periodic_market():
 
 
 def quote_loop():
+    """Prices, every QUOTE_REFRESH_MINUTES."""
     while not _stop.wait(60 * market.QUOTE_REFRESH_MINUTES):
         refresh_quotes()
+
+
+def market_loop():
+    """Declared distributions (20-hour records), USD/CAD and the S&P 500 (6 hours),
+    checked once an hour on their own clock, apart from prices."""
+    while not _stop.wait(60 * market.MARKET_CHECK_MINUTES):
         refresh_periodic_market()
 
 
@@ -3451,6 +3458,7 @@ def main():
     t.start()
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
+    threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()
     url = "http://127.0.0.1:%s" % port
     print("Bagholder  %s" % url, flush=True)

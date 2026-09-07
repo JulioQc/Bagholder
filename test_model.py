@@ -972,8 +972,8 @@ class QuoteTest(unittest.TestCase):
                     self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 0, tzinfo=timezone.utc)), 3)
                     self.assertEqual([x.args[0] for x in f.call_args_list], ["VEQT", "LUNR:US"])
                     self.assertEqual([x.args[0] for x in c.call_args_list], ["HBIX"])
-                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 5, tzinfo=timezone.utc)), 0)
-                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 20, tzinfo=timezone.utc)), 3)
+                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 0, 30, tzinfo=timezone.utc)), 0)
+                    self.assertEqual(market.refresh_quotes(syms, now=datetime(2026, 9, 6, 14, 2, tzinfo=timezone.utc)), 3)
                 self.assertEqual(store.quotes()["HBIX"]["price"], 6.76)
                 q = store.quotes()["LUNR"]
                 self.assertEqual(q["price"], 10.0)

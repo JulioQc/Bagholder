@@ -29,7 +29,8 @@ TMX_QUOTE_QUERY = (
     "query getQuoteBySymbol($symbol: String, $locale: String) { getQuoteBySymbol(symbol: $symbol, locale: $locale) "
     "{ symbol name price priceChange percentChange prevClose currency dividendFrequency dividendYield dividendAmount exDividendDate } }"
 )
-QUOTE_REFRESH_MINUTES = 15
+QUOTE_REFRESH_MINUTES = 1
+MARKET_CHECK_MINUTES = 60
 US_EXCHANGES = ("NASDAQ", "NYSE", "NYSE AMERICAN", "NYSE ARCA", "BATS", "AMEX", "ARCA", "CBOE", "IEX")
 TMX_DIVIDENDS_QUERY = (
     "query getDividendsForSymbol($symbol: String!, $page: Int, $batch: Int) { dividends: getDividendsForSymbol("

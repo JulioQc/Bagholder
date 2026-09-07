@@ -50,7 +50,7 @@ An open position is the lots still held in one account, symbol, currency and dir
 | Qty | Units held |
 | Avg cost | Cost ÷ (qty × multiplier) |
 | Book | Sum of lot qty × price × multiplier |
-| Price | Live quote, refreshed every 15 minutes while the app runs: TMX Money or Cboe Canada for shares and ETFs, Coinbase for crypto in the position's currency, and for a US-listed option the bid/ask midpoint while both are quoted, else its last trade, else its previous close. Otherwise the last fill price in the history, and the Price cell says so |
+| Price | Live quote, refreshed every minute while the app runs: TMX Money or Cboe Canada for shares and ETFs, Coinbase for crypto in the position's currency, and for a US-listed option the bid/ask midpoint while both are quoted, else its last trade, else its previous close. Otherwise the last fill price in the history, and the Price cell says so |
 | Market | Qty × Price × multiplier |
 | P&L | Market − Book for longs, Book − Market for shorts, with the percentage over Book |
 | Hold | Quantity-weighted days since each lot was opened |
@@ -81,13 +81,13 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 
 | Source | Data | Refresh |
 |---|---|---|
-| Bank of Canada Valet | USD/CAD daily | At start, after every sync, and every 6 hours while running |
-| FRED (Stooq fallback) | S&P 500 daily close | At start, after every sync, and every 6 hours while running |
-| TMX Money | Quotes for held shares and ETFs on TSX, TSX-V, CSE and US exchanges | Every 15 minutes while running |
-| Cboe Canada (cboe.com) | Quotes for held shares and ETFs listed on Cboe Canada | Every 15 minutes while running |
-| Coinbase | Spot price of each held crypto asset, in the currency the position is booked in | Every 15 minutes while running |
-| Cboe (delayed chains) | Bid, ask, last trade and previous close of each held US-listed option contract | Every 15 minutes while running |
-| TMX Money | Declared distribution record of every Canadian-listed dividend payer | Refetched once its stored copy is older than 20 hours, checked every 15 minutes, and after every sync |
+| Bank of Canada Valet | USD/CAD daily | At start, after every sync, and every 6 hours while running, on an hourly check |
+| FRED (Stooq fallback) | S&P 500 daily close | At start, after every sync, and every 6 hours while running, on an hourly check |
+| TMX Money | Quotes for held shares and ETFs on TSX, TSX-V, CSE and US exchanges | Every minute while running |
+| Cboe Canada (cboe.com) | Quotes for held shares and ETFs listed on Cboe Canada | Every minute while running |
+| Coinbase | Spot price of each held crypto asset, in the currency the position is booked in | Every minute while running |
+| Cboe (delayed chains) | Bid, ask, last trade and previous close of each held US-listed option contract | Every minute while running |
+| TMX Money | Declared distribution record of every Canadian-listed dividend payer | Refetched once its stored copy is older than 20 hours; the check runs hourly and after every sync |
 | Wealthsimple | Activities, balances, accounts, NAV history | Full sync once, then incremental, automatically on weekdays after 2 PM Mountain while running; the session is refreshed without a new sign-in |
 
 Each declared record carries its own fetch stamp, separate from the quote's, so the quote loop keeping a price fresh never makes the fund's distribution history look fresh.
@@ -100,7 +100,7 @@ The page polls the server every 30 seconds and reloads its model whenever the da
 |---|---|---|
 | Trades, executions, journal, dashboard tiles and cards, distribution history, YTD and All time income | Wealthsimple activities and NAV, converted with BoC rates | The next sync: weekdays after 2 PM Mountain, or Sync now |
 | Annualized returns vs S&P 500, drawdown | NAV from sync; S&P 500 from FRED | Sync for NAV; 6 hours for the index |
-| Position Price, Market, P&L, Allocation; Cashflow Market and Current yield | Live quote | 15 minutes for shares, ETFs, crypto and US-listed options |
+| Position Price, Market, P&L, Allocation; Cashflow Market and Current yield | Live quote | One minute for shares, ETFs, crypto and US-listed options |
 | Cashflow Distribution, Projected, Yield on cost, Current yield | Declared record from TMX | 20 hours, or the next sync, whichever comes first |
 
 Every instrument Wealthsimple offers has a live price source. A Cboe Canada listing has a live price but no declared distribution record on TMX, so its distribution rate comes from the payments received.
