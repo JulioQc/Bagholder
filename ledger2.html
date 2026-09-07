@@ -163,7 +163,7 @@ const FIELDS = [
   { key: "account", label: "Account", kind: "list", opt: "accounts" },
   { key: "symbol", label: "Symbol", kind: "list", opt: "symbols", search: true },
   { key: "grade", label: "Grade", kind: "list", opt: "grades" },
-  { key: "tag", label: "Tag", kind: "list", opt: "tags" },
+  { key: "tag", label: "Tag", kind: "list", opt: "tags", search: true },
   { key: "side", label: "Side", kind: "list", opt: "sides" },
   { key: "kind", label: "Kind", kind: "list", opt: "kinds" },
   { key: "exchange", label: "Exchange", kind: "list", opt: "exchanges" },
@@ -1044,7 +1044,7 @@ function act(name, arg, ev) {
     case "clearPos": state.posSel = null; render(); break;
     case "sort": { const s = state.sort[arg.table]; if (s.key === arg.key) s.dir = s.dir === "desc" ? "asc" : "desc"; else { s.key = arg.key; s.dir = "desc"; } try { localStorage.setItem("bh2.sort", JSON.stringify(state.sort)); } catch (e) {} render(); break; }
     case "openFields": state.picker = state.picker === "fields" ? null : "fields"; state.menuOpen = false; render(); if (state.picker) { const si = document.getElementById("searchInput"); if (si && f.search) si.focus(); } break;
-    case "pickField": state.picker = arg.key; state.valueQuery = ""; render(); if (state.picker === "symbol") { const vq = document.getElementById("valueQuery"); if (vq) vq.focus(); } break;
+    case "pickField": state.picker = arg.key; state.valueQuery = ""; render(); { const vq = document.getElementById("valueQuery"); if (vq) vq.focus(); } break;
     case "closeFilter": state.picker = null; render(); break;
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
