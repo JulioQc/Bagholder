@@ -335,11 +335,11 @@ class RoundTripTest(unittest.TestCase):
         self.assertEqual(t["closed"]["fills"], 2)
         self.assertEqual(t["side"], "SELL")
 
-    def test_partial_exit_is_an_open_trade_with_stable_id(self):
+    def test_partial_exit_is_a_closed_trade_with_stable_id(self):
         acts = [buy("b1", "AAA", 100, 10, "2026-01-01"), sell("s1", "AAA", 40, 12, "2026-01-10")]
         trades = self._trades(acts)
         self.assertEqual(len(trades), 1)
-        self.assertEqual(trades[0]["status"], "open")
+        self.assertEqual(trades[0]["status"], "closed")
         self.assertEqual(trades[0]["id"], "rt:b1")
         self.assertEqual(trades[0]["qty"], 40)
         acts.append(sell("s2", "AAA", 60, 15, "2026-02-01"))

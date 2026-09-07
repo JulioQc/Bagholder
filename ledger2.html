@@ -483,7 +483,7 @@ function kpiHtml(m) {
   const pf = k.profitFactorInfinite ? "∞" : k.profitFactor == null ? "—" : k.profitFactor.toFixed(2);
   const tile = (label, value, sub, vcls) => '<div class="card elev-sm kpi"><div class="lbl">' + label + '</div><div class="v ' + (vcls || "") + '">' + value + '</div><div class="s">' + sub + "</div></div>";
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px">' +
-    tile("Realized P&amp;L", money(k.realized), k.count + (k.count === 1 ? " trade" : " trades") + (k.openCount ? " · " + k.openCount + " open" : "") + " · CAD", cls(k.realized)) +
+    tile("Realized P&amp;L", money(k.realized), k.count + (k.count === 1 ? " trade" : " trades") + " · CAD", cls(k.realized)) +
     tile("Win rate", k.winRate == null ? "—" : pctPlain(k.winRate), k.wins + " W · " + k.losses + " L" + (k.breakeven ? " · " + k.breakeven + " BE" : "")) +
     tile("Profit factor", pf, "W " + money0(k.grossWin) + " · L " + money0(k.grossLoss)) +
     tile("Expectancy", k.expectancy == null ? "—" : money(k.expectancy), "avg W " + money0(k.avgWin) + " · L " + money0(k.avgLoss)) +
@@ -668,7 +668,7 @@ function tradesTableHtml(m) {
   return '<div class="card elev-sm" style="min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Trades</h5></div>' +
     '<div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:760px"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
     rows.map((t) => '<tr class="tab" style="cursor:pointer" data-act="selectTrade" data-arg=\'' + attr({ id: t.id }) + "'>" +
-      '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + (t.status === "open" ? ' <span title="Position still open; realized legs so far" style="font-size:9px;letter-spacing:.06em;color:var(--accent-300);background:var(--accent-900);border-radius:4px;padding:1px 4px;vertical-align:middle">OPEN</span>' : "") + "</td>" +
+      '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + "</td>" +
       '<td title="' + esc(t.symbol) + '" style="font-weight:500;font-variant-numeric:normal;max-width:186px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.symbol) + "</td>" +
       '<td class="dim" style="font-variant-numeric:normal">' + esc(t.currency) + '</td><td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + "</td>" +
       '<td style="text-align:right;font-weight:500;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</td><td style="text-align:right;color:' + color(t.pnl) + '">' + pct(t.pnlPct) + "</td>" +
@@ -727,7 +727,7 @@ function tradeDetailHtml(t, m) {
   const known = ((m.options && m.options.tags) || []).filter((x) => (t.tags || []).indexOf(x) < 0);
   const flagsLine = (t.flags || []).map((f) => f === "assumed-expiry" ? "Expiry assumed at $0 (no expiry row from Wealthsimple)" : f === "rolled" ? "Rolled: the covered contract's P&L is folded into this basis" : f === "reward" ? "Includes staking-reward units at $0 cost" : f === "transfer" ? "Includes crypto transfer legs valued at Wealthsimple's price" : "").filter(Boolean);
   return '<div style="display:flex;flex-direction:column;gap:14px">' +
-    '<div class="card elev-sm" style="padding:16px 18px 12px"><div style="display:flex;align-items:flex-start;gap:14px;margin:0 0 14px"><div style="min-width:0"><h4>' + esc(t.symbol) + '</h4><div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(t.name || t.symbol) + (t.exchange ? " · " + esc(t.exchange) : "") + (t.status === "open" ? ' · <span style="color:var(--accent-300)">position still open</span>' : "") + "</div>" +
+    '<div class="card elev-sm" style="padding:16px 18px 12px"><div style="display:flex;align-items:flex-start;gap:14px;margin:0 0 14px"><div style="min-width:0"><h4>' + esc(t.symbol) + '</h4><div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(t.name || t.symbol) + (t.exchange ? " · " + esc(t.exchange) : "") + "</div>" +
     (flagsLine.length ? '<div class="muted" style="font-size:11px;margin-top:4px">' + flagsLine.map(esc).join(" · ") + "</div>" : "") + "</div>" +
     '<div style="margin-left:auto;text-align:right"><div class="tab" style="font-size:24px;font-weight:500;line-height:1.1;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</div><div class="tab" style="font-size:12px;color:' + color(t.pnl) + ';margin-top:2px">' + pct(t.pnlPct) + (t.currency === "USD" ? ' <span class="muted">· ' + money(t.pnlCad) + " CAD</span>" : "") + "</div></div></div>" +
     (c ? '<div class="tab"><div style="position:relative"><svg viewBox="0 0 1200 300" style="display:block;width:100%;height:auto">' +

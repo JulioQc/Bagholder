@@ -21,9 +21,8 @@ adds trades together (KPIs, monthly, by symbol, grade buckets, cashflow tiles)
 uses the CAD value converted on the fill date with the Bank of Canada rate.
 
 A "trade" is a round trip: the position goes from flat to open and back to
-flat. Partial exits are legs of the same trade. A round trip that still has
-open lots is reported with status "open" and its realized legs so far. Its id
-is stable from the first fill, so journal entries survive later exits.
+flat. Partial exits are legs of the same trade. A trade's id is stable from the first fill, so journal entries survive
+later exits; whatever is still held shows under positions.
 """
 
 from __future__ import annotations
@@ -789,7 +788,7 @@ def match_fifo(activities):
     open_lots = []
     for book in books.values():
         for lot in book:
-            if lot["qty"] <= EPS:
+            if lot["qty"] <= 1e-6:
                 continue
             open_lots.append(dict(lot))
     closed.sort(key=lambda t: (t["exitDate"], t["id"]))
@@ -1232,11 +1231,9 @@ def build_trades(closed, open_lots, saved_groups, acts_by_id, securities, journa
         by_rt[rt].append(s)
     for rt in order:
         groups.append((rt, by_rt[rt], False))
-    open_rts = {l.get("rt") for l in open_lots}
     trades = []
     for gid, members, locked in groups:
-        status = "open" if (gid in open_rts and not locked) else "closed"
-        trades.append(collapse_trade(gid, members, locked, status, acts_by_id, securities, journal))
+        trades.append(collapse_trade(gid, members, locked, "closed", acts_by_id, securities, journal))
     trades.sort(key=lambda t: (t["exitDate"], t["id"]), reverse=True)
     return trades
 
