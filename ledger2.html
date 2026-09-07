@@ -371,9 +371,7 @@ function menuHtml() {
     '<button disabled title="Coming soon">Import CSV</button>' +
     '<button data-act="openData">Clear data</button>' +
     '<button disabled title="Coming soon">Settings</button>' +
-    '<div class="sep"></div>' +
-    '<button data-act="legacy">Open classic view</button>' +
-    (s.connected ? '<button data-act="disconnect" style="color:var(--neg)">Disconnect</button>' : "") +
+    (s.connected ? '<div class="sep"></div><button data-act="disconnect" style="color:var(--neg)">Disconnect</button>' : "") +
     "</div>";
 }
 function dataDialogHtml() {
@@ -1034,7 +1032,6 @@ function act(name, arg, ev) {
     case "openData": openData(); break;
     case "closeData": state.dataOpen = false; render(); break;
     case "clearData": clearData(); break;
-    case "legacy": window.location.href = "/"; break;
     case "grade": { const t = tradeById(arg.id); if (!t) break; saveJournal(arg.id, { grade: t.grade === arg.grade ? "" : arg.grade }); render(); break; }
     case "removeTag": { const t = tradeById(arg.id); if (!t) break; saveJournal(arg.id, { tags: (t.tags || []).filter((x) => x !== arg.tag) }); render(); break; }
     case "addTag": { const t = tradeById(arg.id); if (!t) break; _tagPick = true; if ((t.tags || []).indexOf(arg.tag) < 0) saveJournal(arg.id, { tags: (t.tags || []).concat([arg.tag]) }); state.tagDraft = ""; render(); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); _tagPick = false; break; }
