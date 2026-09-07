@@ -1386,6 +1386,28 @@ class MarketParseTest(unittest.TestCase):
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
+    def test_daily_archive_keeps_bars_only_for_sources_that_forget_them(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+                recs = [
+                    {"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD", "kind": "Shares", "start": "2026-06-01"},
+                    {"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto", "start": "2026-06-01"},
+                    {"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares", "start": "2026-06-01"},
+                ]
+                bars = [{"date": "2026-06-02", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
+                with mock.patch.object(market, "fetch_history", return_value=(bars, "cboe_ca")) as f:
+                    self.assertEqual(market.archive_daily(recs, now=now), ["BTC", "HBIX"], "TMX keeps its own history")
+                    self.assertEqual(f.call_count, 2)
+                    self.assertEqual(market.archive_daily(recs, now=now), [])
+                self.assertEqual(store.price_history("HBIX")[0]["date"], "2026-06-02")
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_history_is_cached_and_closed_days_never_rewritten(self):
         from datetime import datetime, timedelta, timezone
         with tempfile.TemporaryDirectory() as tmp:

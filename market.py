@@ -938,6 +938,38 @@ def archive_intraday(recs, ssl_context=None, now=None, limit=ARCHIVE_BATCH):
     return done
 
 
+SHORT_DAILY_SOURCES = ("cboe_ca", "coingecko")
+
+
+def archive_daily(recs, ssl_context=None, now=None, limit=ARCHIVE_BATCH):
+    """Keep daily bars for instruments whose source forgets them (Cboe Canada after
+    about three months, CoinGecko after a year). TMX keeps full history itself."""
+    now = now or datetime.now(timezone.utc)
+    todo = []
+    for rec in recs or []:
+        src = history_source(rec)
+        sym = tmx_symbol(rec.get("symbol"))
+        if not src or src[0] not in SHORT_DAILY_SOURCES or not sym:
+            continue
+        last = store.history_fetch(sym)
+        age = None
+        if last:
+            try:
+                age = now - datetime.fromisoformat(last["fetchedAt"].replace("Z", "+00:00"))
+            except ValueError:
+                age = None
+        if last is None:
+            todo.append((0, sym, rec))
+        elif age is None or age > timedelta(hours=ARCHIVE_TOPUP_HOURS):
+            todo.append((1, sym, rec))
+    todo.sort(key=lambda x: (x[0], x[1]))
+    done = []
+    for _, sym, rec in todo[:limit]:
+        ensure_history(rec, rec.get("start") or now.date().isoformat(), now.date().isoformat(), ssl_context, now)
+        done.append(sym)
+    return done
+
+
 def ensure_bars(rec, tf, start, end, ssl_context=None, now=None):
     """Bars for one timeframe over a span: daily from the daily store, weekly and
     monthly aggregated from it, 1h and 4h from the intraday store."""

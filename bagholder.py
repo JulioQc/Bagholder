@@ -3071,7 +3071,8 @@ def archive_intraday_bars():
     """Keep intraday bars for everything traded or held in the past year, a few
     instruments per call so the sources are never hammered. Never raises."""
     try:
-        return market.archive_intraday(model.intraday_archive_symbols(), _ssl_context())
+        recs = model.intraday_archive_symbols()
+        return market.archive_daily(recs, _ssl_context()) + market.archive_intraday(recs, _ssl_context())
     except Exception:
         return []
 
