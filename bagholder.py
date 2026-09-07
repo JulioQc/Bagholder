@@ -3579,16 +3579,25 @@ def auto_sync_loop():
             fail_delay = TOKEN_CHECK_SEC
 
 
+def port_choices():
+    """The ports to try: BAGHOLDER_PORT when set (a second instance for testing
+    beside the live app), else the usual three."""
+    env = (os.environ.get("BAGHOLDER_PORT") or "").strip()
+    if env.isdigit() and 1024 <= int(env) <= 65535:
+        return (int(env),)
+    return PORTS
+
+
 def bind_server():
     last = None
-    for port in PORTS:
+    for port in port_choices():
         try:
             httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
             return httpd, port
         except OSError as e:
             last = e
             continue
-    raise SystemExit("Could not bind 127.0.0.1:8765-8767 (%s)" % last)
+    raise SystemExit("Could not bind 127.0.0.1:%s (%s)" % ("-".join(str(p) for p in port_choices()), last))
 
 
 def main():
