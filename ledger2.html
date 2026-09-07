@@ -614,7 +614,7 @@ function gradeCardHtml(m) {
       '<button class="btn btn-secondary" data-act="page" data-arg=\'' + attr({ page: "trades" }) + "' style=\"font-size:12px;margin-top:2px\">Open Trades</button></div></div>";
   }
   const peak = Math.max.apply(null, g.buckets.map((b) => Math.abs(b.pnl)).concat([1]));
-  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column"><h5>Grade vs P&amp;L</h5><div class="muted" style="font-size:11px;margin-bottom:14px">Realized P&amp;L by the grade you gave the trade · ' + g.ungraded + " ungraded</div>" +
+  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column"><h5>Grade vs P&amp;L</h5><div class="muted" style="font-size:11px;margin-bottom:14px">Realized P&amp;L by the grade you gave the trade</div>' +
     '<div style="position:relative;flex:1;min-height:120px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:end">' +
     g.buckets.map((b) => '<div data-act="gradeOpen" data-arg=\'' + attr({ grade: b.grade }) + "' title=\"" + esc(b.n === 0 ? "No trades" : b.n === 1 ? "Open this trade" : "Show these " + b.n + " trades") + '" style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px;height:100%;border-radius:4px;cursor:pointer" class="bar-col">' +
       '<span class="tab" style="font-size:11px;text-align:center;color:' + (b.n === 0 ? "rgba(233,233,237,.45)" : color(b.pnl)) + '">' + (b.n ? shortMoney(b.pnl) : "—") + "</span>" +
