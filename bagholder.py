@@ -3158,7 +3158,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
-        if path in ("/", "/ledger.html"):
+        if path in ("/legacy", "/legacy/", "/ledger.html"):
             if not self._gate():
                 self._send(403, {"ok": False})
                 return
@@ -3170,7 +3170,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send(200, data, "text/html; charset=utf-8")
             return
-        if path in ("/v2", "/v2/", "/ledger2.html"):
+        if path in ("/", "/index.html", "/v2", "/v2/", "/ledger2.html"):
             if not self._gate():
                 self._send(403, {"ok": False})
                 return

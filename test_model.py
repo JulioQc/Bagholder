@@ -1394,8 +1394,12 @@ class ServerTest(unittest.TestCase):
         for needle in ("/api/import", "/api/watch", "Add trade", "Load folder"):
             self.assertIn(needle, html)
 
-    def test_legacy_routes_untouched(self):
+    def test_root_serves_v2_and_legacy_keeps_the_classic_page(self):
         status, body = self._get("/")
+        self.assertEqual(status, 200)
+        self.assertIn(b"/api/model", body)
+        self.assertNotIn(b"ledger.navByAccount.v1", body)
+        status, body = self._get("/legacy")
         self.assertEqual(status, 200)
         self.assertIn(b"ledger.navByAccount.v1", body)
 
