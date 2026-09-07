@@ -207,8 +207,8 @@ Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
 | Distribution | Per-unit amount from the rate above |
 | YTD | CAD received from this symbol this calendar year |
 | All time | CAD received from this symbol ever |
-| Ex-Div | The ex-date of the next declared distribution when one is ahead, else of the last known one, shown muted. From the fund's declared record (TSX, TSX-V, CSE and Cboe Canada listings all have one on TMX); without a record, the ex-date TMX reports on the quote |
-| Pay Day | The pay date of that same distribution; without a record, the date of the last payment received. Muted when it is the last known rather than the next |
+| Ex-Div | The ex-date of the next distribution still to be paid, whether or not it has gone ex; when nothing is left to pay, of the last known one. From the fund's declared record (TSX, TSX-V, CSE and Cboe Canada listings all have one on TMX); without a record, the ex-date TMX reports on the quote. A date before today is shown muted |
+| Pay Day | The pay date of that same distribution; without a record, the date of the last payment received. A date before today is shown muted; the pay day itself is not |
 | Projected | Expected monthly income: annual income ÷ 12 |
 | Yield on cost | Per-unit amount × payments per year ÷ average cost |
 | Current yield | Per-unit amount × payments per year ÷ current price |

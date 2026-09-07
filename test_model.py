@@ -814,17 +814,28 @@ class ViewTest(unittest.TestCase):
             act(id="d2", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-08-06", symbol="HHIS", currency="CAD", accountType="Cashflow"),
             buy("b3", "HBIX", 100, 5, "2026-05-01", accountType="Cashflow"),
             act(id="d3", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-08-06", symbol="HBIX", currency="CAD", accountType="Cashflow"),
+            buy("b4", "EASY", 100, 20, "2026-05-01", accountType="Cashflow"),
+            act(id="d4", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.31, netCashAmount=31, transactionDate="2026-08-21", symbol="EASY", currency="CAD", accountType="Cashflow"),
         ]
         snapshot = {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
         market_data = {"fx": {}, "benchmark": {},
                        "distributions": {"RDDY": [{"exDate": "2026-09-30", "payDate": "2026-10-06", "amount": 0.15, "currency": "CAD"}, {"exDate": "2026-08-31", "payDate": "2026-09-04", "amount": 0.15, "currency": "CAD"}]},
                        "quotes": {"HHIS": {"price": 11.0, "exDividendDate": "2026-09-29"}, "HBIX": {"price": 6.7, "exDividendDate": "2026-08-29"}}}
         market_data["distributions"]["HHIS"] = [{"exDate": "2026-08-31", "payDate": "2026-09-04", "amount": 0.27, "currency": "CAD"}]
+        # EASY pays twice a month: gone ex on the 31st, paid on the 8th, ex again on the 15th.
+        market_data["distributions"]["EASY"] = [{"exDate": "2026-08-31", "payDate": "2026-09-08", "amount": 0.255, "currency": "CAD"}, {"exDate": "2026-09-15", "payDate": "2026-09-22", "amount": 0.255, "currency": "CAD"}]
         base = model.build_base(snapshot, market_data, {}, today="2026-09-07")
-        by = {h["symbol"]: (h["nextExDate"], h["nextPayDate"], h["exUpcoming"]) for h in model.build_view(base, {})["cashflow"]["holdings"]}
-        self.assertEqual(by["RDDY"], ("2026-09-30", "2026-10-06", True), "the declared record's next distribution, with its pay date")
-        self.assertEqual(by["HHIS"], ("2026-08-31", "2026-09-04", False), "nothing declared ahead: the last known one, marked as past")
-        self.assertEqual(by["HBIX"], ("2026-08-29", "2026-08-06", False), "no record: the quote's last ex-date and the last payment received")
+        by = {h["symbol"]: (h["nextExDate"], h["nextPayDate"], h["exPast"], h["payPast"]) for h in model.build_view(base, {})["cashflow"]["holdings"]}
+        self.assertEqual(by["RDDY"], ("2026-09-30", "2026-10-06", False, False), "the declared record's next distribution, with its pay date")
+        self.assertEqual(by["EASY"], ("2026-08-31", "2026-09-08", True, False), "gone ex but not yet paid: that distribution, not the one after it")
+        self.assertEqual(by["HHIS"], ("2026-08-31", "2026-09-04", True, True), "nothing left to pay: the last known one, both dates passed")
+        self.assertEqual(by["HBIX"], ("2026-08-29", "2026-08-06", True, True), "no record: the quote's last ex-date and the last payment received")
+        base = model.build_base(snapshot, market_data, {}, today="2026-09-08")
+        by = {h["symbol"]: (h["nextExDate"], h["nextPayDate"], h["exPast"], h["payPast"]) for h in model.build_view(base, {})["cashflow"]["holdings"]}
+        self.assertEqual(by["EASY"], ("2026-08-31", "2026-09-08", True, False), "pay day itself still counts as ahead")
+        base = model.build_base(snapshot, market_data, {}, today="2026-09-09")
+        by = {h["symbol"]: (h["nextExDate"], h["nextPayDate"], h["exPast"], h["payPast"]) for h in model.build_view(base, {})["cashflow"]["holdings"]}
+        self.assertEqual(by["EASY"], ("2026-09-15", "2026-09-22", False, False), "once paid, the next one")
 
     def test_monthly_distributions_run_to_the_current_month(self):
         acts = [
