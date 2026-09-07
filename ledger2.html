@@ -167,6 +167,10 @@ const state = {
   busy: "",
   notice: "",
   dataOpen: false,
+  modal: null,
+  importReport: null,
+  watch: null,
+  tradeForm: null,
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
@@ -397,6 +401,8 @@ const ICONS = {
   gear: "M128 80a48 48 0 1 0 48 48 48 48 0 0 0-48-48Zm0 80a32 32 0 1 1 32-32 32 32 0 0 1-32 32Zm88-29.8v-4.4l14-17.5a8 8 0 0 0 1.5-7 89 89 0 0 0-9-21.7 8 8 0 0 0-5.9-4l-22.2-2.5q-1.5-1.5-3.1-3.1L189 47.8a8 8 0 0 0-4-5.9 89 89 0 0 0-21.7-9 8 8 0 0 0-7 1.5L138.8 48h-4.4l-17.5-14a8 8 0 0 0-7-1.5 89 89 0 0 0-21.7 9 8 8 0 0 0-4 5.9l-2.5 22.2q-1.6 1.6-3.1 3.1L56.4 75.2a8 8 0 0 0-5.9 4 89 89 0 0 0-9 21.7 8 8 0 0 0 1.5 7l14 17.5v4.4l-14 17.5a8 8 0 0 0-1.5 7 89 89 0 0 0 9 21.7 8 8 0 0 0 5.9 4l22.2 2.5q1.5 1.5 3.1 3.1l2.5 22.2a8 8 0 0 0 4 5.9 89 89 0 0 0 21.7 9 8 8 0 0 0 7-1.5l17.5-14h4.4l17.5 14a8 8 0 0 0 7 1.5 89 89 0 0 0 21.7-9 8 8 0 0 0 4-5.9l2.5-22.2q1.5-1.5 3.1-3.1l22.2-2.5a8 8 0 0 0 5.9-4 89 89 0 0 0 9-21.7 8 8 0 0 0-1.5-7Z",
   link: "M137.5 118.5a8 8 0 0 1 0 11.3l-24 24a40 40 0 0 1-56.6-56.6l24-24a8 8 0 0 1 11.3 11.3l-24 24a24 24 0 0 0 34 34l24-24a8 8 0 0 1 11.3 0Zm61.6-61.6a40 40 0 0 0-56.6 0l-24 24a8 8 0 0 0 11.3 11.3l24-24a24 24 0 0 1 34 34l-24 24a8 8 0 0 0 11.3 11.3l24-24a40 40 0 0 0 0-56.6Z",
   signout: "M112 216a8 8 0 0 1-8 8H48a16 16 0 0 1-16-16V48a16 16 0 0 1 16-16h56a8 8 0 0 1 0 16H48v160h56a8 8 0 0 1 8 8Zm109.7-93.7-40-40a8 8 0 0 0-11.4 11.4L196.7 120H104a8 8 0 0 0 0 16h92.7l-26.4 26.3a8 8 0 0 0 11.4 11.4l40-40a8 8 0 0 0 0-11.4Z",
+  plus: "M224 128a8 8 0 0 1-8 8h-80v80a8 8 0 0 1-16 0v-80H40a8 8 0 0 1 0-16h80V40a8 8 0 0 1 16 0v80h80a8 8 0 0 1 8 8Z",
+  folder: "M216 72h-84.7L104 51.3A15.9 15.9 0 0 0 93.3 48H40a16 16 0 0 0-16 16v136a16 16 0 0 0 16 16h176a16 16 0 0 0 16-16V88a16 16 0 0 0-16-16Zm0 128H40V64h53.3l27.3 20.7a15.9 15.9 0 0 0 10.7 3.3H216Z",
 };
 function icon(name, opacity) {
   return '<svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor" style="flex:none;opacity:' + (opacity || ".7") + '"><path d="' + ICONS[name] + '"/></svg>';
@@ -407,8 +413,10 @@ function menuHtml() {
   return '<div class="menu elev-md">' +
     (s.connected ? item("sync", "Sync now", "sync", { cls: "primary" }) : item("link", "Connect Wealthsimple", "connect", { cls: "primary" })) +
     (s.connected ? item("key", "Refresh session", "refreshSession") : "") +
+    item("plus", "Add trade", "openTrade") +
+    item("import", "Import CSV", "importCsv") +
+    item("folder", "Load folder", "openFolder") +
     item("export", "Export trades CSV", "exportCsv") +
-    item("import", "Import CSV", null, { disabled: true }) +
     item("trash", "Clear data", "openData") +
     item("gear", "Settings", null, { disabled: true }) +
     '<div class="sep"></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px 4px"><span class="lbl" style="margin-right:auto">Theme</span>' +
@@ -422,6 +430,124 @@ function dataDialogHtml() {
     '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeData">Cancel</button><button class="btn" data-act="clearData" style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (state.busy === "clearing" ? "disabled" : "") + ">" + (state.busy === "clearing" ? "Clearing…" : "Clear data") + "</button></div></div></div>";
 }
 function openData() { state.menuOpen = false; state.dataOpen = true; render(); }
+function modalShell(title, body, width) {
+  return '<div id="modalDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="modal"><div class="card elev-md" style="width:' + (width || 440) + 'px;max-width:100%;padding:18px 20px;max-height:90vh;overflow:auto"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><h5>' + title + '</h5><button class="btn btn-icon btn-secondary" data-act="closeModal" aria-label="Close" style="margin-left:auto;width:28px;height:28px">×</button></div>' + body + "</div></div>";
+}
+function fieldHtml(label, inner) { return '<div><div class="lbl" style="margin-bottom:5px">' + label + "</div>" + inner + "</div>"; }
+function tradeModalHtml() {
+  const f = state.tradeForm;
+  const accounts = (state.model && state.model.accounts) || [];
+  const seg = (name, opts) => '<div class="seg">' + opts.map((o) => '<label class="seg-opt' + (f[name] === o ? " on" : "") + '" data-act="tradeSeg" data-arg=\'' + attr({ name, value: o }) + "'>" + o + "</label>").join("") + "</div>";
+  const body = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+    fieldHtml("Date", '<input class="input" type="date" id="tf-date" value="' + esc(f.date) + '">') +
+    fieldHtml("Account", '<select class="input" id="tf-account">' + '<option value=""' + (f.account ? "" : " selected") + ">Manual</option>" + accounts.filter((a) => a.name).map((a) => '<option value="' + esc(a.id) + '"' + (f.account === a.id ? " selected" : "") + ">" + esc(a.name) + "</option>").join("") + "</select>") +
+    fieldHtml("Symbol", '<input class="input" id="tf-symbol" value="' + esc(f.symbol) + '" placeholder="e.g. LUNR or LUNR 15JAN27 12.00 CALL" autocapitalize="characters">') +
+    fieldHtml("Side", seg("side", ["BUY", "SELL"])) +
+    fieldHtml("Quantity", '<input class="input" id="tf-qty" inputmode="decimal" value="' + esc(f.qty) + '">') +
+    fieldHtml("Price", '<input class="input" id="tf-price" inputmode="decimal" value="' + esc(f.price) + '">') +
+    fieldHtml("Currency", seg("currency", ["CAD", "USD"])) +
+    fieldHtml("Fees", '<input class="input" id="tf-fees" inputmode="decimal" value="' + esc(f.fees) + '" placeholder="0">') +
+    "</div>" +
+    (f.error ? '<div class="status-err" style="font-size:12px;margin-top:10px">' + esc(f.error) + "</div>" : "") +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-secondary" data-act="closeModal">Cancel</button><button class="btn btn-primary" data-act="saveTrade" ' + (state.busy === "trade" ? "disabled" : "") + ">" + (state.busy === "trade" ? "Saving…" : "Add trade") + "</button></div>";
+  return modalShell("Add trade", body, 460);
+}
+function importModalHtml() {
+  const r = state.importReport;
+  if (!r) return modalShell("Import CSV", '<div class="muted" style="padding:16px 0"><span class="spin"></span>Reading…</div>');
+  const rows = r.files.map((x) => '<div style="padding:8px 0;border-top:1px solid rgba(var(--ink-rgb),.08)"><div style="display:flex;gap:10px;font-size:12.5px"><span style="font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis">' + esc(x.file) + '</span><span class="muted" style="margin-left:auto;white-space:nowrap">' + (x.error ? esc(x.error) : esc(x.format) + " · " + x.rows + " rows · " + x.added + " new · " + x.duplicates + " duplicates") + "</span></div>" +
+    (x.skipped && x.skipped.length ? '<div class="muted" style="font-size:11px;margin-top:4px">' + x.skippedCount + " skipped" + (x.skippedCount > x.skipped.length ? " (first " + x.skipped.length + " shown)" : "") + "<ul style=\"margin:4px 0 0;padding-left:16px\">" + x.skipped.slice(0, 8).map((s) => "<li>row " + s.row + ": " + esc(s.message) + "</li>").join("") + "</ul></div>" : "")).join("");
+  const body = '<div style="font-size:12.5px">' + r.files.length + (r.files.length === 1 ? " file" : " files") + " · " + r.added + " new " + (r.added === 1 ? "activity" : "activities") + " · " + r.duplicates + " already stored</div>" + rows +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-primary" data-act="closeModal">Done</button></div>';
+  return modalShell("Import CSV", body, 520);
+}
+function folderModalHtml() {
+  const w = state.watch;
+  const path = state.folderPath != null ? state.folderPath : (w && w.path) || "";
+  const files = (w && w.files) || [];
+  const body = '<div class="dim" style="font-size:12.5px;line-height:1.5;margin-bottom:10px">Every CSV at the top level of this folder is imported, and the folder is checked every 10 minutes while the app runs. Files that haven\'t changed are not re-read.</div>' +
+    '<input class="input" id="folderPath" value="' + esc(path) + '" placeholder="/Users/you/Downloads/wealthsimple" spellcheck="false">' +
+    (state.folderError ? '<div class="status-err" style="font-size:12px;margin-top:8px">' + esc(state.folderError) + "</div>" : "") +
+    '<div style="display:flex;gap:8px;margin-top:12px;align-items:center">' +
+    (w && w.watching ? '<button class="btn btn-secondary" data-act="stopWatch">Stop watching</button><button class="btn btn-secondary" data-act="scanFolder" ' + (state.busy === "folder" ? "disabled" : "") + ">Scan now</button>" : "") +
+    '<button class="btn btn-primary" data-act="watchFolder" style="margin-left:auto" ' + (state.busy === "folder" ? "disabled" : "") + ">" + (state.busy === "folder" ? "Scanning…" : (w && w.watching ? "Change folder" : "Watch folder")) + "</button></div>" +
+    (w && w.watching ? '<div class="muted" style="font-size:11px;margin-top:12px">Watching ' + esc(w.path) + (w.lastScan ? " · last scan " + esc(relTime(w.lastScan)) : "") + "</div>" : "") +
+    (files.length ? '<div class="scroll" style="max-height:220px;margin-top:6px">' + files.map((x) => '<div style="display:flex;gap:10px;font-size:12px;padding:6px 0;border-top:1px solid rgba(var(--ink-rgb),.08)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">' + esc(x.file) + '</span><span class="muted" style="margin-left:auto;white-space:nowrap">' + esc(x.format || "") + " · " + x.added + " new · " + x.duplicates + " dup</span></div>").join("") + "</div>" : "");
+  return modalShell("Load folder", body, 520);
+}
+function openTradeModal() {
+  state.menuOpen = false;
+  state.modal = "trade";
+  state.tradeForm = { date: (state.model && state.model.today) || new Date().toISOString().slice(0, 10), account: "", symbol: "", side: "BUY", qty: "", price: "", currency: "CAD", fees: "", error: "" };
+  render();
+  const s = document.getElementById("tf-symbol"); if (s) s.focus();
+}
+function readTradeForm() {
+  const f = state.tradeForm;
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+  f.date = v("tf-date"); f.account = v("tf-account"); f.symbol = v("tf-symbol").trim().toUpperCase(); f.qty = v("tf-qty"); f.price = v("tf-price"); f.fees = v("tf-fees");
+}
+function saveTrade() {
+  readTradeForm();
+  const f = state.tradeForm;
+  const qty = Number(String(f.qty).replace(/,/g, "")), price = Number(String(f.price).replace(/[$,]/g, "")), fees = Number(String(f.fees || 0).replace(/[$,]/g, ""));
+  if (!f.date || !f.symbol || !(qty > 0) || !(price >= 0) || isNaN(fees)) { f.error = "Date, symbol, a positive quantity and a price are required."; render(); return; }
+  const acc = ((state.model && state.model.accounts) || []).find((a) => a.id === f.account);
+  state.busy = "trade"; f.error = ""; render();
+  api("POST", "/api/book/append", { date: f.date, symbol: f.symbol, side: f.side, qty, price, currency: f.currency, commission: fees, accountId: acc ? acc.id : "manual", accountType: acc ? acc.name : "Manual" }).then((r) => {
+    state.busy = "";
+    if (!r || !r.ok) { f.error = (r && r.error) || "Could not save the trade."; render(); return; }
+    state.modal = null;
+    state.notice = r.added ? "Trade added" : "That trade was already recorded";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000);
+    loadModel();
+  });
+}
+function importCsv() {
+  state.menuOpen = false;
+  let input = document.getElementById("csvFile");
+  if (!input) { input = document.createElement("input"); input.type = "file"; input.id = "csvFile"; input.accept = ".csv,text/csv"; input.multiple = true; input.hidden = true; document.body.appendChild(input); input.addEventListener("change", () => importFiles(input.files)); }
+  input.value = "";
+  render();
+  input.click();
+}
+function importFiles(list) {
+  const files = Array.from(list || []).filter((f) => /\.csv$/i.test(f.name) && !/^\._/.test(f.name));
+  if (!files.length) return;
+  state.modal = "import"; state.importReport = null; render();
+  const report = { files: [], added: 0, duplicates: 0 };
+  const next = (i) => {
+    if (i >= files.length) { state.importReport = report; render(); if (report.added) loadModel(); return; }
+    files[i].text().then((text) => api("POST", "/api/import", { name: files[i].name, text })).then((r) => {
+      if (!r || !r.ok) report.files.push({ file: files[i].name, error: (r && r.error) || "Import failed" });
+      else { report.files.push(r); report.added += r.added || 0; report.duplicates += r.duplicates || 0; }
+      next(i + 1);
+    }).catch((e) => { report.files.push({ file: files[i].name, error: String(e) }); next(i + 1); });
+  };
+  next(0);
+}
+function openFolder() {
+  state.menuOpen = false; state.modal = "folder"; state.folderError = ""; state.folderPath = null; render();
+  api("GET", "/api/watch").then((w) => { if (state.modal !== "folder") return; state.watch = w && w.ok ? w : null; render(); const el = document.getElementById("folderPath"); if (el && !el.value) el.focus(); });
+}
+function watchFolder(scanOnly) {
+  const el = document.getElementById("folderPath");
+  const path = scanOnly ? null : (el ? el.value.trim() : "");
+  if (!scanOnly && !path) { state.folderError = "Enter the folder path."; render(); return; }
+  state.folderPath = path; state.busy = "folder"; state.folderError = ""; render();
+  api("POST", scanOnly ? "/api/watch/scan" : "/api/watch", scanOnly ? {} : { path }).then((r) => {
+    state.busy = "";
+    if (!r || !r.ok) { state.folderError = (r && r.error) || "Could not watch that folder."; render(); return; }
+    state.watch = r.status || state.watch; state.folderPath = null;
+    state.notice = r.added ? r.added + " new " + (r.added === 1 ? "activity" : "activities") + " imported" : "Folder scanned · nothing new";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000);
+    render();
+    if (r.added) loadModel();
+  });
+}
+function stopWatch() {
+  api("POST", "/api/watch/clear", {}).then((w) => { state.watch = w && w.ok ? w : null; state.folderPath = ""; render(); });
+}
 function clearData() {
   state.busy = "clearing"; render();
   api("POST", "/api/data/clear", { session: true, journal: true }).then((r) => {
@@ -945,7 +1071,7 @@ function render() {
   const root = document.getElementById("app");
   const scrollY = window.scrollY;
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { _keptScroll[el.dataset.keepScroll] = { top: el.scrollTop, left: el.scrollLeft }; });
-  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.dataOpen ? dataDialogHtml() : "");
+  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.dataOpen ? dataDialogHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
   window.scrollTo(0, scrollY);
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
   const menu = document.getElementById("tagMenu");
@@ -1088,6 +1214,15 @@ function act(name, arg, ev) {
     case "disconnect": disconnect(); break;
     case "exportCsv": state.menuOpen = false; render(); exportCsv(); break;
     case "openData": openData(); break;
+    case "openTrade": openTradeModal(); break;
+    case "closeModal": state.modal = null; render(); break;
+    case "tradeSeg": readTradeForm(); state.tradeForm[arg.name] = arg.value; render(); break;
+    case "saveTrade": saveTrade(); break;
+    case "importCsv": importCsv(); break;
+    case "openFolder": openFolder(); break;
+    case "watchFolder": watchFolder(false); break;
+    case "scanFolder": watchFolder(true); break;
+    case "stopWatch": stopWatch(); break;
     case "theme": applyTheme(arg.theme); render(); break;
     case "closeData": state.dataOpen = false; render(); break;
     case "clearData": clearData(); break;
@@ -1128,6 +1263,7 @@ function bind() {
       return;
     }
     if (state.dataOpen && e.target.id === "dataDlg") { state.dataOpen = false; render(); return; }
+    if (state.modal && e.target.id === "modalDlg") { state.modal = null; render(); return; }
     if ((state.picker || state.menuOpen) && !e.target.closest("[data-pop]")) { state.picker = null; state.menuOpen = false; render(); }
   });
   document.addEventListener("mousedown", (e) => {
@@ -1135,7 +1271,7 @@ function bind() {
     if (el) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(el.dataset.arg || "{}"); } catch (err) {} act(el.dataset.act, arg, e); }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { if (state.dataOpen) { state.dataOpen = false; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); } return; }
+    if (e.key === "Escape") { if (state.dataOpen) { state.dataOpen = false; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); } return; }
     if (e.target && e.target.id === "tagInput") {
       const matches = tagMatches();
       if (e.key === "Backspace" && e.target.value === "") { const t = tradeById(e.target.dataset.id); if (t && t.tags && t.tags.length) { e.preventDefault(); act("removeTag", { id: t.id, tag: t.tags[t.tags.length - 1] }); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); } return; }
@@ -1148,6 +1284,8 @@ function bind() {
       return;
     }
     if (e.target && (e.target.id === "rangeInput" || e.target.id === "searchInput") && e.key === "Enter") { e.target.blur(); }
+    if (e.key === "Enter" && e.target && /^tf-/.test(e.target.id || "") && e.target.tagName !== "SELECT") { e.preventDefault(); saveTrade(); return; }
+    if (e.key === "Enter" && e.target && e.target.id === "folderPath") { e.preventDefault(); watchFolder(false); return; }
     if (e.target && e.target.id === "valueQuery" && e.key === "Enter") { const first = document.querySelector("#popValues [data-act=toggleList]"); if (first) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(first.dataset.arg); } catch (err) {} act("toggleList", arg); } }
   });
   document.addEventListener("input", (e) => {

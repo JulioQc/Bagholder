@@ -1126,6 +1126,135 @@ class MarketParseTest(unittest.TestCase):
                 os.environ.pop("BAGHOLDER_HOME", None)
 
 
+import csvimport
+
+
+CANONICAL_CSV = """transaction_date,activity_type,activity_sub_type,symbol,quantity,unit_price,net_cash_amount,currency,account_id
+2026-01-05,Trade,BUY,AAA,10,5.00,-50.00,CAD,acct-1
+2026-02-05,Trade,SELL,AAA,-10,6.00,60.00,CAD,acct-1
+2026-02-06,Dividend,DIVIDEND,AAA,,,1.50,CAD,acct-1
+"""
+
+STATEMENT_CSV = """date,transaction,description,amount,balance,currency
+2026-01-06,BUY,"AAA - Alpha Inc: Bought 10 shares (executed at 2026-01-05) at $5.00 per share",-50.00,950.00,CAD
+2026-02-06,SELL,"AAA - Alpha Inc: Sold 10 shares (executed at 2026-02-05) at $6.00 per share",60.00,1010.00,CAD
+2026-02-10,SELL,"LUNR 15JAN27 12.00 CALL: Sold 2 contracts (executed at 2026-02-10)",1200.00,2210.00,USD
+2026-03-01,DIV,"AAA - Alpha Inc: Dividend",1.50,2211.50,CAD
+As of 2026-03-02
+"""
+
+LEGACY_CSV = """Date,Action,Symbol,Quantity,Price,Amount,Currency
+2026-01-05,Buy,AAA,10,5.00,-50.00,CAD
+2026-02-05,Sell,AAA,10,6.00,60.00,CAD
+"""
+
+
+class CsvImportTest(unittest.TestCase):
+    def test_helpers(self):
+        self.assertEqual(csvimport.parse_number("($1,234.50)"), -1234.5)
+        self.assertEqual(csvimport.parse_number("CAD 12"), 12.0)
+        self.assertEqual(csvimport.parse_number("n/a"), 0.0)
+        self.assertEqual(csvimport.parse_date("2026-01-05T14:00:00Z"), "2026-01-05")
+        self.assertEqual(csvimport.parse_date("05/01/2026"), "2026-05-01")
+        self.assertEqual(csvimport.parse_date("25/01/2026"), "2026-01-25")
+        self.assertEqual(csvimport.parse_date("5-Jan-2026"), "2026-01-05")
+        self.assertEqual(csvimport.parse_date("Jan 5, 2026"), "2026-01-05")
+        self.assertEqual(csvimport.parse_date("46027"), "2026-01-05")
+        self.assertEqual(csvimport.detect_format(["transaction_date", "activity_type", "symbol"]), "canonical")
+        self.assertEqual(csvimport.detect_format(["Date", "Transaction", "Description", "Amount"]), "statement")
+        self.assertEqual(csvimport.detect_format(["Date", "Action", "Symbol", "Quantity", "Price", "Amount"]), "legacy")
+        self.assertEqual(csvimport.detect_format(["foo", "bar"]), "unknown")
+        self.assertEqual(csvimport.book_id_from_file_name("monthly-statement-ABC12345CAD-2026-01-31.csv"), "ABC12345CAD")
+
+    def test_canonical(self):
+        r = csvimport.parse_csv(CANONICAL_CSV, "activities.csv")
+        self.assertEqual(r["format"], "canonical")
+        self.assertEqual(len(r["activities"]), 3)
+        buy, sell, div = r["activities"]
+        self.assertEqual((buy["category"], buy["activitySubType"], buy["quantity"], buy["unitPrice"]), ("trade", "BUY", 10.0, 5.0))
+        self.assertEqual((sell["category"], sell["quantity"], sell["netCashAmount"]), ("trade", -10.0, 60.0))
+        self.assertEqual(div["category"], "dividend")
+        self.assertEqual(r["countsByType"], {"Trade": 2, "Dividend": 1})
+
+    def test_statement_reads_fills_from_descriptions(self):
+        r = csvimport.parse_csv(STATEMENT_CSV, "monthly-statement-ABC12345CAD-2026-03-31.csv")
+        self.assertEqual(r["format"], "statement")
+        self.assertTrue(r["footerStripped"])
+        self.assertEqual(r["skipped"], [])
+        buy, sell, opt, div = r["activities"]
+        self.assertEqual((buy["symbol"], buy["name"], buy["quantity"], buy["unitPrice"], buy["transactionDate"], buy["settlementDate"]), ("AAA", "Alpha Inc", 10.0, 5.0, "2026-01-05", "2026-01-06"))
+        self.assertEqual((sell["activitySubType"], sell["quantity"], sell["netCashAmount"]), ("SELL", -10.0, 60.0))
+        # options: statement amount is contract cash, so per-share price is amount / (contracts x 100)
+        self.assertEqual((opt["symbol"], opt["quantity"], opt["currency"]), ("LUNR 15JAN27 12.00 CALL", -2.0, "USD"))
+        self.assertAlmostEqual(opt["unitPrice"], 6.0)
+        self.assertEqual(div["category"], "dividend")
+        self.assertEqual(buy["bookId"], "ABC12345CAD")
+
+    def test_legacy_and_unknown(self):
+        r = csvimport.parse_csv(LEGACY_CSV, "old.csv")
+        self.assertEqual(r["format"], "legacy")
+        self.assertEqual([a["activitySubType"] for a in r["activities"]], ["BUY", "SELL"])
+        self.assertEqual(r["activities"][1]["quantity"], -10.0)
+        r = csvimport.parse_csv("foo,bar\n1,2\n", "x.csv")
+        self.assertEqual(r["format"], "unknown")
+        self.assertEqual(len(r["skipped"]), 1)
+
+
+class ImportStoreTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["BAGHOLDER_HOME"] = self.tmp.name
+        store.set_home(self.tmp.name)
+        bagholder.set_home(self.tmp.name)
+        store.ensure()
+        model.invalidate()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_import_text_merges_and_dedups(self):
+        r = csvimport.import_text("activities.csv", CANONICAL_CSV)
+        self.assertEqual((r["format"], r["added"], r["duplicates"]), ("canonical", 3, 0))
+        r = csvimport.import_text("activities.csv", CANONICAL_CSV)
+        self.assertEqual((r["added"], r["duplicates"]), (0, 3))
+        v = model.view(None)
+        self.assertEqual(v["kpi"]["count"], 1)
+        self.assertAlmostEqual(v["kpi"]["realized"], 10)
+
+    def test_folder_scan_skips_junk_and_unchanged_files(self):
+        folder = os.path.join(self.tmp.name, "csv")
+        os.makedirs(os.path.join(folder, "nested"))
+        with open(os.path.join(folder, "a.csv"), "w", encoding="utf-8") as fh:
+            fh.write(LEGACY_CSV)
+        with open(os.path.join(folder, "._a.csv"), "w", encoding="utf-8") as fh:
+            fh.write(LEGACY_CSV)
+        with open(os.path.join(folder, "notes.txt"), "w", encoding="utf-8") as fh:
+            fh.write("hi")
+        with open(os.path.join(folder, "nested", "b.csv"), "w", encoding="utf-8") as fh:
+            fh.write(CANONICAL_CSV)
+        self.assertFalse(csvimport.set_watch_folder(os.path.join(folder, "missing"))["ok"])
+        self.assertTrue(csvimport.set_watch_folder(folder)["ok"])
+        r = csvimport.scan_folder()
+        self.assertEqual([f["file"] for f in r["files"]], ["a.csv"])
+        self.assertEqual(r["added"], 2)
+        r = csvimport.scan_folder()
+        self.assertTrue(r["files"][0]["unchanged"])
+        self.assertEqual(r["added"], 0)
+        with open(os.path.join(folder, "c.csv"), "w", encoding="utf-8") as fh:
+            fh.write(CANONICAL_CSV)
+        r = csvimport.scan_folder()
+        self.assertEqual({f["file"]: f.get("unchanged") for f in r["files"]}, {"a.csv": True, "c.csv": False})
+        self.assertEqual(r["added"], 3)  # a different account id, so nothing is a duplicate
+        r = csvimport.scan_folder(force=True)
+        self.assertEqual((r["added"], r["duplicates"]), (0, 5))
+        st = csvimport.status()
+        self.assertTrue(st["watching"])
+        self.assertEqual(len(st["files"]), 2)
+        csvimport.clear_watch_folder()
+        self.assertFalse(csvimport.status()["watching"])
+
+
 class ServerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -1223,6 +1352,37 @@ class ServerTest(unittest.TestCase):
         html = bagholder.ledger2_path().read_text(encoding="utf-8")
         self.assertIn("/api/data/clear", html)
         self.assertIn("Clear data", html)
+
+    def test_import_watch_and_manual_trade_routes(self):
+        status, out = self._post("/api/import", {"name": "activities.csv", "text": CANONICAL_CSV})
+        self.assertEqual(status, 200)
+        self.assertEqual((out["format"], out["added"]), ("canonical", 3))
+        _, data = self._get("/api/model")
+        self.assertEqual(json.loads(data.decode("utf-8"))["kpi"]["count"], 1)
+        status, out = self._post("/api/book/append", {"date": "2026-03-01", "symbol": "bbb", "side": "BUY", "qty": 5, "price": 2, "currency": "CAD", "commission": 1, "accountId": "manual", "accountType": "Manual"})
+        self.assertEqual(status, 200)
+        self.assertEqual(out["added"], 1)
+        _, data = self._get("/api/model")
+        payload = json.loads(data.decode("utf-8"))
+        self.assertEqual([p["symbol"] for p in payload["positions"]], ["BBB"])
+        self.assertEqual(payload["positions"][0]["fees"], 1.0)
+        folder = os.path.join(self.tmp.name, "csv")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "old.csv"), "w", encoding="utf-8") as fh:
+            fh.write(LEGACY_CSV)
+        status, out = self._post("/api/watch", {"path": folder})
+        self.assertEqual(status, 200)
+        self.assertEqual(out["added"], 2)
+        status, out = self._post("/api/watch/scan", {})
+        self.assertEqual((out["added"], out["duplicates"]), (0, 2))
+        self.assertTrue(out["status"]["watching"])
+        status, body = self._get("/api/watch")
+        self.assertTrue(json.loads(body.decode("utf-8"))["watching"])
+        status, out = self._post("/api/watch/clear", {})
+        self.assertFalse(out["watching"])
+        html = bagholder.ledger2_path().read_text(encoding="utf-8")
+        for needle in ("/api/import", "/api/watch", "Add trade", "Load folder"):
+            self.assertIn(needle, html)
 
     def test_legacy_routes_untouched(self):
         status, body = self._get("/")

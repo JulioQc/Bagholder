@@ -34,6 +34,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
+import csvimport
 import market
 import model
 import store
@@ -3056,6 +3057,28 @@ def quote_loop():
         refresh_quotes()
 
 
+WATCH_SCAN_SEC = 10 * 60
+
+
+def scan_watched_folder():
+    """Import new or changed CSVs from the watched folder. Never raises."""
+    try:
+        if not csvimport.watch_folder():
+            return None
+        result = csvimport.scan_folder()
+        if result.get("ok") and result.get("added"):
+            model.invalidate()
+        return result
+    except Exception:
+        return None
+
+
+def watch_loop():
+    scan_watched_folder()
+    while not _stop.wait(WATCH_SCAN_SEC):
+        scan_watched_folder()
+
+
 def sync_then_market():
     ok = run_sync()
     refresh_market_data()
@@ -3164,6 +3187,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(403, {"ok": False})
                 return
             self._send(200, status_payload())
+            return
+        if path == "/api/watch":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            self._send(200, csvimport.status())
             return
         if path == "/api/data":
             if not self._gate():
@@ -3306,7 +3335,46 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/book/append":
             body = self._read_json()
             result = append_manual(body)
+            model.invalidate()
             self._send(200, result)
+            return
+        if path == "/api/import":
+            body = self._read_json()
+            body = body if isinstance(body, dict) else {}
+            text = body.get("text")
+            if not isinstance(text, str) or not text.strip():
+                self._send(400, {"ok": False, "error": "text required"})
+                return
+            report = csvimport.import_text(_s(body.get("name")) or "upload.csv", text)
+            if report.get("added"):
+                model.invalidate()
+            self._send(200, report)
+            return
+        if path == "/api/watch":
+            body = self._read_json()
+            body = body if isinstance(body, dict) else {}
+            set_result = csvimport.set_watch_folder(body.get("path"))
+            if not set_result.get("ok"):
+                self._send(400, set_result)
+                return
+            result = csvimport.scan_folder(force=True)
+            if result.get("added"):
+                model.invalidate()
+            result["status"] = csvimport.status()
+            self._send(200, result)
+            return
+        if path == "/api/watch/scan":
+            self._read_json()
+            result = csvimport.scan_folder(force=True)
+            if result.get("ok") and result.get("added"):
+                model.invalidate()
+            result["status"] = csvimport.status()
+            self._send(200 if result.get("ok") else 400, result)
+            return
+        if path == "/api/watch/clear":
+            self._read_json()
+            csvimport.clear_watch_folder()
+            self._send(200, csvimport.status())
             return
         if path == "/api/groups":
             body = self._read_json()
@@ -3386,6 +3454,7 @@ def main():
     t.start()
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
+    threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()
     url = "http://127.0.0.1:%s" % port
     print("Bagholder  %s" % url, flush=True)
     try:
