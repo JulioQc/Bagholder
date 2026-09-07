@@ -92,6 +92,15 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(m.group(1), bagholder.PROTOCOL)
         self.assertEqual(bagholder.status_payload()["protocol"], bagholder.PROTOCOL)
 
+    def test_port_can_be_chosen_for_a_second_instance(self):
+        with mock.patch.dict(os.environ, {"BAGHOLDER_PORT": "8799"}):
+            self.assertEqual(bagholder.port_choices(), (8799,))
+        with mock.patch.dict(os.environ, {"BAGHOLDER_PORT": "80"}):
+            self.assertEqual(bagholder.port_choices(), bagholder.PORTS, "a privileged or nonsense port is ignored")
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("BAGHOLDER_PORT", None)
+            self.assertEqual(bagholder.port_choices(), bagholder.PORTS)
+
     def test_update_check_flags_only_a_newer_release(self):
         from datetime import datetime, timedelta, timezone
         self.assertIsNotNone(bagholder.parse_version(bagholder.APP_VERSION), "APP_VERSION must be MAJOR.MINOR.PATCH")
