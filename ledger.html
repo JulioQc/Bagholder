@@ -399,7 +399,7 @@ function saveJournal(id, patch, soon) {
   const body = { id, thesis: t.thesis || "", tags: t.tags || [], grade: t.grade || "" };
   clearTimeout(_saveTimers[id]);
   const post = () => api("POST", "/api/journal", body).then((r) => {
-    if (!r || !r.ok) { state.notice = "Could not save journal entry."; renderHeaderOnly(); return; }
+    if (!r || !r.ok) { state.notice = "Could not save journal entry."; state.noticeKind = "err"; renderHeaderOnly(); return; }
   });
   // the trade on screen is already updated locally; the dashboard's grade
   // buckets and review queue are refreshed the next time a page is opened
@@ -427,7 +427,7 @@ function headerHtml() {
   return '<div id="hdr" style="display:flex;align-items:center;gap:22px;padding:12px 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
     '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span></div>' +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
-    '<span style="font-size:12px;color:var(--ink55)">' + (state.status.updateAvailable ? '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="color:var(--accent-300);text-decoration:none;margin-right:12px">Update available</a>' : "") + syncLine() + (state.notice ? ' <span class="status-err">· ' + esc(state.notice) + "</span>" : "") + "</span>" +
+    '<span style="font-size:12px;color:var(--ink55)">' + (state.status.updateAvailable ? '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="color:var(--accent-300);text-decoration:none;margin-right:12px">Update available</a>' : "") + (state.notice ? '<span class="' + (state.noticeKind === "err" ? "status-err" : "") + '">' + esc(state.notice) + "</span>" : syncLine()) + "</span>" +
     '<div style="position:relative" data-pop="filter">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Filters" data-act="openFields"><svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M230.6 49.5A15.8 15.8 0 0 0 216 40H40a16 16 0 0 0-12.6 25.9l68.6 81.1v55a16 16 0 0 0 25.6 13.3l32-21.3a16 16 0 0 0 7.4-13.3v-33.7l68.6-81.1a15.8 15.8 0 0 0 1-15.4Z"/></svg></button>' +
     (filtersActive() ? '<span style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);pointer-events:none"></span>' : "") +
@@ -545,7 +545,7 @@ function saveTrade() {
     state.busy = "";
     if (!r || !r.ok) { f.error = (r && r.error) || "Could not save the trade."; render(); return; }
     state.modal = null;
-    state.notice = r.added ? "Trade added" : "That trade was already recorded";
+    state.notice = r.added ? "Trade added" : "That trade was already recorded"; state.noticeKind = "ok";
     setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000);
     loadModel();
   });
@@ -586,7 +586,7 @@ function watchFolder(scanOnly) {
     state.busy = "";
     if (!r || !r.ok) { state.folderError = (r && r.error) || "Could not watch that folder."; render(); return; }
     state.watch = r.status || state.watch; state.folderPath = null;
-    state.notice = r.added ? r.added + " new " + (r.added === 1 ? "activity" : "activities") + " imported" : "Folder scanned · nothing new";
+    state.notice = r.added ? r.added + " new " + (r.added === 1 ? "activity" : "activities") + " imported" : "Folder scanned · nothing new"; state.noticeKind = "ok";
     setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000);
     render();
     if (r.added) loadModel();
@@ -599,7 +599,7 @@ function clearData() {
   state.busy = "clearing"; render();
   api("POST", "/api/data/clear", { session: true, journal: true }).then((r) => {
     state.busy = "";
-    if (!r || !r.ok) { state.notice = (r && r.error) || "Could not clear data."; render(); return; }
+    if (!r || !r.ok) { state.notice = (r && r.error) || "Could not clear data."; state.noticeKind = "err"; render(); return; }
     state.dataOpen = false; state.sel = null; state.posSel = null; state.filters = EMPTY_FILTERS();
     state.status.lastSync = ""; state.status.connected = false;
     loadModel(); pollStatus();
@@ -1341,7 +1341,7 @@ function syncNow() {
 }
 function refreshSession() {
   state.menuOpen = false; state.busy = "refresh"; renderHeaderOnly();
-  api("POST", "/api/refresh").then((r) => { state.busy = ""; state.notice = r && r.ok ? "Session refreshed" : ((r && r.error) || "Refresh failed"); renderHeaderOnly(); pollStatus(); setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000); });
+  api("POST", "/api/refresh").then((r) => { state.busy = ""; state.notice = r && r.ok ? "Session refreshed" : ((r && r.error) || "Refresh failed"); state.noticeKind = r && r.ok ? "ok" : "err"; renderHeaderOnly(); pollStatus(); setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000); });
 }
 function disconnect() {
   state.menuOpen = false;
