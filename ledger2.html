@@ -860,7 +860,8 @@ function cashflowHtml(m) {
 }
 function freqTip(h) {
   if (!h.freq) return "";
-  return h.freqVerified ? h.freq + " payments a year, verified from payment dates" : "Monthly assumed: only one payment on record";
+  if (h.rateSource === "declared") return h.freq + " payments a year, from the fund's declared distributions" + (h.priceSource === "close" ? " · last price from TMX" : "");
+  return h.freqVerified ? h.freq + " payments a year, from your payment dates" : "Monthly assumed: only one payment on record";
 }
 function cfHover(e) {
   const m = state.model; if (!m) return;

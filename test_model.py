@@ -711,6 +711,95 @@ class PaymentFrequencyTest(unittest.TestCase):
         self.assertEqual(h["NEWM"]["per"], 0.1)
 
 
+class DeclaredDistributionsTest(unittest.TestCase):
+    def test_tmx_parsers(self):
+        q = {"data": {"getQuoteBySymbol": {"symbol": "CCHI", "name": "Ninepoint Cameco HighShares ETF", "price": 10.95, "dividendFrequency": None, "dividendYield": 27.5, "dividendAmount": 0.135, "exDividendDate": "2026-09-15 00:00:00.0"}}}
+        rec = market.parse_tmx_quote(q)
+        self.assertEqual(rec["price"], 10.95)
+        self.assertEqual(rec["exDividendDate"], "2026-09-15")
+        d = {"data": {"dividends": {"dividends": [{"exDate": "2026-09-15", "payableDate": "2026-09-21", "amount": 0.135, "currency": "CAD"}, {"exDate": "bad", "amount": 1}, {"exDate": "2026-08-31", "payableDate": "2026-09-04", "amount": "0.135"}]}}}
+        rows = market.parse_tmx_dividends(d)
+        self.assertEqual([r["exDate"] for r in rows], ["2026-09-15", "2026-08-31"])
+        self.assertEqual(market.tmx_symbol("cchi.to"), "CCHI")
+        self.assertTrue(market.is_canadian_listing("TSX", "CAD"))
+        self.assertFalse(market.is_canadian_listing("NASDAQ", "USD"))
+        self.assertTrue(market.is_canadian_listing("", "CAD"))
+
+    def test_declared_record_beats_own_history_and_tracks_schedule_change(self):
+        div = lambda i, day, qty, per: act(
+            id="c%d" % i, category="dividend", activityType="Dividend", activitySubType="dividend", rawType="DIVIDEND",
+            quantity=qty, unitPrice=per, netCashAmount=qty * per, transactionDate=day, symbol="CCHI", currency="CAD", accountType="Cashflow",
+        )
+        snapshot = {
+            "activities": [buy("b1", "CCHI", 4000, 11.64, "2026-08-25", accountType="Cashflow"), div(1, "2026-09-04", 4000, 0.135)],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        public = {"CCHI": [
+            {"exDate": "2026-09-15", "payDate": "2026-09-21", "amount": 0.135, "currency": "CAD"},
+            {"exDate": "2026-08-31", "payDate": "2026-09-04", "amount": 0.135, "currency": "CAD"},
+            {"exDate": "2026-08-14", "payDate": "2026-08-20", "amount": 0.135, "currency": "CAD"},
+            {"exDate": "2026-07-31", "payDate": "2026-08-10", "amount": 0.27, "currency": "CAD"},
+            {"exDate": "2026-06-30", "payDate": "2026-07-08", "amount": 0.27, "currency": "CAD"},
+            {"exDate": "2026-05-29", "payDate": "2026-06-05", "amount": 0.27, "currency": "CAD"},
+        ]}
+        quotes = {"CCHI": {"price": 10.95, "dividendAmount": 0.135, "dividendFrequency": "", "exDividendDate": "2026-09-15", "fetchedAt": "2026-09-06T00:00:00Z"}}
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}, "distributions": public, "quotes": quotes}, {}, today="2026-09-06")
+        h = model.build_view(base, None)["cashflow"]["holdings"][0]
+        self.assertEqual(h["per"], 0.135)
+        self.assertEqual(h["freq"], 24)
+        self.assertTrue(h["freqVerified"])
+        self.assertEqual(h["rateSource"], "declared")
+        self.assertAlmostEqual(h["yoc"], 0.135 * 24 / 11.64)
+        self.assertEqual(h["last"], 10.95)
+        self.assertEqual(h["priceSource"], "close")
+        self.assertAlmostEqual(h["currentYield"], 0.135 * 24 / 10.95)
+        # without the public record it falls back to the single own payment
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-09-06")
+        h = model.build_view(base, None)["cashflow"]["holdings"][0]
+        self.assertEqual(h["rateSource"], "payments")
+        self.assertFalse(h["freqVerified"])
+        self.assertEqual(h["priceSource"], "fill")
+
+    def test_payer_symbols_are_held_dividend_payers(self):
+        snapshot = {
+            "activities": [
+                buy("b1", "RDDY", 100, 7, "2026-01-05", accountType="Cashflow"),
+                act(id="d1", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=100, unitPrice=0.2, netCashAmount=20, transactionDate="2026-02-06", symbol="RDDY", currency="CAD", accountType="Cashflow"),
+                buy("b2", "TD", 10, 80, "2025-01-05", accountType="Cashflow"),
+                act(id="d2", category="dividend", activityType="Dividend", rawType="DIVIDEND", quantity=10, unitPrice=1, netCashAmount=10, transactionDate="2025-02-06", symbol="TD", currency="CAD", accountType="Cashflow"),
+                sell("s2", "TD", 10, 90, "2025-03-01", accountType="Cashflow"),
+                buy("b3", "AAA", 10, 5, "2026-01-05", accountType="Cashflow"),
+            ],
+            "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": [],
+        }
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2026-09-06")
+        self.assertEqual(model.payer_symbols(base), [{"symbol": "RDDY", "exchange": "", "currency": "CAD"}])
+
+    def test_store_roundtrip_and_stale_detection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                self.assertEqual(store.upsert_distributions("cchi", [{"exDate": "2026-08-31", "payDate": "2026-09-04", "amount": 0.135, "currency": "CAD"}, {"exDate": "x", "amount": 1}]), 1)
+                self.assertEqual(store.distributions()["CCHI"][0]["amount"], 0.135)
+                store.upsert_quote("CCHI", {"price": 10.95, "dividendAmount": 0.135, "fetchedAt": "2026-09-06T00:00:00Z"})
+                self.assertEqual(store.quotes()["CCHI"]["price"], 10.95)
+                syms = [{"symbol": "CCHI", "exchange": "TSX", "currency": "CAD"}, {"symbol": "LUNR", "exchange": "NASDAQ", "currency": "USD"}, {"symbol": "NEW", "exchange": "", "currency": "CAD"}]
+                from datetime import datetime, timezone
+                fresh = datetime(2026, 9, 6, 5, 0, tzinfo=timezone.utc)
+                self.assertEqual(market.stale_symbols(syms, now=fresh), ["NEW"])
+                old = datetime(2026, 9, 8, 5, 0, tzinfo=timezone.utc)
+                self.assertEqual(market.stale_symbols(syms, now=old), ["CCHI", "NEW"])
+                with mock.patch.object(market, "fetch_tmx", return_value=({"price": 1.0, "dividendAmount": 0.1, "dividendFrequency": "Monthly", "exDividendDate": "2026-09-01"}, [{"exDate": "2026-09-01", "payDate": "2026-09-05", "amount": 0.1, "currency": "CAD"}])) as f:
+                    self.assertEqual(market.refresh_distributions(syms), 2)
+                self.assertEqual(sorted(store.quotes()), ["CCHI", "NEW"])
+                self.assertEqual(f.call_count, 2)
+            finally:
+                store.set_home(None)
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+
 class LegacyNotesTest(unittest.TestCase):
     def test_group_id_matches_ledger_html(self):
         # ledger.html: FNV-1a over "\n".join(sorted keys), "g_" + hex + "_" + n
@@ -831,7 +920,7 @@ class MarketParseTest(unittest.TestCase):
             store.ensure()
             try:
                 with mock.patch.object(market, "_get_text", side_effect=OSError("offline")):
-                    self.assertEqual(market.refresh_all(), {"fx": 0, "benchmark": 0, "skipped": False})
+                    self.assertEqual(market.refresh_all(), {"fx": 0, "benchmark": 0, "distributions": 0, "skipped": False})
                 self.assertTrue(market.is_stale())
                 boc = json.dumps({"observations": [{"d": "2026-09-04", "FXUSDCAD": {"v": "1.38"}}]})
                 fred = "observation_date,SP500\n2026-09-04,7000\n"

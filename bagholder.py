@@ -3021,12 +3021,22 @@ def ledger2_path():
     return Path(__file__).resolve().parent / "ledger2.html"
 
 
-def refresh_market_data():
-    """USD/CAD and S&P 500 series for the derived model. Never raises."""
+def _payer_symbols():
     try:
-        return market.refresh_all(_ssl_context())
+        return model.payer_symbols()
     except Exception:
-        return {"fx": 0, "benchmark": 0, "skipped": True}
+        return []
+
+
+def refresh_market_data():
+    """USD/CAD, S&P 500 and declared distributions for the derived model. Never raises."""
+    try:
+        out = market.refresh_all(_ssl_context(), _payer_symbols())
+        if out.get("distributions"):
+            model.invalidate()
+        return out
+    except Exception:
+        return {"fx": 0, "benchmark": 0, "distributions": 0, "skipped": True}
 
 
 def sync_then_market():
@@ -3153,8 +3163,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             query = self.path.split("?", 1)[1] if "?" in self.path else ""
             try:
-                if market.is_stale():
-                    market.refresh_in_background(_ssl_context())
+                if market.is_stale(symbols=_payer_symbols()):
+                    threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
             except Exception:
                 pass
             try:

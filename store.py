@@ -176,6 +176,26 @@ def _init_schema(conn):
             close REAL NOT NULL,
             PRIMARY KEY (symbol, date)
         );
+
+        CREATE TABLE IF NOT EXISTS distributions (
+            symbol TEXT NOT NULL,
+            ex_date TEXT NOT NULL,
+            pay_date TEXT,
+            amount REAL NOT NULL,
+            currency TEXT,
+            source TEXT NOT NULL DEFAULT 'tmx',
+            PRIMARY KEY (symbol, ex_date, source)
+        );
+
+        CREATE TABLE IF NOT EXISTS quotes (
+            symbol TEXT PRIMARY KEY,
+            price REAL,
+            dividend_amount REAL,
+            dividend_frequency TEXT,
+            ex_dividend_date TEXT,
+            source TEXT,
+            fetched_at TEXT
+        );
         """
     )
     _migrate_nav_history(conn)
@@ -1267,8 +1287,137 @@ def upsert_benchmark_prices(mapping, symbol=BENCHMARK_SYMBOL):
             conn.close()
 
 
+def distributions():
+    """symbol -> [{exDate, payDate, amount, currency}] newest first (public record)."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            out = {}
+            for r in conn.execute("SELECT * FROM distributions ORDER BY symbol, ex_date DESC").fetchall():
+                out.setdefault(r["symbol"], []).append(
+                    {"exDate": r["ex_date"], "payDate": r["pay_date"] or "", "amount": r["amount"], "currency": r["currency"] or ""}
+                )
+            return out
+        finally:
+            conn.close()
+
+
+def upsert_distributions(symbol, rows, source="tmx"):
+    sym = _s(symbol).strip().upper()
+    if not sym:
+        return 0
+    clean = []
+    for r in rows or []:
+        ex = _s(r.get("exDate"))[:10]
+        amt = _num(r.get("amount"), None)
+        if len(ex) != 10 or amt is None or amt <= 0:
+            continue
+        clean.append((sym, ex, _s(r.get("payDate"))[:10] or None, amt, _s(r.get("currency")) or None, source))
+    if not clean:
+        return 0
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.executemany(
+                "INSERT INTO distributions(symbol, ex_date, pay_date, amount, currency, source) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(symbol, ex_date, source) DO UPDATE SET pay_date = excluded.pay_date, amount = excluded.amount, currency = excluded.currency",
+                clean,
+            )
+            conn.commit()
+            return len(clean)
+        finally:
+            conn.close()
+
+
+def quotes():
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            out = {}
+            for r in conn.execute("SELECT * FROM quotes").fetchall():
+                out[r["symbol"]] = {
+                    "price": r["price"],
+                    "dividendAmount": r["dividend_amount"],
+                    "dividendFrequency": r["dividend_frequency"] or "",
+                    "exDividendDate": r["ex_dividend_date"] or "",
+                    "source": r["source"] or "",
+                    "fetchedAt": r["fetched_at"] or "",
+                }
+            return out
+        finally:
+            conn.close()
+
+
+def upsert_quote(symbol, rec, source="tmx"):
+    sym = _s(symbol).strip().upper()
+    if not sym or not isinstance(rec, dict):
+        return
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute(
+                "INSERT INTO quotes(symbol, price, dividend_amount, dividend_frequency, ex_dividend_date, source, fetched_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET price = excluded.price, "
+                "dividend_amount = excluded.dividend_amount, dividend_frequency = excluded.dividend_frequency, "
+                "ex_dividend_date = excluded.ex_dividend_date, source = excluded.source, fetched_at = excluded.fetched_at",
+                (
+                    sym,
+                    _num(rec.get("price"), None),
+                    _num(rec.get("dividendAmount"), None),
+                    _s(rec.get("dividendFrequency")),
+                    _s(rec.get("exDividendDate"))[:10],
+                    source,
+                    _s(rec.get("fetchedAt")) or _now_iso(),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def quote_fetched_at():
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            return {r["symbol"]: r["fetched_at"] or "" for r in conn.execute("SELECT symbol, fetched_at FROM quotes").fetchall()}
+        finally:
+            conn.close()
+
+
+_CANADIAN_EXCHANGES = ("TSX", "TSX-V", "TSXV", "CSE", "CBOE CANADA", "NEO", "ALPHA EXCHANGE", "")
+
+
+def dividend_symbols():
+    """Symbols that have paid a dividend, with the listing exchange when known."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            rows = conn.execute(
+                "SELECT DISTINCT a.symbol AS symbol, a.currency AS currency, s.primary_exchange AS exchange "
+                "FROM activities a LEFT JOIN securities s ON s.id = a.security_id "
+                "WHERE a.category = 'dividend' AND IFNULL(a.symbol, '') != ''"
+            ).fetchall()
+            out = []
+            seen = set()
+            for r in rows:
+                sym = _s(r["symbol"]).strip().upper()
+                if not sym or sym in seen:
+                    continue
+                seen.add(sym)
+                out.append({"symbol": sym, "currency": _s(r["currency"]), "exchange": _s(r["exchange"]).strip()})
+            return out
+        finally:
+            conn.close()
+
+
 def market_data():
-    return {"fx": fx_rates(), "benchmark": benchmark_prices()}
+    return {"fx": fx_rates(), "benchmark": benchmark_prices(), "distributions": distributions(), "quotes": quotes()}
 
 
 _GRADES = ("A", "B", "C", "F")
@@ -1392,6 +1541,8 @@ def clear_synced_data(keep_journal=True, keep_market=True):
             if not keep_market:
                 conn.execute("DELETE FROM fx_rates")
                 conn.execute("DELETE FROM benchmark_prices")
+                conn.execute("DELETE FROM distributions")
+                conn.execute("DELETE FROM quotes")
                 conn.execute("DELETE FROM meta WHERE key = 'spy_by_date'")
             conn.commit()
         finally:
@@ -1411,6 +1562,8 @@ def data_version():
                 "SELECT COUNT(*), MAX(date) FROM nav_history",
                 "SELECT COUNT(*), MAX(date) FROM fx_rates",
                 "SELECT COUNT(*), MAX(date) FROM benchmark_prices",
+                "SELECT COUNT(*), MAX(ex_date) FROM distributions",
+                "SELECT COUNT(*), MAX(fetched_at) FROM quotes",
                 "SELECT COUNT(*), MAX(fetched_at) FROM securities",
                 "SELECT COUNT(*), SUM(quantity) FROM balances",
                 "SELECT COUNT(*), MAX(id) FROM accounts",

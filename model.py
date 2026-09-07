@@ -1676,6 +1676,8 @@ def build_base(snapshot, market, journal, today=None):
         "syncedAt": _s(snapshot.get("syncedAt")),
         "fx": fx,
         "benchmark": bench,
+        "distributions": market.get("distributions") or {},
+        "quotes": market.get("quotes") or {},
         "fxLast": max(fx) if fx else "",
         "benchmarkLast": max(bench) if bench else "",
         "activities": acts,
@@ -2006,30 +2008,46 @@ def cashflow_view(base, f, positions_all):
     def sum_for(sym, pred):
         return sum(r["amountCad"] for r in for_yoc if r["symbol"] == sym and pred(r))
 
+    public = base.get("distributions") or {}
+    quotes = base.get("quotes") or {}
+
     def rate_for(sym):
+        # Preferred: the fund's own declared record (TMX Money): the latest
+        # distribution that has gone ex, and payments per year from the gaps
+        # between its recent ex-dates, so a schedule change shows at once.
+        declared = [d for d in public.get(sym, []) if d["exDate"] <= today]
+        if declared:
+            declared.sort(key=lambda d: d["exDate"], reverse=True)
+            per = declared[0]["amount"]
+            freq = payments_per_year([d["exDate"] for d in public.get(sym, [])])
+            if per and freq:
+                return {"per": per, "freq": freq, "annual": per * freq, "verified": True, "source": "declared"}
+        # Otherwise this holding's own payment rows.
         rs = sorted([r for r in for_yoc if r["symbol"] == sym and r["per"]], key=lambda r: r["date"], reverse=True)
         if not rs:
             return None
         per = rs[0]["per"]
         if not per:
             return None
-        # Payments per year is verified from this holding's own payment dates
-        # (every payment row, even ones without a per-unit value): the median
-        # gap between consecutive payments, snapped to a standard schedule.
-        # With a single payment on record it cannot be verified; monthly is
-        # assumed and the row says so.
         freq = payments_per_year([r["date"] for r in for_yoc if r["symbol"] == sym])
         verified = freq is not None
         if not verified:
             freq = 12
-        return {"per": per, "freq": freq, "annual": per * freq, "verified": verified}
+        return {"per": per, "freq": freq, "annual": per * freq, "verified": verified, "source": "payments"}
+
+    def last_price(p):
+        q = quotes.get(p["symbol"]) or {}
+        px = _num(q.get("price"), None)
+        if px and px > 0:
+            return px, "close"
+        return p["last"], "fill"
 
     holdings = []
     for p in held:
         r = rate_for(p["symbol"])
         basis = p["cost"]
         avg = p["avg"]
-        last_px = p["last"]
+        last_px, price_source = last_price(p)
         holdings.append(
             {
                 "id": p["id"],
@@ -2039,9 +2057,11 @@ def cashflow_view(base, f, positions_all):
                 "per": r["per"] if r else None,
                 "freq": r["freq"] if r else None,
                 "freqVerified": bool(r and r["verified"]),
+                "rateSource": r["source"] if r else "",
                 "cost": basis,
                 "avg": avg,
                 "last": last_px,
+                "priceSource": price_source,
                 "ytd": sum_for(p["symbol"], lambda x: x["date"][:4] == this_year),
                 "ttm": sum_for(p["symbol"], lambda x: x["date"][:7] >= cut),
                 "all": sum_for(p["symbol"], lambda x: True),
@@ -2202,6 +2222,20 @@ def base_model(force=False):
 
 def view(filters=None):
     return build_view(base_model(), filters)
+
+
+def payer_symbols(base=None):
+    """Held positions that have paid a distribution: what the public
+    distribution feed is refreshed for."""
+    base = base or base_model()
+    payers = {r["symbol"] for r in base["cashflow"] if r["kind"] == "Dividend"}
+    out = []
+    seen = set()
+    for p in base["positions"]:
+        if p["symbol"] in payers and p["symbol"] not in seen and not p["short"]:
+            seen.add(p["symbol"])
+            out.append({"symbol": p["symbol"], "exchange": p["exchange"] if p["exchange"] != "Crypto" else "", "currency": p["currency"]})
+    return out
 
 
 def invalidate():
