@@ -97,7 +97,7 @@ A USD transaction is converted at the Bank of Canada rate for its own date, look
 
 ### Versions and the update check
 
-A version is a GitHub release tagged `vMAJOR.MINOR.PATCH`; commits alone are not versions. `APP_VERSION` in `bagholder.py` is bumped in the commit a release is cut from, and the running version is shown in the header as small muted text to the right of the Bagholder wordmark; nothing about versions appears in the menu. Once a day, and at start, the app asks GitHub for the latest release; when its tag is newer than the running version the header shows an "Update available" link to that release. The request carries nothing but the app's version in its user agent; a failed check, or no release yet, is silent.
+A version is a GitHub release tagged `vMAJOR.MINOR.PATCH`; commits alone are not versions. `APP_VERSION` in `bagholder.py` is bumped in the commit a release is cut from, and the running version is shown in the header as small muted text to the right of the Bagholder wordmark; nothing about versions appears in the menu. Once a day, and at start, the app asks GitHub for the latest release; when its tag is newer than the running version the header shows an "Update available" link to that release, beside the version at the top left. The request carries nothing but the app's version in its user agent; a failed check, or no release yet, is silent.
 
 ### Freshness of what is on the page
 
