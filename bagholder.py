@@ -521,6 +521,7 @@ SECURITY_BATCH = 50
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
 PROTOCOL = "2026-09-07.2"
+STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 QUERIES = {
     "FetchSecurities": Q_FETCH_SECURITIES,
@@ -3017,6 +3018,7 @@ def status_payload():
             "error": _state["error"] or "",
             "dataVersion": store.data_version(),
             "protocol": PROTOCOL,
+            "startedAt": STARTED_AT,
         }
 
 

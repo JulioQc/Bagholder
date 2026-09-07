@@ -332,6 +332,13 @@ function setFilters(patch) {
 }
 function applyStatus(st) {
   if (!st) return;
+  // A restarted server may answer differently (new sources, new timeframes):
+  // forget what earlier answers said and let the open trade fetch again.
+  if (st.startedAt && state.status.startedAt && st.startedAt !== state.status.startedAt) {
+    Object.keys(_histCache).forEach((k) => delete _histCache[k]);
+    const el = document.activeElement;
+    if (document.getElementById("tradeChart") && !(el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT"))) render();
+  }
   const prev = state.status.lastSync;
   const prevCount = state.status.activityCount;
   const prevVersion = state.status.dataVersion;
