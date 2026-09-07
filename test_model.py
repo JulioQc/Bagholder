@@ -94,8 +94,9 @@ class FifoPortTest(unittest.TestCase):
         ]
         r = model.match_fifo(lunr)
         self.assertEqual(r["open"], [])
-        self.assertEqual(len(r["closed"]), 2)
-        by_qty = sorted(r["closed"], key=lambda t: t["quantity"])
+        real = [t for t in r["closed"] if "rolled-out" not in t["flags"]]
+        self.assertEqual(len(real), 2)
+        by_qty = sorted(real, key=lambda t: t["quantity"])
         self.assertEqual(by_qty[0]["quantity"], 1)
         self.assertAlmostEqual(by_qty[0]["exitPrice"], 1.28)
         self.assertEqual(by_qty[1]["quantity"], 15)
@@ -103,7 +104,75 @@ class FifoPortTest(unittest.TestCase):
         self.assertTrue(all(t["openDirection"] == "SHORT" for t in r["closed"]))
         want = (6.2225 - 1.28) * 1 * 100 + (6.2225 - 1.35) * 15 * 100
         self.assertAlmostEqual(sum(t["pnl"] for t in r["closed"]), want)
-        self.assertTrue(all(t["rt"] == "rt:sto" for t in r["closed"]))
+        self.assertTrue(all(t["rt"] == "rt:sto" for t in real))
+
+    def test_roll_carries_the_unposted_leg_to_the_next_buy_back(self):
+        # STO 16 Jan27 calls; roll to Jan28 (only the closing leg is posted);
+        # STO 6 more Jan28; buy back all 22. Nothing stays open.
+        acts = [
+            act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
+                quantity=-16, unitPrice=6.2225, netCashAmount=9956, transactionDate="2025-10-01", symbol="LUNR 15JAN27 12.00 CALL"),
+            act(id="ml", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG",
+                quantity=0, netCashAmount=-2160, transactionDate="2025-11-14", symbol="LUNR 15JAN27 12.00 CALL"),
+            act(id="sto2", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
+                quantity=-6, unitPrice=6.75, netCashAmount=4050, transactionDate="2025-12-10", symbol="LUNR 21JAN28 12.00 CALL"),
+            act(id="btc", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOOPEN", rawType="OPTIONS_BUY",
+                quantity=22, unitPrice=13.3, netCashAmount=-29260, transactionDate="2026-06-26", symbol="LUNR 21JAN28 12.00 CALL"),
+        ]
+        r = model.match_fifo(acts)
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["open"], [])
+        total = sum(t["pnl"] for t in r["closed"])
+        self.assertAlmostEqual(total, 9956 - 2160 + 4050 - 29260)
+        rolled_in = [t for t in r["closed"] if "rolled-in" in t["flags"]]
+        self.assertAlmostEqual(sum(t["quantity"] for t in rolled_in), 16)
+        self.assertTrue(all(t["symbol"] == "LUNR 21JAN28 12.00 CALL" for t in rolled_in))
+
+    def test_credit_roll_up_moves_shorts_to_the_new_strike(self):
+        # 5 short 10 calls rolled up to 12 calls for a credit (two multileg fills
+        # posted on the 10 call), then the 12 calls are bought back.
+        acts = [
+            act(id="sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL",
+                quantity=-5, unitPrice=3.0, netCashAmount=1500, transactionDate="2025-11-12", symbol="BBAI 21JAN28 10.00 CALL"),
+            act(id="cr1", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG",
+                quantity=0, netCashAmount=14, transactionDate="2026-06-09", symbol="BBAI 21JAN28 10.00 CALL"),
+            act(id="cr2", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG",
+                quantity=0, netCashAmount=56, transactionDate="2026-06-17", symbol="BBAI 21JAN28 10.00 CALL"),
+            act(id="btc", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOOPEN", rawType="OPTIONS_BUY",
+                quantity=5, unitPrice=0.85, netCashAmount=-425, transactionDate="2026-06-26", symbol="BBAI 21JAN28 12.00 CALL"),
+        ]
+        r = model.match_fifo(acts)
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["open"], [])
+        self.assertAlmostEqual(sum(t["pnl"] for t in r["closed"]), 1500 + 14 + 56 - 425)
+
+    def test_buy_back_closes_older_contracts_of_a_rolled_chain(self):
+        # Short Dec puts rolled forward (only one leg posted, tagged with a contract
+        # never opened); the June buy-back of 26 closes 11 known shorts, the
+        # carried leg and the 9 old Dec puts, and nothing stays open.
+        acts = [
+            act(id="s1", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL", quantity=-3, unitPrice=0.12, netCashAmount=36, transactionDate="2025-12-05", symbol="BBAI 26DEC25 5.50 PUT"),
+            act(id="s2", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL", quantity=-5, unitPrice=0.2, netCashAmount=100, transactionDate="2025-12-11", symbol="BBAI 02JAN26 5.50 PUT"),
+            act(id="s3", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL", quantity=-1, unitPrice=0.4, netCashAmount=40, transactionDate="2025-12-15", symbol="BBAI 26DEC25 6.00 PUT"),
+            act(id="s4", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL", quantity=-6, unitPrice=0.2, netCashAmount=120, transactionDate="2025-12-12", symbol="BBAI 19DEC25 6.00 PUT"),
+            act(id="ml1", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG", quantity=0, netCashAmount=-18, transactionDate="2025-12-15", symbol="BBAI 19DEC25 6.00 PUT"),
+            act(id="ml2", activityType="OPTIONS_MULTILEG", activitySubType="FILLED", rawType="OPTIONS_MULTILEG", quantity=0, netCashAmount=-1830, transactionDate="2025-12-18", symbol="BBAI 18JUN26 5.00 PUT"),
+            act(id="s5", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN", rawType="OPTIONS_SELL", quantity=-11, unitPrice=2.4, netCashAmount=2640, transactionDate="2026-02-27", symbol="BBAI 21JAN28 5.00 PUT"),
+            act(id="btc", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOOPEN", rawType="OPTIONS_BUY", quantity=26, unitPrice=2.74, netCashAmount=-7124, transactionDate="2026-06-29", symbol="BBAI 21JAN28 5.00 PUT"),
+        ]
+        r = model.match_fifo(acts)
+        self.assertEqual(r["unmatched"], [])
+        self.assertEqual(r["open"], [])
+        self.assertAlmostEqual(sum(t["pnl"] for t in r["closed"]), 36 + 100 + 40 + 120 - 18 - 1830 + 2640 - 7124)
+        self.assertTrue(all(t["symbol"] == "BBAI 21JAN28 5.00 PUT" for t in r["closed"] if t["exitDate"] == "2026-06-29"))
+
+    def test_plain_option_buys_without_a_roll_stay_long(self):
+        r = model.match_fifo([
+            act(id="bto", category="trade", activityType="OPTIONS_BUY", activitySubType="BUYTOOPEN", rawType="OPTIONS_BUY",
+                quantity=10, unitPrice=1.27, netCashAmount=-1270, transactionDate="2026-06-15", symbol="QNC 20NOV26 3.00 CALL"),
+        ])
+        self.assertEqual(len(r["open"]), 1)
+        self.assertEqual(r["open"][0]["direction"], "LONG")
 
     def test_short_expiry_closes_short(self):
         r = model.match_fifo([
@@ -128,7 +197,7 @@ class FifoPortTest(unittest.TestCase):
         self.assertFalse(model.is_option_symbol("AAA"))
         self.assertTrue(model.is_option_symbol("LUNR 15JAN27 12.00 CALL"))
 
-    def test_credit_multilegs_add_to_short(self):
+    def test_credit_multilegs_on_a_short_are_a_roll(self):
         r = model.match_fifo([
             act(id="bbai-sto", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOOPEN",
                 rawType="OPTIONS_SELL", quantity=-3, unitPrice=1.2, netCashAmount=360, transactionDate="2026-01-05",
@@ -140,9 +209,8 @@ class FifoPortTest(unittest.TestCase):
                 quantity=0, netCashAmount=56, transactionDate="2026-02-01", symbol="BBAI 21JAN28 10.00 CALL"),
         ])
         self.assertEqual(r["unmatched"], [])
-        self.assertEqual(r["closed"], [])
-        self.assertGreaterEqual(sum(l["qty"] for l in r["open"]), 3)
-        self.assertTrue(all(l["direction"] == "SHORT" for l in r["open"]))
+        self.assertEqual(r["open"], [])
+        self.assertAlmostEqual(sum(t["pnl"] for t in r["closed"]), 360 + 14 + 56)
 
     def test_long_expiry_and_same_day_expiry(self):
         r = model.match_fifo([

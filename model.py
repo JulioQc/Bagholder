@@ -105,6 +105,21 @@ def option_multiplier(symbol):
     return 100 if is_option_symbol(symbol) else 1
 
 
+def option_right(symbol):
+    u = _SPACE_RE.sub(" ", _s(symbol).strip().upper())
+    if u.endswith(" PUT") or u.endswith(" P") or re.search(r" \d{6}P\d+", u):
+        return "PUT"
+    return "CALL"
+
+
+def is_multileg(a):
+    return "MULTILEG" in compact(a.get("rawType"))
+
+
+def roll_key(a):
+    return (fifo_account(a), underlying_symbol(a.get("symbol")), option_right(a.get("symbol")))
+
+
 def days_between(a, b):
     try:
         da = date.fromisoformat(_s(a)[:10])
@@ -478,6 +493,14 @@ def infer_zero_qty_option_fills(fills):
         return remaining[k]
 
     zeros_by_book = {}
+    pools = {}
+
+    def pool_of(a):
+        k = roll_key(a)
+        if k not in pools:
+            pools[k] = {"LONG": 0.0, "SHORT": 0.0}
+        return pools[k]
+
     for i, f in enumerate(fills):
         a = f["a"]
         qty = abs(_num(a.get("quantity")))
@@ -492,6 +515,43 @@ def infer_zero_qty_option_fills(fills):
         if not f["side"]:
             continue
         rem = rem_of(a)
+        if is_option_symbol(a.get("symbol")) and is_multileg(a):
+            # A roll: this row closes what the contract holds (or what an earlier
+            # roll carried forward), and the same quantity moves to the next contract.
+            pool = pool_of(a)
+            direction = "SHORT" if rem["SHORT"] > EPS else "LONG" if rem["LONG"] > EPS else ("SHORT" if pool["SHORT"] >= pool["LONG"] else "LONG")
+            open_sz = rem[direction] + pool[direction]
+            qty = abs(_num(a.get("quantity")))
+            cash = _num(a.get("netCashAmount"))
+            if qty == 0:
+                k = book_key(a)
+                upcoming = len([j for j in zeros_by_book.get(k, []) if j > i])
+                if rem[direction] > EPS and upcoming == 0:
+                    qty = rem[direction]
+                elif open_sz > EPS:
+                    picked = 0
+                    cap = max(1, int(open_sz + 1e-9))
+                    for q in range(1, cap + 1):
+                        if _is_clean_option_qty(cash, q):
+                            picked = q
+                            break
+                    qty = picked or _infer_standalone_option_qty(cash)
+                    if qty > open_sz:
+                        qty = open_sz
+                else:
+                    qty = _infer_standalone_option_qty(cash)
+                a["unitPrice"] = abs(cash) / (qty * 100.0) if qty > 0 else 0.0
+            f["side"] = "BUY" if direction == "SHORT" else "SELL"
+            a["activitySubType"] = "BUYTOCLOSE" if direction == "SHORT" else "SELLTOCLOSE"
+            a["quantity"] = qty if direction == "SHORT" else -qty
+            f["qty"] = qty
+            f["rollDirection"] = direction
+            closed = min(qty, rem[direction])
+            rem[direction] -= closed
+            pool[direction] -= min(qty - closed, pool[direction])
+            if closed > EPS or qty > EPS:
+                pool[direction] += qty
+            continue
         if is_option_symbol(a.get("symbol")):
             _resolve_option_fill_side(f, rem)
         qty = abs(_num(a.get("quantity")))
@@ -534,6 +594,11 @@ def infer_zero_qty_option_fills(fills):
             close_amt = min(left, rem.get(closing_dir, 0.0))
             rem[closing_dir] -= close_amt
             left -= close_amt
+            if left > EPS and is_option_symbol(a.get("symbol")):
+                pool = pool_of(a)
+                pooled = min(left, pool[closing_dir])
+                pool[closing_dir] -= pooled
+                left -= pooled
             if left > EPS and opening:
                 rem[opening] += left
 
@@ -680,6 +745,61 @@ def match_fifo(activities):
     rt_open = {}
     closed = []
     unmatched = []
+    rolled = {}  # (account, underlying, right) -> {"LONG": [lots], "SHORT": [lots]}: legs Wealthsimple never posted
+
+    def rolled_of(a):
+        k = roll_key(a)
+        if k not in rolled:
+            rolled[k] = {"LONG": [], "SHORT": []}
+        return rolled[k]
+
+    rolled_keys = set()
+
+    def close_rolled(fill, a, remaining, closing_dir):
+        """Close carried-forward legs against this fill; they take this contract's
+        symbol. When this chain has been rolled, a buy-back beyond the known
+        shorts also closes the chain's older contracts (nearest expiry first):
+        those are the legs the rolls moved here without posting."""
+        lots = rolled_of(a)[closing_dir]
+        key = book_key(a)
+        rt = rt_open.get(key)
+        while remaining > EPS and lots:
+            lot = lots[0]
+            lot["symbol"] = _s(a.get("symbol"))
+            lot["rt"] = rt or lot.get("rt") or ("rt:" + _s(lot.get("activityId")))
+            matched = min(lot["qty"], remaining)
+            closed.append(_make_slice(lot, fill, a, matched))
+            lot["qty"] -= matched
+            remaining -= matched
+            if lot["qty"] <= EPS:
+                lots.pop(0)
+        if remaining > EPS and roll_key(a) in rolled_keys:
+            others = []
+            for k2, b2 in books.items():
+                if k2 == key or not b2:
+                    continue
+                bits = k2.split("::")
+                if bits[0] != fifo_account(a) or bits[2] != _s(a.get("currency")):
+                    continue
+                if not is_option_symbol(bits[1]) or underlying_symbol(bits[1]) != underlying_symbol(a.get("symbol")) or option_right(bits[1]) != option_right(a.get("symbol")):
+                    continue
+                others.append((option_expiry(bits[1]), k2))
+            for _, k2 in sorted(others):
+                b2 = books[k2]
+                while remaining > EPS and b2 and b2[0]["direction"] == closing_dir:
+                    lot = b2[0]
+                    matched = min(lot["qty"], remaining)
+                    s = _make_slice(lot, fill, a, matched, _s(a.get("symbol")))
+                    s["flags"] = sorted(set(s["flags"]) | {"rolled-in"})
+                    closed.append(s)
+                    lot["qty"] -= matched
+                    remaining -= matched
+                    if lot["qty"] <= EPS:
+                        b2.pop(0)
+                if not b2:
+                    rt_open[k2] = None
+        return remaining
+
     splits = split_markers(normalized)
     pending_splits = {}
     for (acct, sym, day), factor in splits.items():
@@ -727,7 +847,58 @@ def match_fifo(activities):
         key = book_key(a)
         book = books.setdefault(key, [])
         apply_splits(key, _s(a.get("transactionDate")))
+        if is_option_symbol(a.get("symbol")) and is_multileg(a) and fill.get("rollDirection"):
+            # Roll: close this contract (book, then carried-forward legs) and carry
+            # the same quantity to the unposted new leg. A debit belongs to the
+            # closed leg's exit, a credit to the new leg's entry.
+            direction = fill["rollDirection"]
+            cash = _num(a.get("netCashAmount"))
+            per = abs(cash) / (fill["qty"] * 100.0) if fill["qty"] > 0 else 0.0
+            debit = cash < 0
+            exit_px = per if (direction == "SHORT") == debit else 0.0
+            entry_px = per if (direction == "SHORT") != debit else 0.0
+            a["unitPrice"] = exit_px
+            before = len(closed)
+            remaining = close_against(book, key, fill, a, fill["qty"])
+            remaining = close_rolled(fill, a, remaining, direction)
+            moved = fill["qty"] - remaining
+            rolled_keys.add(roll_key(a))
+            if moved > EPS:
+                for s in closed[before:]:
+                    if "rolled" not in s["flags"]:
+                        s["flags"].append("rolled")
+                rolled_of(a)[direction].append(
+                    {
+                        "qty": moved,
+                        "price": entry_px,
+                        "date": _s(a.get("transactionDate")),
+                        "when": _s(a.get("occurredAt")),
+                        "commission": 0.0,
+                        "direction": direction,
+                        "accountId": _s(a.get("accountId")),
+                        "accountType": fifo_account(a),
+                        "symbol": _s(a.get("symbol")),
+                        "name": _s(a.get("name")),
+                        "currency": _s(a.get("currency")),
+                        "kind": "Options",
+                        "activityId": _s(a.get("id")),
+                        "securityId": "",
+                        "rt": None,
+                        "flags": ["rolled-in"],
+                    }
+                )
+            if remaining > EPS:
+                # nothing to roll: this multileg simply opened a position
+                opening = "LONG" if debit else "SHORT"
+                a["unitPrice"] = per
+                fill["side"] = "BUY" if opening == "LONG" else "SELL"
+                if not book or not rt_open.get(key):
+                    rt_open[key] = "rt:" + _s(a.get("id"))
+                book.append({"qty": remaining, "price": per, "date": _s(a.get("transactionDate")), "when": _s(a.get("occurredAt")), "commission": 0.0, "direction": opening, "accountId": _s(a.get("accountId")), "accountType": fifo_account(a), "symbol": _s(a.get("symbol")), "name": _s(a.get("name")), "currency": _s(a.get("currency")), "kind": "Options", "activityId": _s(a.get("id")), "securityId": _s(a.get("securityId")), "rt": rt_open[key], "flags": list(a.get("flags") or [])})
+            continue
         remaining = close_against(book, key, fill, a, fill["qty"])
+        if remaining > EPS and is_option_symbol(a.get("symbol")):
+            remaining = close_rolled(fill, a, remaining, "SHORT" if fill["side"] == "BUY" else "LONG")
         if remaining > EPS and fill["side"] == "SELL":
             for dk, dbook in books.items():
                 if not dbook or dk == key:
@@ -785,6 +956,18 @@ def match_fifo(activities):
 
     for key in list(books):
         apply_splits(key, "9999-12-31")
+    for (acct, under, right), dirs in rolled.items():
+        for direction, lots in dirs.items():
+            for lot in lots:
+                if lot["qty"] <= EPS:
+                    continue
+                # the closing leg of this roll was never posted; the credit (or
+                # nothing, for a debit roll) is what it earned
+                pseudo = {"a": {"id": "roll-out:" + lot["activityId"], "unitPrice": 0.0, "commission": 0.0, "transactionDate": lot["date"], "occurredAt": lot["when"], "name": lot["name"], "securityId": "", "flags": ["rolled-out"]}, "side": "BUY" if direction == "SHORT" else "SELL", "qty": lot["qty"]}
+                lot["rt"] = lot.get("rt") or "rt:" + lot["activityId"]
+                s = _make_slice(lot, pseudo, pseudo["a"], lot["qty"])
+                s["sellActivityId"] = ""
+                closed.append(s)
     open_lots = []
     for book in books.values():
         for lot in book:
