@@ -103,7 +103,7 @@ The page polls the server every 30 seconds and reloads its model whenever the da
 | Position Price, Market, P&L, Allocation; Cashflow Market and Current yield | Live quote | 15 minutes for shares, ETFs, crypto and US-listed options |
 | Cashflow Distribution, Projected, Yield on cost, Current yield | Declared record from TMX | 20 hours, or the next sync, whichever comes first |
 
-The one price without a public source is a Canadian-listed option (Montréal Exchange); it shows the last fill price in the history. A Cboe Canada listing has a live price but no declared distribution record, so its distribution rate comes from the payments received.
+Every instrument Wealthsimple offers has a live price source. A Cboe Canada listing has a live price but no declared distribution record on TMX, so its distribution rate comes from the payments received.
 
 ## 3. Formatting
 
