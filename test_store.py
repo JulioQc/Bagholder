@@ -75,6 +75,15 @@ class StoreTest(unittest.TestCase):
         self.tmp.cleanup()
         os.environ.pop("BAGHOLDER_HOME", None)
 
+    def test_status_carries_the_data_version_so_the_page_can_reload(self):
+        v0 = bagholder.status_payload()["dataVersion"]
+        self.assertTrue(v0)
+        store.upsert_quote("RDDY", {"price": 4.75, "fetchedAt": "2026-09-07T15:00:00Z"})
+        v1 = bagholder.status_payload()["dataVersion"]
+        self.assertNotEqual(v0, v1)
+        store.upsert_distributions("RDDY", [{"exDate": "2026-09-30", "payDate": "2026-10-05", "amount": 0.2, "currency": "CAD"}])
+        self.assertNotEqual(v1, bagholder.status_payload()["dataVersion"])
+
     def test_options_sell_maps_as_sell_to_open(self):
         item = _ws_item(
             type="OPTIONS_SELL",

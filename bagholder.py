@@ -3011,6 +3011,7 @@ def status_payload():
             "listingsFilling": bool(_state.get("listingsFilling")),
             "syncStep": _state.get("syncStep") or "",
             "error": _state["error"] or "",
+            "dataVersion": store.data_version(),
         }
 
 
@@ -3048,9 +3049,21 @@ def refresh_quotes():
         return 0
 
 
+def refresh_periodic_market():
+    """USD/CAD, S&P 500 and declared distributions on their own clocks. Never raises."""
+    try:
+        out = market.refresh_periodic(_ssl_context(), _payer_symbols())
+        if out.get("fx") or out.get("benchmark") or out.get("distributions"):
+            model.invalidate()
+        return out
+    except Exception:
+        return {"fx": 0, "benchmark": 0, "distributions": 0, "skipped": True}
+
+
 def quote_loop():
     while not _stop.wait(60 * market.QUOTE_REFRESH_MINUTES):
         refresh_quotes()
+        refresh_periodic_market()
 
 
 WATCH_SCAN_SEC = 10 * 60

@@ -81,10 +81,26 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 
 | Source | Data | Refresh |
 |---|---|---|
-| Bank of Canada Valet | USD/CAD daily | On sync and at start |
-| FRED (Stooq fallback) | S&P 500 daily close | On sync and at start |
-| TMX Money | Quotes for held shares and ETFs; declared distributions for dividend payers | Quotes every 15 minutes; distributions when stale |
+| Bank of Canada Valet | USD/CAD daily | At start, after every sync, and every 6 hours while running |
+| FRED (Stooq fallback) | S&P 500 daily close | At start, after every sync, and every 6 hours while running |
+| TMX Money | Quotes for held shares and ETFs on TSX, TSX-V, CSE and US exchanges | Every 15 minutes while running |
+| TMX Money | Declared distribution record of every Canadian-listed dividend payer | Refetched once its stored copy is older than 20 hours, checked every 15 minutes, and after every sync |
 | Wealthsimple | Activities, balances, accounts, NAV history | Full sync once, then incremental, automatically on weekdays after 2 PM Mountain while running; the session is refreshed without a new sign-in |
+
+Each declared record carries its own fetch stamp, separate from the quote's, so the quote loop keeping a price fresh never makes the fund's distribution history look fresh.
+
+### Freshness of what is on the page
+
+The page polls the server every 30 seconds and reloads its model whenever the data version changes, which any new activity, NAV point, FX rate, benchmark close, distribution or quote does. The reload is deferred until the next page change while a trade is open or a note is being typed, so nothing is overwritten under the user. After a sync the reload is immediate.
+
+| Value | Feeds from | Fresh within |
+|---|---|---|
+| Trades, executions, journal, dashboard tiles and cards, distribution history, YTD and All time income | Wealthsimple activities and NAV, converted with BoC rates | The next sync: weekdays after 2 PM Mountain, or Sync now |
+| Annualized returns vs S&P 500, drawdown | NAV from sync; S&P 500 from FRED | Sync for NAV; 6 hours for the index |
+| Position Price, Market, P&L, Allocation; Cashflow Market and Current yield | TMX quote | 15 minutes for shares and ETFs on TMX-covered exchanges |
+| Cashflow Distribution, Projected, Yield on cost, Current yield | Declared record from TMX | 20 hours, or the next sync, whichever comes first |
+
+Prices that are not live, because no source covers them yet: crypto, options, and listings on Cboe Canada. These show the last fill price in the history and are labelled as such in the position panel.
 
 ## 3. Formatting
 

@@ -990,13 +990,22 @@ class DeclaredDistributionsTest(unittest.TestCase):
                 syms = [{"symbol": "CCHI", "exchange": "TSX", "currency": "CAD"}, {"symbol": "LUNR", "exchange": "NASDAQ", "currency": "USD"}, {"symbol": "NEW", "exchange": "", "currency": "CAD"}]
                 from datetime import datetime, timezone
                 fresh = datetime(2026, 9, 6, 5, 0, tzinfo=timezone.utc)
+                # A fresh quote says nothing about the declared record: until the
+                # record itself has been fetched, the symbol is stale.
+                self.assertEqual(market.stale_symbols(syms, now=fresh), ["CCHI", "NEW"])
+                store.mark_distributions_fetched("CCHI", "2026-09-06T00:00:00Z")
                 self.assertEqual(market.stale_symbols(syms, now=fresh), ["NEW"])
                 old = datetime(2026, 9, 8, 5, 0, tzinfo=timezone.utc)
+                self.assertEqual(market.stale_symbols(syms, now=old), ["CCHI", "NEW"])
+                # The quote loop refreshing the quote does not make the record fresh.
+                store.upsert_quote("CCHI", {"price": 11.0, "fetchedAt": "2026-09-08T04:55:00Z"})
                 self.assertEqual(market.stale_symbols(syms, now=old), ["CCHI", "NEW"])
                 with mock.patch.object(market, "fetch_tmx", return_value=({"price": 1.0, "dividendAmount": 0.1, "dividendFrequency": "Monthly", "exDividendDate": "2026-09-01"}, [{"exDate": "2026-09-01", "payDate": "2026-09-05", "amount": 0.1, "currency": "CAD"}])) as f:
                     self.assertEqual(market.refresh_distributions(syms), 2)
                 self.assertEqual(sorted(store.quotes()), ["CCHI", "NEW"])
+                self.assertEqual(sorted(store.distributions_fetched_at()), ["CCHI", "NEW"])
                 self.assertEqual(f.call_count, 2)
+                self.assertEqual(market.stale_symbols(syms), [])
             finally:
                 store.set_home(None)
                 os.environ.pop("BAGHOLDER_HOME", None)
@@ -1114,6 +1123,38 @@ class MarketParseTest(unittest.TestCase):
         self.assertEqual(market.parse_fred_csv(fred), {"2026-08-28": 6500.12})
         stooq = "Date,Open,High,Low,Close,Volume\n2026-08-28,1,2,0,6501.5,0\n"
         self.assertEqual(market.parse_stooq_csv(stooq), {"2026-08-28": 6501.5})
+
+    def test_periodic_refresh_paces_fx_and_benchmark_and_refetches_stale_records(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                boc = json.dumps({"observations": [{"d": "2026-09-04", "FXUSDCAD": {"v": "1.38"}}]})
+                fred = "observation_date,SP500\n2026-09-04,7000\n"
+                syms = [{"symbol": "CCHI", "exchange": "TSX", "currency": "CAD"}]
+                divs = ({"price": 1.0}, [{"exDate": "2026-09-01", "payDate": "2026-09-05", "amount": 0.1, "currency": "CAD"}])
+                t0 = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                    out = market.refresh_periodic(symbols=syms, now=t0)
+                self.assertEqual((out["fx"], out["benchmark"], out["distributions"]), (1, 1, 1))
+                self.assertEqual((g.call_count, f.call_count), (2, 1))
+                # Ten minutes later: FX and the benchmark wait for their six hours; the record is fresh.
+                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                    out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(minutes=10))
+                self.assertEqual((out["fx"], out["benchmark"], out["distributions"]), (0, 0, 0))
+                self.assertEqual((g.call_count, f.call_count), (0, 0))
+                # Seven hours later FX and the benchmark are attempted again; the record is still within 20 hours.
+                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]) as g, mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                    out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(hours=7))
+                self.assertEqual((g.call_count, f.call_count), (2, 0))
+                # A day later the declared record is refetched.
+                with mock.patch.object(market, "_get_text", side_effect=[boc, fred]), mock.patch.object(market, "fetch_tmx", return_value=divs) as f:
+                    out = market.refresh_periodic(symbols=syms, now=t0 + timedelta(hours=25))
+                self.assertEqual(f.call_count, 1)
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
 
     def test_refresh_uses_store_and_survives_errors(self):
         with tempfile.TemporaryDirectory() as tmp:

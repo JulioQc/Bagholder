@@ -36,6 +36,8 @@ TMX_DIVIDENDS_QUERY = (
 )
 TMX_BATCH = 24
 QUOTE_STALE_HOURS = 20
+RECORD_STALE_HOURS = QUOTE_STALE_HOURS
+MARKET_ATTEMPT_HOURS = 6
 CANADIAN_EXCHANGES = ("TSX", "TSX-V", "TSXV", "CSE", "CBOE CANADA", "NEO", "ALPHA EXCHANGE")
 FX_START = "2016-01-01"
 TIMEOUT_SEC = 30
@@ -336,9 +338,12 @@ def refresh_quotes(symbols, ssl_context=None, now=None):
 
 
 def stale_symbols(symbols, now=None):
-    """Dividend-paying Canadian listings whose quote is older than QUOTE_STALE_HOURS."""
+    """Dividend-paying Canadian listings whose declared distribution record
+    is older than RECORD_STALE_HOURS. The record has its own fetch stamp: the
+    quote loop keeps quotes fresh every few minutes, and that must not make
+    the fund's distribution history look fresh."""
     now = now or datetime.now(timezone.utc)
-    fetched = store.quote_fetched_at()
+    fetched = store.distributions_fetched_at()
     out = []
     for rec in symbols or []:
         sym = tmx_symbol(rec.get("symbol"))
@@ -349,15 +354,16 @@ def stale_symbols(symbols, now=None):
             age = now - datetime.fromisoformat(last.replace("Z", "+00:00")) if last else None
         except ValueError:
             age = None
-        if age is None or age > timedelta(hours=QUOTE_STALE_HOURS):
+        if age is None or age > timedelta(hours=RECORD_STALE_HOURS):
             out.append(sym)
     return out
 
 
-def refresh_distributions(symbols=None, ssl_context=None, force=False):
+def refresh_distributions(symbols=None, ssl_context=None, force=False, now=None):
     """Refresh quotes and declared distributions for the dividend payers."""
     recs = symbols or []
-    todo = [tmx_symbol(r.get("symbol")) for r in recs if is_canadian_listing(r.get("exchange"), r.get("currency"))] if force else stale_symbols(recs)
+    now = now or datetime.now(timezone.utc)
+    todo = [tmx_symbol(r.get("symbol")) for r in recs if is_canadian_listing(r.get("exchange"), r.get("currency"))] if force else stale_symbols(recs, now=now)
     done = 0
     for sym in todo:
         quote, divs = fetch_tmx(sym, ssl_context)
@@ -366,6 +372,7 @@ def refresh_distributions(symbols=None, ssl_context=None, force=False):
         if divs:
             store.upsert_distributions(sym, divs)
         if quote or divs:
+            store.mark_distributions_fetched(sym, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
             done += 1
     return done
 
@@ -389,12 +396,42 @@ def refresh_all(ssl_context=None, symbols=None):
             return {"fx": 0, "benchmark": 0, "skipped": True}
         _refreshing = True
     try:
+        store.set_meta("market_attempt_at", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
         return {
             "fx": refresh_fx(ssl_context),
             "benchmark": refresh_benchmark(ssl_context),
             "distributions": refresh_distributions(symbols or [], ssl_context),
             "skipped": False,
         }
+    finally:
+        with _lock:
+            _refreshing = False
+
+
+def refresh_periodic(ssl_context=None, symbols=None, now=None):
+    """What the background loop runs every few minutes: USD/CAD and the
+    S&P 500 at most every MARKET_ATTEMPT_HOURS, and the declared distribution
+    record of every payer whose copy is older than RECORD_STALE_HOURS.
+    Never raises; returns row counts written."""
+    global _refreshing
+    with _lock:
+        if _refreshing:
+            return {"fx": 0, "benchmark": 0, "distributions": 0, "skipped": True}
+        _refreshing = True
+    try:
+        now = now or datetime.now(timezone.utc)
+        out = {"fx": 0, "benchmark": 0, "distributions": 0, "skipped": False}
+        last = store.get_meta("market_attempt_at")
+        try:
+            age = now - datetime.fromisoformat(last.replace("Z", "+00:00")) if last else None
+        except ValueError:
+            age = None
+        if age is None or age > timedelta(hours=MARKET_ATTEMPT_HOURS):
+            store.set_meta("market_attempt_at", now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            out["fx"] = refresh_fx(ssl_context)
+            out["benchmark"] = refresh_benchmark(ssl_context)
+        out["distributions"] = refresh_distributions(symbols or [], ssl_context, now=now)
+        return out
     finally:
         with _lock:
             _refreshing = False

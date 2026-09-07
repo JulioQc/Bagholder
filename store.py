@@ -196,6 +196,11 @@ def _init_schema(conn):
             source TEXT,
             fetched_at TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS distribution_fetches (
+            symbol TEXT PRIMARY KEY,
+            fetched_at TEXT NOT NULL
+        );
         """
     )
     _migrate_nav_history(conn)
@@ -1403,6 +1408,34 @@ def quote_fetched_at():
         try:
             _init_schema(conn)
             return {r["symbol"]: r["fetched_at"] or "" for r in conn.execute("SELECT symbol, fetched_at FROM quotes").fetchall()}
+        finally:
+            conn.close()
+
+
+def distributions_fetched_at():
+    """symbol -> when its declared distribution record was last fetched."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            return {r["symbol"]: r["fetched_at"] or "" for r in conn.execute("SELECT symbol, fetched_at FROM distribution_fetches").fetchall()}
+        finally:
+            conn.close()
+
+
+def mark_distributions_fetched(symbol, when):
+    sym = _s(symbol).strip().upper()
+    if not sym or not when:
+        return
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute(
+                "INSERT INTO distribution_fetches(symbol, fetched_at) VALUES (?, ?) ON CONFLICT(symbol) DO UPDATE SET fetched_at = excluded.fetched_at",
+                (sym, _s(when)),
+            )
+            conn.commit()
         finally:
             conn.close()
 
