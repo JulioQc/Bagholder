@@ -176,6 +176,9 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
+const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
+function chartTf() { const v = state.chartTf || (function () { try { return localStorage.getItem("bh2.chartTf"); } catch (e) { return ""; } })(); return TIMEFRAMES.some((x) => x[0] === v) ? v : "1d"; }
+function setChartTf(tf) { state.chartTf = tf; try { localStorage.setItem("bh2.chartTf", tf); } catch (e) {} }
 function applyTheme(name) {
   state.theme = THEMES.some((t) => t[0] === name) ? name : "nocturne";
   if (state.theme === "nocturne") document.documentElement.removeAttribute("data-theme");
@@ -431,6 +434,7 @@ function menuHtml() {
     '<div class="sep"></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px 4px"><span class="lbl" style="margin-right:auto">Theme</span>' +
     THEMES.map((t) => '<button class="pill' + (state.theme === t[0] ? " on" : "") + '" data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "' style=\"padding:3px 9px;font-size:11.5px;width:auto\">" + t[1] + "</button>").join("") + "</div>" +
     (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
+    '<div class="sep"></div><a href="https://www.tradingview.com/" target="_blank" rel="noopener" class="muted" style="display:block;font-size:10.5px;padding:4px 9px 2px;text-decoration:none;color:var(--ink55)">Charts by TradingView</a>' +
     "</div>";
 }
 function dataDialogHtml() {
@@ -877,17 +881,25 @@ function chartSpan(t) {
   const to = new Date(Math.min(Date.now(), Date.parse(t.exitDate) + 10 * day)).toISOString().slice(0, 10);
   return { from, to };
 }
-function loadHistory(t) {
-  if (_histCache[t.id]) return Promise.resolve(_histCache[t.id]);
+function loadHistory(t, tf) {
+  const key = t.id + "|" + tf;
+  if (_histCache[key]) return Promise.resolve(_histCache[key]);
   const sp = chartSpan(t);
-  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to;
-  return api("GET", "/api/history?" + q).then((r) => { const bars = (r && r.ok && r.bars) || []; _histCache[t.id] = bars; return bars; });
+  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to + "&tf=" + tf;
+  return api("GET", "/api/history?" + q).then((r) => { const out = { bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [] }; _histCache[key] = out; return out; });
 }
-function fillMarkers(fills, bars, c) {
-  const dates = bars.map((b) => b.date);
-  const onBar = (d) => { let best = null; for (const x of dates) { if (x <= d) best = x; else break; } return best || (dates[0] || d); };
+function tfPillsHtml(available, active) {
+  if (!available.length) return "";
+  return TIMEFRAMES.map((x) => '<button class="pill' + (x[0] === active ? " on" : "") + '"' + (available.indexOf(x[0]) < 0 ? " disabled" : "") + ' data-act="chartTf" data-arg=\'' + attr({ tf: x[0] }) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + x[1] + "</button>").join("");
+}
+function fillMarkers(fills, bars, c, step) {
+  // a fill sits on the bar that contains it: by date on daily and coarser bars,
+  // by bucket on intraday ones
+  const keys = bars.map((b) => (b.date != null ? b.date : b.time));
+  const keyOf = (f) => (bars.length && bars[0].date != null ? f.date : Math.floor(Date.parse(f.when) / 1000 / (step || 1)) * (step || 1));
+  const onBar = (k) => { let best = null; for (const x of keys) { if (x <= k) best = x; else break; } return best != null ? best : (keys.length ? keys[0] : k); };
   return fills.map((f) => ({
-    time: bars.length ? onBar(f.date) : Math.round(Date.parse(f.when) / 1000),
+    time: bars.length ? onBar(keyOf(f)) : Math.round(Date.parse(f.when) / 1000),
     position: f.side === "BUY" ? "belowBar" : "aboveBar",
     shape: f.side === "BUY" ? "arrowUp" : "arrowDown",
     color: f.side === "BUY" ? c.up : c.down,
@@ -902,8 +914,17 @@ function mountTradeChart() {
   if (!t) return;
   const c = chartColors();
   const LW = window.LightweightCharts;
-  loadHistory(t).then((bars) => {
+  const wanted = chartTf();
+  loadHistory(t, wanted).then((h) => {
     if (!document.getElementById("tradeChart") || state.sel !== t.id || _chart) return;
+    const available = h.available;
+    // the remembered timeframe may not exist for this instrument: fall back to daily
+    const tf = available.indexOf(wanted) >= 0 ? wanted : (available.indexOf("1d") >= 0 ? "1d" : "");
+    if (tf && tf !== wanted) { loadHistory(t, tf).then(() => { if (state.sel === t.id) { _chart = null; mountTradeChartWith(t, tf); } }); return; }
+    const pills = document.getElementById("chartTf");
+    if (pills) pills.innerHTML = tfPillsHtml(available, tf);
+    const bars = tf ? h.bars : [];
+    const step = { "1h": 3600, "4h": 14400 }[tf] || 0;
     // With real bars every execution is marked on its day, a zero-price fill
     // (a staking reward) included. Without bars only priced fills can be placed.
     const timed = (t.fills || []).filter((f) => isFinite(Date.parse(f.when))).sort((a, b) => (a.when < b.when ? -1 : a.when > b.when ? 1 : 0));
@@ -911,10 +932,10 @@ function mountTradeChart() {
     const candles = bars.length > 0 && bars.every((b) => b.open != null && b.high != null && b.low != null);
     const chart = LW.createChart(host, {
       autoSize: true,
-      layout: { background: { type: "solid", color: "transparent" }, textColor: c.text, fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: true },
+      layout: { background: { type: "solid", color: "transparent" }, textColor: c.text, fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: false },
       grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
       rightPriceScale: { borderColor: c.grid },
-      timeScale: { borderColor: c.grid, timeVisible: false, secondsVisible: false },
+      timeScale: { borderColor: c.grid, timeVisible: step > 0, secondsVisible: false },
       crosshair: { mode: LW.CrosshairMode.Normal },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
@@ -924,32 +945,37 @@ function mountTradeChart() {
     let series;
     if (candles) {
       series = chart.addSeries(LW.CandlestickSeries, { upColor: c.up, downColor: c.down, borderUpColor: c.up, borderDownColor: c.down, wickUpColor: c.up, wickDownColor: c.down, priceLineVisible: false, lastValueVisible: false });
-      series.setData(bars.map((b) => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close })));
+      series.setData(bars.map((b) => ({ time: b.date != null ? b.date : b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
     } else if (bars.length) {
       series = chart.addSeries(LW.LineSeries, { color: c.line, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      series.setData(bars.map((b) => ({ time: b.date, value: b.close })));
+      series.setData(bars.map((b) => ({ time: b.date != null ? b.date : b.time, value: b.close })));
     } else {
       const pts = fills.map((f) => ({ time: Math.round(Date.parse(f.when) / 1000), value: f.price }));
       for (let i = 1; i < pts.length; i++) if (pts[i].time <= pts[i - 1].time) pts[i].time = pts[i - 1].time + 1;
       series = chart.addSeries(LW.LineSeries, { color: c.line, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
       series.setData(pts);
     }
-    const markers = fillMarkers(fills, bars, c);
+    const markers = fillMarkers(fills, bars, c, step);
     if (!bars.length) { const pts = series.data(); markers.forEach((m, i) => { if (pts[i]) m.time = pts[i].time; }); }
-    // Labels only once the view is zoomed in enough to read them: fewer than 80
-    // bars (or executions) across the chart. Arrows are always shown.
+    // Labels only once the view is zoomed in enough to read them: at most 40
+    // executions in view. Arrows are always shown.
     const bare = markers.map((m) => Object.assign({}, m, { text: "" }));
     const sm = LW.createSeriesMarkers(series, bare);
+    const slot = {};
+    series.data().forEach((d, i) => { slot[d.time] = i; });
+    const idx = markers.map((m) => slot[m.time]).filter((i) => i != null).sort((a, b) => a - b);
     let labelled = false;
-    const relabel = (r) => { const want = !!r && (r.to - r.from) < 80; if (want !== labelled) { labelled = want; sm.setMarkers(want ? markers : bare); } };
-    const kept = _chartRange[t.id];
+    const relabel = (r) => { const want = !!r && idx.filter((i) => i >= r.from && i <= r.to).length <= 40; if (want !== labelled) { labelled = want; sm.setMarkers(want ? markers : bare); } };
+    const rk = t.id + "|" + tf;
+    const kept = _chartRange[rk];
     const fit = () => { if (_chart !== chart) return; if (kept) chart.timeScale().setVisibleLogicalRange(kept); else chart.timeScale().fitContent(); relabel(chart.timeScale().getVisibleLogicalRange()); };
     fit();
     // autoSize learns the card's width a frame after the redraw; fit again then
     requestAnimationFrame(() => requestAnimationFrame(fit));
-    chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { if (r) { _chartRange[t.id] = r; relabel(r); } });
+    chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { if (r) { _chartRange[rk] = r; relabel(r); } });
   });
 }
+function mountTradeChartWith(t, tf) { setChartTf(tf); mountTradeChart(); }
 function execSortValue(e, key) { if (key === "when") return e.when; if (key === "side") return e.side; if (key === "qty") return e.qty; if (key === "currency") return e.currency; if (key === "price") return e.price; return e.amount; }
 function tradeDetailHtml(t, m) {
   const fact = (l, v) => '<div><div class="lbl">' + l + '</div><div class="tab" style="font-size:13px">' + v + "</div></div>";
@@ -961,7 +987,7 @@ function tradeDetailHtml(t, m) {
     '<div class="card elev-sm" style="padding:16px 18px 12px"><div style="display:flex;align-items:flex-start;gap:14px;margin:0 0 14px"><div style="min-width:0"><h4>' + esc(t.symbol) + '</h4><div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(t.name || t.symbol) + (t.exchange ? " · " + esc(t.exchange) : "") + "</div>" +
 "</div>" +
     '<div style="margin-left:auto;text-align:right"><div class="tab" style="font-size:24px;font-weight:500;line-height:1.1;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</div><div class="tab" style="font-size:12px;color:' + color(t.pnl) + ';margin-top:2px">' + pct(t.pnlPct) + "</div></div></div>" +
-    '<div id="tradeChart" style="position:relative;height:300px"></div></div>' +
+    '<div id="chartTf" style="display:flex;gap:4px;justify-content:flex-end;margin:0 0 8px"></div><div id="tradeChart" style="position:relative;height:300px"></div></div>' +
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch;height:372px">' +
     '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div class="rule-b" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:0 0 14px">' +
     fact("Open", esc(t.entryDate)) + fact("Close", esc(t.exitDate)) + fact("Entry", px(t.entry)) + fact("Exit", px(t.exit)) + fact("Hold", hold(t.holdDays)) + fact("Account", esc(t.account)) + "</div>" +
@@ -1262,6 +1288,7 @@ function act(name, arg, ev) {
     case "closeFilter": state.picker = null; render(); break;
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
+    case "chartTf": setChartTf(arg.tf); render(); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
     case "toggleList": { const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value); setFilters({}); const vq = document.getElementById("valueQuery"); if (vq) { vq.focus(); vq.select(); } break; }

@@ -90,7 +90,11 @@ class StoreTest(unittest.TestCase):
         bars = [{"date": "2026-09-04", "open": 4.8, "high": 4.8, "low": 4.68, "close": 4.75, "volume": 1}]
         with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")):
             out = bagholder.history_payload("symbol=RDDY&exchange=TSX&currency=CAD&kind=Shares&from=2026-08-25&to=2026-09-05")
-        self.assertEqual((out["ok"], out["source"], [b["close"] for b in out["bars"]]), (True, "tmx", [4.75]))
+        self.assertEqual((out["ok"], out["source"], out["tf"], out["available"], [b["close"] for b in out["bars"]]), (True, "tmx", "1d", ["1d", "1w", "1M"], [4.75]))
+        with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")):
+            weekly = bagholder.history_payload("symbol=RDDY&exchange=TSX&currency=CAD&kind=Shares&from=2026-08-25&to=2026-09-05&tf=1w")
+        self.assertEqual([b["date"] for b in weekly["bars"]], ["2026-08-31"])
+        self.assertFalse(bagholder.history_payload("symbol=RDDY&exchange=TSX&currency=CAD&kind=Shares&from=2026-08-25&to=2026-09-05&tf=2h")["ok"])
         out = bagholder.history_payload("symbol=QNC%2020NOV26%203.00%20CALL&exchange=NYSE&currency=USD&kind=Options&from=2026-06-01&to=2026-09-05")
         self.assertEqual((out["ok"], out["source"], out["bars"]), (True, "", []))
 

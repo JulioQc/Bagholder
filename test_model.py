@@ -1262,6 +1262,32 @@ class MarketParseTest(unittest.TestCase):
         self.assertEqual(src({"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}), ("coingecko", "BTC-CAD"))
         self.assertIsNone(src({"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}))
 
+    def test_timeframes_aggregate_and_report_availability(self):
+        from datetime import datetime, timezone
+        daily = [
+            {"date": "2026-08-31", "open": 1, "high": 3, "low": 0.5, "close": 2, "volume": 10},   # Monday
+            {"date": "2026-09-01", "open": 2, "high": 4, "low": 1.5, "close": 3, "volume": 10},
+            {"date": "2026-09-04", "open": 3, "high": 3.5, "low": 2, "close": 2.5, "volume": 10},  # Friday
+            {"date": "2026-09-08", "open": 2.5, "high": 5, "low": 2, "close": 4.5, "volume": 10},  # next week
+        ]
+        weeks = market.aggregate_daily(daily, "1w")
+        self.assertEqual([(w["date"], w["open"], w["high"], w["low"], w["close"], w["volume"]) for w in weeks], [("2026-08-31", 1, 4, 0.5, 2.5, 30), ("2026-09-07", 2.5, 5, 2, 4.5, 10)])
+        months = market.aggregate_daily(daily, "1M")
+        self.assertEqual([(m["date"], m["open"], m["close"]) for m in months], [("2026-08-01", 1, 2), ("2026-09-01", 2, 4.5)])
+        hourly = [{"time": 3600 * h, "close": h} for h in range(1, 10)]
+        four = market.aggregate_hourly(hourly, 14400)
+        self.assertEqual([(b["time"], b["close"]) for b in four], [(0, 3), (14400, 7), (28800, 9)])
+        pts = json.dumps({"prices": [[1788800400123, 100.0], [1788801000000, 101.0], [1788804000000, 102.0]]})
+        self.assertEqual(market.parse_coingecko_hourly(pts), [{"time": 1788800400, "close": 101.0}, {"time": 1788804000, "close": 102.0}])
+        now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+        share = {"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}
+        coin = {"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}
+        opt = {"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}
+        self.assertEqual(market.available_timeframes(share, "2025-01-01", now), ["1d", "1w", "1M"])
+        self.assertEqual(market.available_timeframes(coin, "2026-08-01", now), ["1h", "4h", "1d", "1w", "1M"])
+        self.assertEqual(market.available_timeframes(coin, "2026-01-01", now), ["1d", "1w", "1M"], "hourly reaches back 89 days only")
+        self.assertEqual(market.available_timeframes(opt, "2026-08-01", now), [])
+
     def test_history_is_cached_and_closed_days_never_rewritten(self):
         from datetime import datetime, timedelta, timezone
         with tempfile.TemporaryDirectory() as tmp:

@@ -219,6 +219,23 @@ def _init_schema(conn):
             start TEXT NOT NULL,
             fetched_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS price_bars (
+            symbol TEXT NOT NULL,
+            tf TEXT NOT NULL,
+            ts INTEGER NOT NULL,
+            close REAL NOT NULL,
+            source TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (symbol, tf, ts)
+        );
+
+        CREATE TABLE IF NOT EXISTS bar_fetches (
+            symbol TEXT NOT NULL,
+            tf TEXT NOT NULL,
+            start_ts INTEGER NOT NULL,
+            fetched_at TEXT NOT NULL,
+            PRIMARY KEY (symbol, tf)
+        );
         """
     )
     _migrate_nav_history(conn)
@@ -1511,6 +1528,68 @@ def mark_history_fetched(symbol, start, when):
             conn.execute(
                 "INSERT INTO history_fetches(symbol, start, fetched_at) VALUES (?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET start = MIN(history_fetches.start, excluded.start), fetched_at = excluded.fetched_at",
                 (sym, _s(start)[:10], _s(when)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def price_bars(symbol, tf, start_ts=0, end_ts=2 ** 40):
+    """Intraday closes for one symbol and timeframe, oldest first: [{time, close}]."""
+    sym = _s(symbol).strip().upper()
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            rows = conn.execute("SELECT ts, close FROM price_bars WHERE symbol = ? AND tf = ? AND ts >= ? AND ts <= ? ORDER BY ts", (sym, _s(tf), int(start_ts), int(end_ts))).fetchall()
+            return [{"time": r["ts"], "close": r["close"]} for r in rows]
+        finally:
+            conn.close()
+
+
+def upsert_price_bars(symbol, tf, bars, source=""):
+    """Closed bars are written once; the newest stored bar may be replaced."""
+    sym = _s(symbol).strip().upper()
+    clean = [(sym, _s(tf), int(b["time"]), float(b["close"]), _s(source)) for b in bars or [] if b.get("time") is not None and _num(b.get("close"), None) and _num(b.get("close"), None) > 0]
+    if not sym or not clean:
+        return 0
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            newest = conn.execute("SELECT MAX(ts) FROM price_bars WHERE symbol = ? AND tf = ?", (sym, _s(tf))).fetchone()[0]
+            conn.executemany("INSERT OR IGNORE INTO price_bars(symbol, tf, ts, close, source) VALUES (?, ?, ?, ?, ?)", clean)
+            if newest is not None:
+                conn.executemany("UPDATE price_bars SET close = ?, source = ? WHERE symbol = ? AND tf = ? AND ts = ?", [(c[3], c[4], c[0], c[1], c[2]) for c in clean if c[2] == newest])
+            conn.commit()
+            return len(clean)
+        finally:
+            conn.close()
+
+
+def bar_fetch(symbol, tf):
+    sym = _s(symbol).strip().upper()
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            r = conn.execute("SELECT start_ts, fetched_at FROM bar_fetches WHERE symbol = ? AND tf = ?", (sym, _s(tf))).fetchone()
+            return {"startTs": r["start_ts"], "fetchedAt": r["fetched_at"]} if r else None
+        finally:
+            conn.close()
+
+
+def mark_bars_fetched(symbol, tf, start_ts, when):
+    sym = _s(symbol).strip().upper()
+    if not sym or not when:
+        return
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute(
+                "INSERT INTO bar_fetches(symbol, tf, start_ts, fetched_at) VALUES (?, ?, ?, ?) ON CONFLICT(symbol, tf) DO UPDATE SET start_ts = MIN(bar_fetches.start_ts, excluded.start_ts), fetched_at = excluded.fetched_at",
+                (sym, _s(tf), int(start_ts), _s(when)),
             )
             conn.commit()
         finally:
