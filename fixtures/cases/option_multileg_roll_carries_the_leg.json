@@ -1,0 +1,136 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 224.0,
+      "avgLoss": -23508.9,
+      "avgWin": 0.0,
+      "count": 1,
+      "expectancy": -23508.9,
+      "losses": 1,
+      "profitFactor": 0.0,
+      "realized": -23508.9,
+      "winRate": 0.0,
+      "wins": 0
+    },
+    "positions": [],
+    "trades": [
+      {
+        "currency": "USD",
+        "entry": 5.384545,
+        "entryDate": "2025-11-14",
+        "exit": 13.3,
+        "exitDate": "2026-06-26",
+        "fees": 0.0,
+        "fills": [
+          "BUY TO OPEN",
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "holdDays": 224,
+        "kind": "Options",
+        "mult": 100,
+        "pnl": -17414.0,
+        "pnlCad": -23508.9,
+        "pnlPct": -1.470032,
+        "qty": 22.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "LUNR 21JAN28 12.00 CALL"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto",
+        "name": "LUNR",
+        "netCashAmount": 9956.0,
+        "occurredAt": "2025-10-01T15:00:00+00:00",
+        "quantity": -16,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "LUNR 15JAN27 12.00 CALL",
+        "transactionDate": "2025-10-01",
+        "unitPrice": 6.2225
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "FILLED",
+        "activityType": "OPTIONS_MULTILEG",
+        "category": "other",
+        "commission": 0,
+        "currency": "USD",
+        "id": "ml",
+        "name": "LUNR",
+        "netCashAmount": -2160,
+        "occurredAt": "2025-11-14T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "OPTIONS_MULTILEG",
+        "securityId": "",
+        "symbol": "LUNR 15JAN27 12.00 CALL",
+        "transactionDate": "2025-11-14",
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto2",
+        "name": "LUNR",
+        "netCashAmount": 4050.0,
+        "occurredAt": "2025-12-10T15:00:00+00:00",
+        "quantity": -6,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "LUNR 21JAN28 12.00 CALL",
+        "transactionDate": "2025-12-10",
+        "unitPrice": 6.75
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOOPEN",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "btc",
+        "name": "LUNR",
+        "netCashAmount": -29260.000000000004,
+        "occurredAt": "2026-06-26T15:00:00+00:00",
+        "quantity": 22,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "LUNR 21JAN28 12.00 CALL",
+        "transactionDate": "2026-06-26",
+        "unitPrice": 13.3
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-09-01"
+}

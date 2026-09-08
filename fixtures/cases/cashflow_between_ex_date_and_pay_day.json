@@ -2,20 +2,20 @@
   "expect": {
     "cashflowHoldings": [
       {
-        "all": 1200.0,
-        "annual": 7200.0,
-        "exPast": false,
+        "all": 400.0,
+        "annual": 2520.0,
+        "exPast": true,
         "freq": 12,
         "freqVerified": true,
-        "nextExDate": "2026-09-30",
-        "nextPayDate": "2026-10-06",
+        "nextExDate": "2026-08-31",
+        "nextPayDate": "2026-09-08",
         "payPast": false,
-        "per": 0.15,
-        "qty": 4000.0,
-        "symbol": "RDDY",
-        "ttm": 1200.0,
-        "yoc": 0.154639,
-        "ytd": 1200.0
+        "per": 0.21,
+        "qty": 1000.0,
+        "symbol": "EASY",
+        "ttm": 400.0,
+        "yoc": 0.126,
+        "ytd": 400.0
       }
     ],
     "cashflowTiles": [
@@ -34,20 +34,20 @@
       {
         "count": 2,
         "label": "2026 YTD",
-        "perMonth": 600.0,
-        "total": 1200.0
+        "perMonth": 200.0,
+        "total": 400.0
       },
       {
         "count": 2,
         "label": "All time",
-        "perMonth": 600.0,
-        "total": 1200.0
+        "perMonth": 200.0,
+        "total": 400.0
       },
       {
-        "book": 46560.0,
-        "earned": 1200.0,
+        "book": 20000.0,
+        "earned": 400.0,
         "label": "Yield on cost",
-        "yield": 0.154639
+        "yield": 0.126
       }
     ],
     "kpi": {
@@ -64,12 +64,12 @@
     },
     "positions": [
       {
-        "avg": 11.64,
-        "cost": 46560.0,
+        "avg": 20.0,
+        "cost": 20000.0,
         "currency": "CAD",
         "kind": "Shares",
-        "qty": 4000.0,
-        "symbol": "RDDY"
+        "qty": 1000.0,
+        "symbol": "EASY"
       }
     ],
     "trades": []
@@ -78,24 +78,24 @@
   "market": {
     "benchmark": {},
     "distributions": {
-      "RDDY": [
+      "EASY": [
         {
-          "amount": 0.15,
+          "amount": 0.2,
+          "currency": "CAD",
+          "exDate": "2026-06-30",
+          "payDate": "2026-07-08"
+        },
+        {
+          "amount": 0.2,
           "currency": "CAD",
           "exDate": "2026-07-31",
-          "payDate": "2026-08-06"
+          "payDate": "2026-08-08"
         },
         {
-          "amount": 0.15,
+          "amount": 0.21,
           "currency": "CAD",
           "exDate": "2026-08-31",
-          "payDate": "2026-09-04"
-        },
-        {
-          "amount": 0.15,
-          "currency": "CAD",
-          "exDate": "2026-09-30",
-          "payDate": "2026-10-06"
+          "payDate": "2026-09-08"
         }
       ]
     },
@@ -114,14 +114,14 @@
         "currency": "CAD",
         "id": "b1",
         "name": "LUNR",
-        "netCashAmount": -46560.0,
+        "netCashAmount": -20000.0,
         "occurredAt": "2026-05-01T15:00:00+00:00",
-        "quantity": 4000,
+        "quantity": 1000,
         "rawType": "DIY_BUY",
         "securityId": "",
-        "symbol": "RDDY",
+        "symbol": "EASY",
         "transactionDate": "2026-05-01",
-        "unitPrice": 11.64
+        "unitPrice": 20.0
       },
       {
         "accountId": "acct-1",
@@ -133,14 +133,14 @@
         "currency": "CAD",
         "id": "d1",
         "name": "LUNR",
-        "netCashAmount": 600.0,
-        "occurredAt": "2026-08-06T15:00:00+00:00",
-        "quantity": 4000,
+        "netCashAmount": 200.0,
+        "occurredAt": "2026-07-08T15:00:00+00:00",
+        "quantity": 1000,
         "rawType": "DIVIDEND",
         "securityId": "",
-        "symbol": "RDDY",
-        "transactionDate": "2026-08-06",
-        "unitPrice": 0.15
+        "symbol": "EASY",
+        "transactionDate": "2026-07-08",
+        "unitPrice": 0.2
       },
       {
         "accountId": "acct-1",
@@ -152,14 +152,14 @@
         "currency": "CAD",
         "id": "d2",
         "name": "LUNR",
-        "netCashAmount": 600.0,
-        "occurredAt": "2026-09-04T15:00:00+00:00",
-        "quantity": 4000,
+        "netCashAmount": 200.0,
+        "occurredAt": "2026-08-08T15:00:00+00:00",
+        "quantity": 1000,
         "rawType": "DIVIDEND",
         "securityId": "",
-        "symbol": "RDDY",
-        "transactionDate": "2026-09-04",
-        "unitPrice": 0.15
+        "symbol": "EASY",
+        "transactionDate": "2026-08-08",
+        "unitPrice": 0.2
       }
     ],
     "balances": [],

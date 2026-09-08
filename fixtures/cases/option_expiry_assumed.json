@@ -1,0 +1,106 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 28.0,
+      "avgLoss": 0.0,
+      "avgWin": 81.0,
+      "count": 1,
+      "expectancy": 81.0,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 81.0,
+      "winRate": 1.0,
+      "wins": 1
+    },
+    "positions": [
+      {
+        "avg": 1.0,
+        "cost": 100.0,
+        "currency": "USD",
+        "kind": "Options",
+        "qty": 1.0,
+        "symbol": "ZZZ 17JUL26 10.00 CALL"
+      }
+    ],
+    "trades": [
+      {
+        "currency": "USD",
+        "entry": 0.3,
+        "entryDate": "2025-12-05",
+        "exit": 0.0,
+        "exitDate": "2026-01-02",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "holdDays": 28,
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 60.0,
+        "pnlCad": 81.0,
+        "pnlPct": 1.0,
+        "qty": 2.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "BBAI 02JAN26 5.50 PUT"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto",
+        "name": "LUNR",
+        "netCashAmount": 60.0,
+        "occurredAt": "2025-12-05T15:00:00+00:00",
+        "quantity": -2,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "BBAI 02JAN26 5.50 PUT",
+        "transactionDate": "2025-12-05",
+        "unitPrice": 0.3
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOOPEN",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "bto",
+        "name": "LUNR",
+        "netCashAmount": -100.0,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": 1,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "ZZZ 17JUL26 10.00 CALL",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 1.0
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-03-01"
+}

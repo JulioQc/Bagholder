@@ -1,0 +1,97 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 52.0,
+      "avgLoss": -108.0,
+      "avgWin": 0.0,
+      "count": 1,
+      "expectancy": -108.0,
+      "losses": 1,
+      "profitFactor": 0.0,
+      "realized": -108.0,
+      "winRate": 0.0,
+      "wins": 0
+    },
+    "positions": [],
+    "trades": [
+      {
+        "currency": "USD",
+        "entry": 0.4,
+        "entryDate": "2025-07-01",
+        "exit": 0.0,
+        "exitDate": "2025-08-22",
+        "fees": 0.0,
+        "fills": [
+          "BUY TO OPEN",
+          "SELL TO CLOSE"
+        ],
+        "holdDays": 52,
+        "kind": "Options",
+        "mult": 100,
+        "pnl": -80.0,
+        "pnlCad": -108.0,
+        "pnlPct": -1.0,
+        "qty": 2.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "LUNR 22AUG25 8.00 CALL"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOOPEN",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "bto",
+        "name": "LUNR",
+        "netCashAmount": -80.0,
+        "occurredAt": "2025-07-01T15:00:00+00:00",
+        "quantity": 2,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "LUNR 22AUG25 8.00 CALL",
+        "transactionDate": "2025-07-01",
+        "unitPrice": 0.4
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "EXPIR",
+        "category": "option_event",
+        "commission": 0,
+        "currency": "USD",
+        "id": "exp",
+        "name": "LUNR",
+        "netCashAmount": 0,
+        "occurredAt": "2025-08-22T15:00:00+00:00",
+        "quantity": 2,
+        "rawType": "OPTIONS_EXPIRY",
+        "securityId": "",
+        "symbol": "LUNR 22AUG25 8.00 CALL",
+        "transactionDate": "2025-08-22",
+        "unitPrice": 0
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2025-09-01"
+}

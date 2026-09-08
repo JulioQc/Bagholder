@@ -1,0 +1,117 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 31.0,
+      "avgLoss": 0.0,
+      "avgWin": 250.0,
+      "count": 1,
+      "expectancy": 250.0,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 250.0,
+      "winRate": 1.0,
+      "wins": 1
+    },
+    "positions": [],
+    "trades": [
+      {
+        "currency": "CAD",
+        "entry": 66.666667,
+        "entryDate": "2026-01-01",
+        "exit": 150.0,
+        "exitDate": "2026-02-01",
+        "fees": 0.0,
+        "fills": [
+          "BUY",
+          "BUY",
+          "SELL"
+        ],
+        "holdDays": 31,
+        "kind": "Crypto",
+        "mult": 1,
+        "pnl": 250.0,
+        "pnlCad": 250.0,
+        "pnlPct": 1.25,
+        "qty": 3.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "ETH"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Crypto",
+        "activitySubType": "MARKET_ORDER",
+        "activityType": "CRYPTO_BUY",
+        "category": "other",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "cb",
+        "name": "LUNR",
+        "netCashAmount": 200,
+        "occurredAt": "2026-01-01T15:00:00+00:00",
+        "quantity": 2,
+        "rawType": "CRYPTO_BUY",
+        "securityId": "",
+        "symbol": "ETH",
+        "transactionDate": "2026-01-01",
+        "unitPrice": 100
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Crypto",
+        "activitySubType": "other",
+        "activityType": "CRYPTO_STAKING_REWARD",
+        "category": "other",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "rw",
+        "name": "LUNR",
+        "netCashAmount": 0,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": 1,
+        "rawType": "CRYPTO_STAKING_REWARD",
+        "securityId": "",
+        "symbol": "ETH",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Crypto",
+        "activitySubType": "MARKET_ORDER",
+        "activityType": "CRYPTO_SELL",
+        "category": "other",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "cs",
+        "name": "LUNR",
+        "netCashAmount": 450,
+        "occurredAt": "2026-02-01T15:00:00+00:00",
+        "quantity": 3,
+        "rawType": "CRYPTO_SELL",
+        "securityId": "",
+        "symbol": "ETH",
+        "transactionDate": "2026-02-01",
+        "unitPrice": 150
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-03-01"
+}

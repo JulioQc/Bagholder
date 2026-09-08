@@ -1,0 +1,139 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 108.0,
+      "avgLoss": 0.0,
+      "avgWin": 484.0,
+      "count": 1,
+      "expectancy": 484.0,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 484.0,
+      "winRate": 1.0,
+      "wins": 1
+    },
+    "positions": [],
+    "trades": [
+      {
+        "currency": "USD",
+        "entry": 4.0,
+        "entryDate": "2026-08-15",
+        "exit": 0.5,
+        "exitDate": "2026-12-01",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "holdDays": 108,
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 350.0,
+        "pnlCad": 484.0,
+        "pnlPct": 0.875,
+        "qty": 1.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "ZZZ 15JAN27 12.00 CALL"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {
+      "2026-01-01": 1.4,
+      "2026-08-15": 1.38,
+      "2026-12-01": 1.36
+    }
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "aug-sto",
+        "name": "LUNR",
+        "netCashAmount": 300,
+        "occurredAt": "2026-01-01T15:00:00+00:00",
+        "quantity": -1,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "transactionDate": "2026-01-01",
+        "unitPrice": 3
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOCLOSE",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "aug-cover",
+        "name": "LUNR",
+        "netCashAmount": -100,
+        "occurredAt": "2026-08-15T15:00:00+00:00",
+        "quantity": 1,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "transactionDate": "2026-08-15",
+        "unitPrice": 1
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "jan-sto",
+        "name": "LUNR",
+        "netCashAmount": 200,
+        "occurredAt": "2026-08-15T15:00:00+00:00",
+        "quantity": -1,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "ZZZ 15JAN27 12.00 CALL",
+        "transactionDate": "2026-08-15",
+        "unitPrice": 2
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOCLOSE",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "jan-cover",
+        "name": "LUNR",
+        "netCashAmount": -50.0,
+        "occurredAt": "2026-12-01T15:00:00+00:00",
+        "quantity": 1,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "ZZZ 15JAN27 12.00 CALL",
+        "transactionDate": "2026-12-01",
+        "unitPrice": 0.5
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2027-01-01"
+}

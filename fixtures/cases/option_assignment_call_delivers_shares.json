@@ -1,0 +1,154 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 40.5,
+      "avgLoss": 0.0,
+      "avgWin": 1571.25,
+      "count": 2,
+      "expectancy": 1571.25,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 3142.5,
+      "winRate": 1.0,
+      "wins": 2
+    },
+    "positions": [],
+    "trades": [
+      {
+        "currency": "USD",
+        "entry": 25.0,
+        "entryDate": "2025-01-10",
+        "exit": 31.0,
+        "exitDate": "2025-03-07",
+        "fees": 0.0,
+        "fills": [
+          "BUY",
+          "SELL"
+        ],
+        "holdDays": 56,
+        "kind": "Shares",
+        "mult": 1,
+        "pnl": 1800.0,
+        "pnlCad": 2499.0,
+        "pnlPct": 0.24,
+        "qty": 300.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "ASTS"
+      },
+      {
+        "currency": "USD",
+        "entry": 1.5,
+        "entryDate": "2025-02-10",
+        "exit": 0.0,
+        "exitDate": "2025-03-07",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "holdDays": 25,
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 450.0,
+        "pnlCad": 643.5,
+        "pnlPct": 1.0,
+        "qty": 3.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "ASTS 07MAR25 31.00 CALL"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {
+      "2025-01-10": 1.44,
+      "2025-02-10": 1.43,
+      "2025-03-07": 1.43
+    }
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "b1",
+        "name": "LUNR",
+        "netCashAmount": -7500.0,
+        "occurredAt": "2025-01-10T15:00:00+00:00",
+        "quantity": 300,
+        "rawType": "DIY_BUY",
+        "securityId": "sec-s-asts",
+        "symbol": "ASTS",
+        "transactionDate": "2025-01-10",
+        "unitPrice": 25.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto",
+        "name": "LUNR",
+        "netCashAmount": 450.0,
+        "occurredAt": "2025-02-10T15:00:00+00:00",
+        "quantity": -3,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "sec-o-asts",
+        "symbol": "ASTS 07MAR25 31.00 CALL",
+        "transactionDate": "2025-02-10",
+        "unitPrice": 1.5
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOCLOSE",
+        "activityType": "ASSIGN",
+        "category": "option_event",
+        "commission": 0,
+        "currency": "USD",
+        "id": "asg",
+        "name": "LUNR",
+        "netCashAmount": 9300,
+        "occurredAt": "2025-03-07T15:00:00+00:00",
+        "quantity": 3,
+        "rawType": "OPTIONS_ASSIGN",
+        "securityId": "sec-o-asts",
+        "symbol": "ASTS 07MAR25 31.00 CALL",
+        "transactionDate": "2025-03-07",
+        "unitPrice": 0
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [
+      {
+        "id": "sec-o-asts",
+        "symbol": "ASTS",
+        "underlyingId": "sec-s-asts"
+      },
+      {
+        "id": "sec-s-asts",
+        "name": "AST SpaceMobile",
+        "primaryExchange": "NASDAQ",
+        "symbol": "ASTS"
+      }
+    ],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-09-06"
+}

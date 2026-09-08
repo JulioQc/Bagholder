@@ -1,0 +1,106 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 25.0,
+      "avgLoss": 0.0,
+      "avgWin": 67.5,
+      "count": 1,
+      "expectancy": 67.5,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 67.5,
+      "winRate": 1.0,
+      "wins": 1
+    },
+    "positions": [
+      {
+        "avg": 5.0,
+        "cost": 500.0,
+        "currency": "USD",
+        "kind": "Shares",
+        "qty": 100.0,
+        "symbol": "BBAI"
+      }
+    ],
+    "trades": [
+      {
+        "currency": "USD",
+        "entry": 0.5,
+        "entryDate": "2025-11-10",
+        "exit": 0.0,
+        "exitDate": "2025-12-05",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "holdDays": 25,
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 50.0,
+        "pnlCad": 67.5,
+        "pnlPct": 1.0,
+        "qty": 1.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "BBAI 05DEC25 5.00 PUT"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto",
+        "name": "LUNR",
+        "netCashAmount": 50.0,
+        "occurredAt": "2025-11-10T15:00:00+00:00",
+        "quantity": -1,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "BBAI 05DEC25 5.00 PUT",
+        "transactionDate": "2025-11-10",
+        "unitPrice": 0.5
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOCLOSE",
+        "activityType": "ASSIGN",
+        "category": "option_event",
+        "commission": 0,
+        "currency": "USD",
+        "id": "asg",
+        "name": "LUNR",
+        "netCashAmount": -500,
+        "occurredAt": "2025-12-05T15:00:00+00:00",
+        "quantity": 1,
+        "rawType": "OPTIONS_ASSIGN",
+        "securityId": "",
+        "symbol": "BBAI 05DEC25 5.00 PUT",
+        "transactionDate": "2025-12-05",
+        "unitPrice": 0
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-01-01"
+}

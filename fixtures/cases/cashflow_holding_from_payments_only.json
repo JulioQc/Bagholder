@@ -2,20 +2,20 @@
   "expect": {
     "cashflowHoldings": [
       {
-        "all": 1200.0,
-        "annual": 7200.0,
+        "all": 184.0,
+        "annual": 256.0,
         "exPast": false,
-        "freq": 12,
+        "freq": 4,
         "freqVerified": true,
-        "nextExDate": "2026-09-30",
-        "nextPayDate": "2026-10-06",
-        "payPast": false,
-        "per": 0.15,
-        "qty": 4000.0,
-        "symbol": "RDDY",
-        "ttm": 1200.0,
-        "yoc": 0.154639,
-        "ytd": 1200.0
+        "nextExDate": "2026-09-15",
+        "nextPayDate": "2026-06-15",
+        "payPast": true,
+        "per": 0.32,
+        "qty": 200.0,
+        "symbol": "QQQQ",
+        "ttm": 184.0,
+        "yoc": 0.0256,
+        "ytd": 124.0
       }
     ],
     "cashflowTiles": [
@@ -26,28 +26,28 @@
         "total": 0
       },
       {
-        "count": 0,
+        "count": 1,
         "label": "2025",
-        "perMonth": 0.0,
-        "total": 0
+        "perMonth": 60.0,
+        "total": 60.0
       },
       {
         "count": 2,
         "label": "2026 YTD",
-        "perMonth": 600.0,
-        "total": 1200.0
+        "perMonth": 62.0,
+        "total": 124.0
       },
       {
-        "count": 2,
+        "count": 3,
         "label": "All time",
-        "perMonth": 600.0,
-        "total": 1200.0
+        "perMonth": 61.333333,
+        "total": 184.0
       },
       {
-        "book": 46560.0,
-        "earned": 1200.0,
+        "book": 10000.0,
+        "earned": 184.0,
         "label": "Yield on cost",
-        "yield": 0.154639
+        "yield": 0.0256
       }
     ],
     "kpi": {
@@ -64,12 +64,12 @@
     },
     "positions": [
       {
-        "avg": 11.64,
-        "cost": 46560.0,
+        "avg": 50.0,
+        "cost": 10000.0,
         "currency": "CAD",
         "kind": "Shares",
-        "qty": 4000.0,
-        "symbol": "RDDY"
+        "qty": 200.0,
+        "symbol": "QQQQ"
       }
     ],
     "trades": []
@@ -77,29 +77,13 @@
   "filters": {},
   "market": {
     "benchmark": {},
-    "distributions": {
-      "RDDY": [
-        {
-          "amount": 0.15,
-          "currency": "CAD",
-          "exDate": "2026-07-31",
-          "payDate": "2026-08-06"
-        },
-        {
-          "amount": 0.15,
-          "currency": "CAD",
-          "exDate": "2026-08-31",
-          "payDate": "2026-09-04"
-        },
-        {
-          "amount": 0.15,
-          "currency": "CAD",
-          "exDate": "2026-09-30",
-          "payDate": "2026-10-06"
-        }
-      ]
-    },
-    "fx": {}
+    "distributions": {},
+    "fx": {},
+    "quotes": {
+      "QQQQ": {
+        "exDividendDate": "2026-09-15"
+      }
+    }
   },
   "snapshot": {
     "accounts": [],
@@ -114,14 +98,14 @@
         "currency": "CAD",
         "id": "b1",
         "name": "LUNR",
-        "netCashAmount": -46560.0,
-        "occurredAt": "2026-05-01T15:00:00+00:00",
-        "quantity": 4000,
+        "netCashAmount": -10000.0,
+        "occurredAt": "2025-10-01T15:00:00+00:00",
+        "quantity": 200,
         "rawType": "DIY_BUY",
         "securityId": "",
-        "symbol": "RDDY",
-        "transactionDate": "2026-05-01",
-        "unitPrice": 11.64
+        "symbol": "QQQQ",
+        "transactionDate": "2025-10-01",
+        "unitPrice": 50.0
       },
       {
         "accountId": "acct-1",
@@ -133,14 +117,14 @@
         "currency": "CAD",
         "id": "d1",
         "name": "LUNR",
-        "netCashAmount": 600.0,
-        "occurredAt": "2026-08-06T15:00:00+00:00",
-        "quantity": 4000,
+        "netCashAmount": 60.0,
+        "occurredAt": "2025-12-15T15:00:00+00:00",
+        "quantity": 200,
         "rawType": "DIVIDEND",
         "securityId": "",
-        "symbol": "RDDY",
-        "transactionDate": "2026-08-06",
-        "unitPrice": 0.15
+        "symbol": "QQQQ",
+        "transactionDate": "2025-12-15",
+        "unitPrice": 0.3
       },
       {
         "accountId": "acct-1",
@@ -152,14 +136,33 @@
         "currency": "CAD",
         "id": "d2",
         "name": "LUNR",
-        "netCashAmount": 600.0,
-        "occurredAt": "2026-09-04T15:00:00+00:00",
-        "quantity": 4000,
+        "netCashAmount": 60.0,
+        "occurredAt": "2026-03-16T15:00:00+00:00",
+        "quantity": 200,
         "rawType": "DIVIDEND",
         "securityId": "",
-        "symbol": "RDDY",
-        "transactionDate": "2026-09-04",
-        "unitPrice": 0.15
+        "symbol": "QQQQ",
+        "transactionDate": "2026-03-16",
+        "unitPrice": 0.3
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Cashflow",
+        "activitySubType": "",
+        "activityType": "Dividend",
+        "category": "dividend",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "d3",
+        "name": "LUNR",
+        "netCashAmount": 64.0,
+        "occurredAt": "2026-06-15T15:00:00+00:00",
+        "quantity": 200,
+        "rawType": "DIVIDEND",
+        "securityId": "",
+        "symbol": "QQQQ",
+        "transactionDate": "2026-06-15",
+        "unitPrice": 0.32
       }
     ],
     "balances": [],

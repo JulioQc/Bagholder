@@ -1,0 +1,97 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 370.0,
+      "avgLoss": 0.0,
+      "avgWin": 1350.0,
+      "count": 1,
+      "expectancy": 1350.0,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 1350.0,
+      "winRate": 1.0,
+      "wins": 1
+    },
+    "positions": [],
+    "trades": [
+      {
+        "currency": "USD",
+        "entry": 2.0,
+        "entryDate": "2026-01-10",
+        "exit": 0.0,
+        "exitDate": "2027-01-15",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "holdDays": 370,
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 1000.0,
+        "pnlCad": 1350.0,
+        "pnlPct": 1.0,
+        "qty": 5.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "ABC 15JAN27 10.00 CALL"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto",
+        "name": "LUNR",
+        "netCashAmount": 1000,
+        "occurredAt": "2026-01-10T15:00:00+00:00",
+        "quantity": -5,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "ABC 15JAN27 10.00 CALL",
+        "transactionDate": "2026-01-10",
+        "unitPrice": 2
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "EXPIRED",
+        "activityType": "OPTIONS_SHORT_EXPIRY",
+        "category": "other",
+        "commission": 0,
+        "currency": "USD",
+        "id": "exp",
+        "name": "LUNR",
+        "netCashAmount": 0,
+        "occurredAt": "2027-01-15T15:00:00+00:00",
+        "quantity": 5,
+        "rawType": "OPTIONS_SHORT_EXPIRY",
+        "securityId": "",
+        "symbol": "ABC 15JAN27 10.00 CALL",
+        "transactionDate": "2027-01-15",
+        "unitPrice": 0
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2027-02-01"
+}
