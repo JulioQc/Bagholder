@@ -1389,7 +1389,7 @@ function connect() {
       // the server stopped waiting: the window closed, or nothing showed up in time
       if (st && !st.capturing) { state.busy = ""; state.status.error = st.error || "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
       if (Date.now() - t0 > 180000) { state.busy = ""; state.status.error = "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
-      setTimeout(tick, 1500);
+      setTimeout(tick, 500);
     });
     tick();
   });

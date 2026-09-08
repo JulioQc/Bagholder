@@ -2713,6 +2713,8 @@ def _cdp_cookie_list(msg):
 
 
 CAPTURE_CALL_SEC = 2   # each DevTools call while capturing: short, so a closed window is noticed quickly
+WINDOW_CHECK_SEC = 0.5   # how often the watcher looks for the window
+CAPTURE_EVERY_SEC = 1.5  # how often it tries to capture the session
 
 
 def _cdp_cookies_from_target(ws_url):
@@ -2797,6 +2799,7 @@ def _poll_chrome_session(proc, debug_port, attempt=None):
     deadline = time.time() + CAPTURE_WAIT_SEC
     start = time.time()
     seen_page = False
+    last_capture = 0.0
 
     def mine():
         with _lock:
@@ -2830,7 +2833,8 @@ def _poll_chrome_session(proc, debug_port, attempt=None):
             _close_login_browser(proc)
             return
         body = None
-        if pages:
+        if pages and time.time() - last_capture >= CAPTURE_EVERY_SEC:
+            last_capture = time.time()
             try:
                 body = _try_capture_from_cdp(debug_port)
             except Exception:
@@ -2842,7 +2846,7 @@ def _poll_chrome_session(proc, debug_port, attempt=None):
             sys.stderr.write("bagholder captured Wealthsimple session\n")
             _close_login_browser(proc)
             return
-        time.sleep(1.5)
+        time.sleep(WINDOW_CHECK_SEC)
     if not mine():
         return
     with _lock:
