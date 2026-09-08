@@ -1,23 +1,161 @@
 {
   "expect": {
+    "benchmark": {
+      "key": "SP500",
+      "label": "S&P 500"
+    },
+    "bySymbol": [
+      {
+        "avgHold": 370.0,
+        "legs": 1,
+        "n": 1,
+        "pnl": 1350.0,
+        "symbol": "ABC",
+        "winRate": 1.0
+      }
+    ],
+    "cashflowCount": 0,
+    "cashflowHoldings": [],
+    "cashflowMonths": [],
+    "cashflowSkipped": [],
+    "cashflowTiles": [
+      {
+        "count": 0,
+        "label": "2025",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2026",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2027 YTD",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "All time",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "book": 0,
+        "earned": 0,
+        "label": "Yield on cost",
+        "yield": null
+      }
+    ],
+    "cashflowTotal": 0,
+    "equity": {
+      "annualized": {
+        "count": 0,
+        "first": "",
+        "last": "",
+        "rate": null,
+        "years": 0.0
+      },
+      "drawdown": {
+        "abs": null,
+        "at": "",
+        "pct": null,
+        "peakAt": ""
+      },
+      "label": "All accounts",
+      "series": []
+    },
+    "grades": {
+      "buckets": [
+        {
+          "grade": "A",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "B",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "C",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "F",
+          "n": 0,
+          "pnl": 0
+        }
+      ],
+      "graded": 0,
+      "ungraded": 1
+    },
     "kpi": {
       "avgHold": 370.0,
       "avgLoss": 0.0,
       "avgWin": 1350.0,
+      "breakeven": 0,
       "count": 1,
       "expectancy": 1350.0,
+      "grossLoss": 0,
+      "grossWin": 1350.0,
       "losses": 0,
       "profitFactor": null,
       "realized": 1350.0,
       "winRate": 1.0,
       "wins": 1
     },
+    "monthly": [
+      {
+        "count": 1,
+        "key": "2027-01",
+        "label": "Jan '27",
+        "value": 1350.0
+      }
+    ],
+    "options": {
+      "accounts": [
+        "Trading"
+      ],
+      "exchanges": [],
+      "kinds": [
+        "Options"
+      ],
+      "symbols": [
+        "ABC 15JAN27 10.00 CALL"
+      ],
+      "tags": [],
+      "years": [
+        "2027"
+      ]
+    },
     "positions": [],
+    "positionsSummary": {
+      "book": 0,
+      "count": 0,
+      "mv": 0,
+      "unreal": 0
+    },
+    "queue": [
+      {
+        "date": "2027-01-15",
+        "id": "rt:sto",
+        "missing": "no grade or thesis",
+        "pnl": 1350.0,
+        "symbol": "ABC 15JAN27 10.00 CALL"
+      }
+    ],
     "trades": [
       {
+        "account": "Trading",
         "currency": "USD",
         "entry": 2.0,
         "entryDate": "2026-01-10",
+        "exchange": "",
         "exit": 0.0,
         "exitDate": "2027-01-15",
         "fees": 0.0,
@@ -25,7 +163,9 @@
           "SELL TO OPEN",
           "BUY TO CLOSE"
         ],
+        "grade": "",
         "holdDays": 370,
+        "id": "rt:sto",
         "kind": "Options",
         "mult": 100,
         "pnl": 1000.0,
@@ -34,11 +174,14 @@
         "qty": 5.0,
         "side": "COVER",
         "status": "closed",
-        "symbol": "ABC 15JAN27 10.00 CALL"
+        "symbol": "ABC 15JAN27 10.00 CALL",
+        "tags": []
       }
-    ]
+    ],
+    "years": []
   },
   "filters": {},
+  "journal": {},
   "market": {
     "benchmark": {},
     "fx": {}

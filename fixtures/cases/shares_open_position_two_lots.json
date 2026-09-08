@@ -1,30 +1,148 @@
 {
   "expect": {
+    "benchmark": {
+      "key": "SP500",
+      "label": "S&P 500"
+    },
+    "bySymbol": [],
+    "cashflowCount": 0,
+    "cashflowHoldings": [],
+    "cashflowMonths": [],
+    "cashflowSkipped": [],
+    "cashflowTiles": [
+      {
+        "count": 0,
+        "label": "2024",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2025",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2026 YTD",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "All time",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "book": 0,
+        "earned": 0,
+        "label": "Yield on cost",
+        "yield": null
+      }
+    ],
+    "cashflowTotal": 0,
+    "equity": {
+      "annualized": {
+        "count": 0,
+        "first": "",
+        "last": "",
+        "rate": null,
+        "years": 0.0
+      },
+      "drawdown": {
+        "abs": null,
+        "at": "",
+        "pct": null,
+        "peakAt": ""
+      },
+      "label": "All accounts",
+      "series": []
+    },
+    "grades": {
+      "buckets": [
+        {
+          "grade": "A",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "B",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "C",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "F",
+          "n": 0,
+          "pnl": 0
+        }
+      ],
+      "graded": 0,
+      "ungraded": 0
+    },
     "kpi": {
       "avgHold": null,
       "avgLoss": 0.0,
       "avgWin": 0.0,
+      "breakeven": 0,
       "count": 0,
       "expectancy": null,
+      "grossLoss": 0,
+      "grossWin": 0,
       "losses": 0,
       "profitFactor": 0.0,
       "realized": 0,
       "winRate": null,
       "wins": 0
     },
+    "monthly": [],
+    "options": {
+      "accounts": [
+        "Trading"
+      ],
+      "exchanges": [],
+      "kinds": [
+        "Shares"
+      ],
+      "symbols": [
+        "BBB"
+      ],
+      "tags": [],
+      "years": []
+    },
     "positions": [
       {
+        "account": "Trading",
+        "alloc": 1.0,
         "avg": 6.0,
         "cost": 1200.0,
         "currency": "CAD",
+        "exchange": "",
+        "held": 40,
+        "id": "rt:b1",
         "kind": "Shares",
         "qty": 200.0,
+        "short": false,
         "symbol": "BBB"
       }
     ],
-    "trades": []
+    "positionsSummary": {
+      "book": 1200.0,
+      "count": 1,
+      "mv": 1400.0,
+      "unreal": 200.0
+    },
+    "queue": [],
+    "trades": [],
+    "years": []
   },
   "filters": {},
+  "journal": {},
   "market": {
     "benchmark": {},
     "fx": {}

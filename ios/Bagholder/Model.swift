@@ -73,8 +73,23 @@ struct BHQuote {
 
 struct BHMarket {
     var fx: [String: Double] = [:]
+    var benchmark: [String: Double] = [:]
+    var benchmarks: [String: [String: Double]] = [:]
     var distributions: [String: [BHDistribution]] = [:]
     var quotes: [String: BHQuote] = [:]
+}
+
+/// One day of Wealthsimple's NAV history.
+struct BHNavPoint {
+    var date = ""
+    var equity: Double?
+    var netDeposits: Double?
+}
+
+/// A journal entry, keyed by the round trip that opened the trade or position.
+struct BHJournalEntry {
+    var grade = "", thesis = ""
+    var tags: [String] = []
 }
 
 struct BHLot {
@@ -119,6 +134,8 @@ struct BHTrade {
     var legCount = 0
     var fills: [BHFillRow] = []
     var flags: [String] = []
+    var grade = "", thesis = ""
+    var tags: [String] = []
 }
 
 struct BHPositionLot {
@@ -139,6 +156,8 @@ struct BHPosition {
     var rt: String?
     var lots: [BHPositionLot] = []
     var alloc = 0.0
+    var thesis = ""
+    var tags: [String] = []
 }
 
 struct BHCashRow {
@@ -187,6 +206,7 @@ struct BHKPI {
 }
 
 struct BHCashflowView {
+    var skipped: [String] = []
     var tiles: [BHTile] = []
     var months: [BHMonth] = []
     var holdings: [BHHolding] = []
@@ -200,6 +220,11 @@ struct BHCashflowView {
 struct BHBase {
     var today = ""
     var fx: [String: Double] = [:]
+    var benchmark: [String: Double] = [:]
+    var benchmarks: [String: [String: Double]] = [:]
+    var equity: [BHEquityPoint] = []
+    var equityByAccount: [String: [BHEquityPoint]] = [:]
+    var journal: [String: BHJournalEntry] = [:]
     var distributions: [String: [BHDistribution]] = [:]
     var quotes: [String: BHQuote] = [:]
     var activities: [BHAct] = []
@@ -1533,7 +1558,7 @@ enum BHModel {
         return f
     }
 
-    static func collapseTrade(_ gid: String, _ members: [BHSlice], status: String, actsById: [String: BHAct], securities: Securities) -> BHTrade {
+    static func collapseTrade(_ gid: String, _ members: [BHSlice], status: String, actsById: [String: BHAct], securities: Securities, journal: [String: BHJournalEntry] = [:]) -> BHTrade {
         let slices = members.sorted { ($0.exitDate, $0.entryDate, sliceMemberKey($0)) < ($1.exitDate, $1.entryDate, sliceMemberKey($1)) }
         let t0 = slices[0]
         let qty = slices.reduce(0.0) { $0 + $1.quantity }
@@ -1607,10 +1632,14 @@ enum BHModel {
         t.legCount = slices.count
         t.fills = fills
         t.flags = Array(Set(slices.flatMap { $0.flags })).sorted()
+        let note = journal[gid]
+        t.grade = note?.grade ?? ""
+        t.thesis = note?.thesis ?? ""
+        t.tags = note?.tags ?? []
         return t
     }
 
-    static func buildTrades(_ closed: [BHSlice], actsById: [String: BHAct], securities: Securities) -> [BHTrade] {
+    static func buildTrades(_ closed: [BHSlice], actsById: [String: BHAct], securities: Securities, journal: [String: BHJournalEntry] = [:]) -> [BHTrade] {
         var byRt: [String: [BHSlice]] = [:]
         var order: [String] = []
         for s in closed {
@@ -1621,7 +1650,7 @@ enum BHModel {
             }
             byRt[rt]!.append(s)
         }
-        var trades = order.map { collapseTrade($0, byRt[$0]!, status: "closed", actsById: actsById, securities: securities) }
+        var trades = order.map { collapseTrade($0, byRt[$0]!, status: "closed", actsById: actsById, securities: securities, journal: journal) }
         trades.sort { ($0.exitDate, $0.id) > ($1.exitDate, $1.id) }
         return trades
     }
@@ -1638,7 +1667,7 @@ enum BHModel {
         return out
     }
 
-    static func buildPositions(_ openLots: [BHLot], lastPrices: [String: (price: Double, date: String)], securities: Securities, today: String, quotes: [String: BHQuote]) -> [BHPosition] {
+    static func buildPositions(_ openLots: [BHLot], lastPrices: [String: (price: Double, date: String)], securities: Securities, today: String, quotes: [String: BHQuote], journal: [String: BHJournalEntry] = [:]) -> [BHPosition] {
         var groups: [String: [BHLot]] = [:]
         var order: [String] = []
         for lot in openLots {
@@ -1705,6 +1734,11 @@ enum BHModel {
             p.lots = lots.map { l in
                 BHPositionLot(opened: l.date, qty: l.qty, price: l.price, basis: l.qty * l.price * mult, held: daysBetween(l.date, today), flags: l.flags, activityId: l.activityId)
             }
+            // A position and the trade it becomes when it closes share one journal
+            // entry: both are keyed by the round trip that opened the position.
+            let note = journal[p.id] ?? journal[legacyPid]
+            p.thesis = note?.thesis ?? ""
+            p.tags = note?.tags ?? []
             rows.append(p)
         }
         let book = rows.reduce(0.0) { $0 + abs($1.cost) }
@@ -1760,7 +1794,7 @@ enum BHModel {
 
     // MARK: build
 
-    static func buildBase(activities raw: [BHAct], securities secRows: [BHSecurity], market: BHMarket, today: String) -> BHBase {
+    static func buildBase(activities raw: [BHAct], securities secRows: [BHSecurity], market: BHMarket, today: String, navHistory: [BHNavPoint] = [], navByAccount: [String: [BHNavPoint]] = [:], journal: [String: BHJournalEntry] = [:]) -> BHBase {
         var acts = normalizeActivities(raw)
         let securities = Securities(secRows)
         let delivered = synthesizeAssignmentShares(acts, securities)
@@ -1777,14 +1811,20 @@ enum BHModel {
         var base = BHBase()
         base.today = today
         base.fx = market.fx
+        base.benchmark = market.benchmark
+        base.benchmarks = market.benchmarks
+        if base.benchmarks["SP500"] == nil { base.benchmarks["SP500"] = market.benchmark }
+        base.equity = equitySeries(navHistory)
+        for (nick, pts) in navByAccount { base.equityByAccount[normAccountName(nick)] = equitySeries(pts) }
+        base.journal = journal
         base.distributions = market.distributions
         base.quotes = market.quotes
         base.activities = acts
         base.closed = fifo.closed
         base.openLots = fifo.open
         base.unmatched = fifo.unmatched
-        base.trades = buildTrades(fifo.closed, actsById: actsById, securities: securities)
-        base.positions = buildPositions(fifo.open, lastPrices: lastFillPrices(acts), securities: securities, today: today, quotes: market.quotes)
+        base.trades = buildTrades(fifo.closed, actsById: actsById, securities: securities, journal: journal)
+        base.positions = buildPositions(fifo.open, lastPrices: lastFillPrices(acts), securities: securities, today: today, quotes: market.quotes, journal: journal)
         base.cashflow = buildCashflow(acts, securities: securities, fx: market.fx)
         return base
     }
@@ -1838,169 +1878,5 @@ enum BHModel {
         var best = schedules[0]
         for s in schedules where abs(Double(s) - perYear) < abs(Double(best) - perYear) { best = s }
         return best
-    }
-
-    /// The Cashflow page, unfiltered.
-    static func cashflowView(_ base: BHBase) -> BHCashflowView {
-        let today = base.today
-        let everything = base.cashflow
-        let recs = everything.filter { $0.kind == "Dividend" }
-
-        var keys: [String] = []
-        var bucket: [String: (sum: Double, n: Int)] = [:]
-        if !recs.isEmpty {
-            let monthsSeen = Array(Set(recs.map { String($0.date.prefix(7)) })).sorted()
-            let first = monthsSeen[0]
-            var last = monthsSeen[monthsSeen.count - 1]
-            let endDay = today
-            last = max(last, String(endDay.prefix(7)))
-            var y = Int(first.prefix(4))!, m = Int(first.dropFirst(5).prefix(2))!
-            while true {
-                let k = String(format: "%04d-%02d", y, m)
-                if k > last { break }
-                keys.append(k)
-                bucket[k] = (0, 0)
-                m += 1
-                if m > 12 { m = 1; y += 1 }
-            }
-        }
-        for r in recs {
-            let k = String(r.date.prefix(7))
-            if bucket[k] != nil {
-                bucket[k]!.sum += r.amountCad
-                bucket[k]!.n += 1
-            }
-        }
-        let months = keys.map { BHMonth(key: $0, label: monthLabel($0), value: bucket[$0]!.sum, count: bucket[$0]!.n) }
-
-        let payers = Set(base.cashflow.filter { $0.kind == "Dividend" }.map { $0.symbol })
-        let held = base.positions.filter { payers.contains($0.symbol) && !$0.short }
-        let forYoc = base.cashflow.filter { $0.kind == "Dividend" }
-        let lastRec = recs.first?.date ?? today
-        var cm = Int(lastRec.dropFirst(5).prefix(2))! - 11
-        var cy = Int(lastRec.prefix(4))!
-        while cm <= 0 { cm += 12; cy -= 1 }
-        let cut = String(format: "%04d-%02d", cy, cm)
-        let thisYear = String(today.prefix(4))
-
-        func sumFor(_ sym: String, _ pred: (BHCashRow) -> Bool) -> Double {
-            forYoc.filter { $0.symbol == sym && pred($0) }.reduce(0.0) { $0 + $1.amountCad }
-        }
-
-        let pub = base.distributions
-        let quotes = base.quotes
-
-        struct Rate { var per: Double; var freq: Int; var annual: Double; var verified: Bool; var source: String }
-
-        func rateFor(_ sym: String) -> Rate? {
-            // Preferred: the fund's own declared record (TMX Money): the latest
-            // distribution that has gone ex, and payments per year from the gaps
-            // between its recent ex-dates, so a schedule change shows at once.
-            var declared = (pub[sym] ?? []).filter { $0.exDate <= today }
-            if !declared.isEmpty {
-                declared.sort { $0.exDate > $1.exDate }
-                let per = declared[0].amount
-                let freq = paymentsPerYear((pub[sym] ?? []).map { $0.exDate })
-                if per != 0, let freq = freq {
-                    return Rate(per: per, freq: freq, annual: per * Double(freq), verified: true, source: "declared")
-                }
-            }
-            // Otherwise this holding's own payment rows.
-            let rs = forYoc.filter { $0.symbol == sym && ($0.per ?? 0) != 0 }.sorted { $0.date > $1.date }
-            guard let per = rs.first?.per, per != 0 else { return nil }
-            let freq = paymentsPerYear(forYoc.filter { $0.symbol == sym }.map { $0.date })
-            let verified = freq != nil
-            let f = freq ?? 12
-            return Rate(per: per, freq: f, annual: per * Double(f), verified: verified, source: "payments")
-        }
-
-        /// (ex-date, pay date, ex passed, pay passed): the next distribution still
-        /// to be paid, whether or not it has gone ex, else the last known one.
-        func distributionDates(_ sym: String) -> (String, String, Bool, Bool) {
-            func payOf(_ d: BHDistribution) -> String { let p = String(d.payDate.prefix(10)); return p.isEmpty ? d.exDate : p }
-            let recs_ = (pub[sym] ?? []).sorted { (payOf($0), $0.exDate) < (payOf($1), $1.exDate) }
-            let unpaid = recs_.filter { payOf($0) >= today }
-            let pick = unpaid.first ?? recs_.last
-            var ex = "", pay = ""
-            if let p = pick {
-                ex = p.exDate
-                pay = String(p.payDate.prefix(10))
-            } else {
-                ex = String((quotes[sym]?.exDividendDate ?? "").prefix(10))
-                let paid = forYoc.filter { $0.symbol == sym }.map { $0.date }.sorted()
-                pay = paid.last ?? ""
-            }
-            return (ex, pay, !ex.isEmpty && ex < today, !pay.isEmpty && pay < today)
-        }
-
-        func lastPrice(_ p: BHPosition) -> (Double, String) {
-            if let px = quotes[p.symbol]?.price, px > 0 { return (px, "close") }
-            return (p.last, "fill")
-        }
-
-        var holdings: [BHHolding] = []
-        for p in held {
-            let r = rateFor(p.symbol)
-            let basis = p.cost
-            let avg = p.avg
-            let (lastPx, priceSource) = lastPrice(p)
-            let dd = distributionDates(p.symbol)
-            var h = BHHolding()
-            h.id = p.id
-            h.symbol = p.symbol
-            h.account = p.account
-            h.qty = p.qty
-            h.per = r?.per
-            h.freq = r?.freq
-            h.freqVerified = r?.verified ?? false
-            h.rateSource = r?.source ?? ""
-            h.cost = basis
-            h.avg = avg
-            h.last = lastPx
-            h.priceSource = priceSource
-            h.ytd = sumFor(p.symbol) { String($0.date.prefix(4)) == thisYear }
-            h.ttm = sumFor(p.symbol) { String($0.date.prefix(7)) >= cut }
-            h.all = sumFor(p.symbol) { _ in true }
-            h.nextExDate = dd.0
-            h.nextPayDate = dd.1
-            h.exPast = dd.2
-            h.payPast = dd.3
-            h.yob = r.map { $0.per * p.qty }
-            h.annual = r.map { $0.annual * p.qty }
-            h.yoc = (r != nil && avg != 0) ? r!.annual / avg : nil
-            h.currentYield = (r != nil && lastPx != 0) ? r!.annual / lastPx : nil
-            holdings.append(h)
-        }
-        let verified = holdings.filter { $0.annual != nil }
-        let basisAll = verified.reduce(0.0) { $0 + $1.cost }
-        let earnedAll = verified.reduce(0.0) { $0 + $1.ttm }
-        let annualAll = verified.reduce(0.0) { $0 + $1.annual! }
-        let total = recs.reduce(0.0) { $0 + $1.amountCad }
-        let thisYr = Int(thisYear)!
-        var tiles: [BHTile] = []
-        for y in [thisYr - 2, thisYr - 1, thisYr] {
-            let ys = String(y)
-            let rs = recs.filter { String($0.date.prefix(4)) == ys }
-            let sm = rs.reduce(0.0) { $0 + $1.amountCad }
-            var paid = keys.filter { String($0.prefix(4)) == ys && bucket[$0]!.n > 0 }.count
-            if paid == 0 { paid = 1 }
-            tiles.append(BHTile(label: y == thisYr ? "\(y) YTD" : ys, total: sm, perMonth: sm / Double(paid), count: rs.count))
-        }
-        var monthsInScope = keys.filter { bucket[$0]!.n > 0 }.count
-        if monthsInScope == 0 { monthsInScope = 1 }
-        tiles.append(BHTile(label: "All time", total: total, perMonth: total / Double(monthsInScope), count: recs.count))
-        tiles.append(BHTile(label: "Yield on cost", yield: basisAll != 0 ? annualAll / basisAll : nil, earned: earnedAll, book: basisAll))
-        let other = everything.filter { $0.kind != "Dividend" }
-        var v = BHCashflowView()
-        v.tiles = tiles
-        v.months = months
-        v.holdings = holdings
-        v.rows = recs
-        v.other = other
-        v.total = total
-        v.count = recs.count
-        v.interest = other.filter { $0.kind == "Interest" }.reduce(0.0) { $0 + $1.amountCad }
-        v.withholding = other.filter { $0.kind == "Withholding tax" }.reduce(0.0) { $0 + $1.amountCad }
-        return v
     }
 }

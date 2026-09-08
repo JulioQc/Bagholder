@@ -15,15 +15,19 @@ sys.path.insert(0, ROOT)
 import model  # noqa: E402
 from test_model import act, buy, sell  # noqa: E402
 
-TRADE_KEYS = ("symbol", "kind", "currency", "side", "qty", "mult", "entry", "exit", "entryDate", "exitDate", "holdDays", "pnl", "pnlCad", "pnlPct", "status", "fees")
-KPI_KEYS = ("count", "wins", "losses", "winRate", "realized", "expectancy", "profitFactor", "avgHold", "avgWin", "avgLoss")
-POSITION_KEYS = ("symbol", "kind", "currency", "qty", "avg", "cost")
+TRADE_KEYS = ("id", "symbol", "kind", "currency", "side", "qty", "mult", "entry", "exit", "entryDate", "exitDate", "holdDays", "pnl", "pnlCad", "pnlPct", "status", "fees", "account", "exchange", "grade", "tags")
+KPI_KEYS = ("count", "wins", "losses", "breakeven", "winRate", "realized", "expectancy", "profitFactor", "avgHold", "avgWin", "avgLoss", "grossWin", "grossLoss")
+POSITION_KEYS = ("id", "symbol", "kind", "currency", "account", "exchange", "qty", "avg", "cost", "held", "alloc", "short")
+YEAR_KEYS = ("year", "r", "days", "from", "to", "flow", "endV", "spR")
+MONTH_KEYS = ("key", "label", "value", "count")
+SYMBOL_KEYS = ("symbol", "pnl", "n", "legs", "winRate", "avgHold")
+QUEUE_KEYS = ("id", "symbol", "date", "pnl", "missing")
 HOLDING_KEYS = ("symbol", "qty", "per", "freq", "freqVerified", "annual", "yoc", "ytd", "ttm", "all", "nextExDate", "nextPayDate", "exPast", "payPast")
 TILE_KEYS = ("label", "total", "perMonth", "count", "yield", "earned", "book")
 
 
-def snapshot(acts, securities=None):
-    return {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": securities or []}
+def snapshot(acts, securities=None, nav=None, nav_by_account=None):
+    return {"activities": acts, "accounts": [], "balances": [], "navHistory": nav or [], "navByAccount": nav_by_account or {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": securities or []}
 
 
 def dividend(id, symbol, qty, per, day, account="Cashflow"):
@@ -50,6 +54,49 @@ def multileg(id, symbol, cash, day):
 def crypto(id, kind, symbol, qty, px, day, account="Crypto"):
     raw = {"buy": "CRYPTO_BUY", "sell": "CRYPTO_SELL", "reward": "CRYPTO_STAKING_REWARD"}[kind]
     return act(id=id, activityType=raw, activitySubType="MARKET_ORDER" if kind != "reward" else "other", rawType=raw, quantity=qty, unitPrice=px, netCashAmount=qty * px, transactionDate=day, symbol=symbol, currency="CAD", accountType=account)
+
+
+def nav(day, equity, deposits=None):
+    return {"date": day, "equity": equity, "netDeposits": deposits}
+
+
+NAV = [
+    nav("2023-12-15", 50.0, 50.0),          # pre-history: a few dollars parked before the real start
+    nav("2024-01-15", 100000.0, 100000.0),
+    nav("2024-03-01", 110000.0, 100000.0),
+    nav("2024-06-03", 95000.0, 100000.0),
+    nav("2024-09-03", 140000.0, 130000.0),  # a 30,000 deposit on the day
+    nav("2024-12-31", 150000.0, 130000.0),
+    nav("2025-03-03", 170000.0, 130000.0),
+    nav("2025-06-02", 150000.0, 130000.0),
+    nav("2025-12-31", 200000.0, 130000.0),
+    nav("2026-03-02", 230000.0, 130000.0),
+    nav("2026-06-01", 190000.0, 120000.0),  # a 10,000 withdrawal
+    nav("2026-09-04", 215000.0, 120000.0),
+]
+SP500 = {"2023-12-29": 4700.0, "2024-06-28": 5400.0, "2024-12-31": 5900.0, "2025-06-30": 6200.0, "2025-12-31": 6800.0, "2026-09-04": 7200.0}
+TSX = {"2023-12-29": 20900.0, "2024-06-28": 21800.0, "2024-12-31": 24700.0, "2025-06-30": 26800.0, "2025-12-31": 28100.0, "2026-09-04": 29500.0}
+
+# a small book across two accounts for the filter cases: shares, an option chain, a loser, a
+# position in each account, one exchange record per share, and a journal on three trades
+FILTER_ACTS = [
+    buy("b1", "AAA", 100, 10.0, "2026-01-05", securityId="sec-aaa"), sell("s1", "AAA", 100, 12.0, "2026-01-20", securityId="sec-aaa"),
+    buy("b2", "AAA", 50, 12.0, "2026-02-02", securityId="sec-aaa"), sell("s2", "AAA", 50, 11.0, "2026-02-10", securityId="sec-aaa"),
+    buy("b3", "BBB", 200, 5.0, "2025-11-03", accountType="TFSA", securityId="sec-bbb"), sell("s3", "BBB", 200, 6.0, "2026-03-16", accountType="TFSA", securityId="sec-bbb"),
+    sto("sto", "ZZZ 21AUG26 10.00 CALL", 2, 3, "2026-04-01"), btc("cover", "ZZZ 21AUG26 10.00 CALL", 2, 1, "2026-05-15"),
+    buy("b4", "CCC", 10, 100.0, "2026-06-01", currency="USD"), sell("s4", "CCC", 10, 90.0, "2026-06-12", currency="USD"),
+    buy("b5", "DDD", 300, 2.0, "2026-07-01", securityId="sec-ddd"),
+    buy("b6", "EEE", 40, 25.0, "2026-08-01", accountType="TFSA"),
+    dividend("d1", "DDD", 300, 0.05, "2026-08-15", account="Trading"),
+]
+FILTER_SECS = [{"id": "sec-aaa", "symbol": "AAA", "name": "Triple A Corp", "primaryExchange": "TSX"},
+               {"id": "sec-bbb", "symbol": "BBB", "name": "Bee Inc", "primaryExchange": "NASDAQ"},
+               {"id": "sec-ddd", "symbol": "DDD", "name": "Dee Fund", "primaryExchange": "TSX"}]
+FILTER_JOURNAL = {"rt:b1": {"grade": "A", "thesis": "Breakout after earnings.", "tags": ["earnings", "breakout"]},
+                  "rt:b2": {"grade": "F", "thesis": "", "tags": []},
+                  "rt:sto": {"grade": "B", "thesis": "Covered call on a flat name.", "tags": ["income"]},
+                  "rt:b5": {"grade": "", "thesis": "Holding for the distribution.", "tags": ["income"]}}
+FILTER_MARKET = {"fx": {"2026-06-01": 1.37, "2026-06-12": 1.36}, "benchmark": SP500, "benchmarks": {"TSX": TSX}}
 
 
 CASES = {
@@ -199,6 +246,65 @@ CASES = {
                                               {"exDate": "2026-07-31", "payDate": "2026-08-08", "amount": 0.20, "currency": "CAD"},
                                               {"exDate": "2026-08-31", "payDate": "2026-09-08", "amount": 0.21, "currency": "CAD"}]}},
     },
+    # the equity series with a pre-history balance, a deposit and a withdrawal: yearly
+    # returns net of flows, the index over the same spans, annualized, drawdown
+    "nav_yearly_returns_and_drawdown": {
+        "today": "2026-09-07",
+        "activities": [buy("b1", "AAA", 100, 10.0, "2026-01-05"), sell("s1", "AAA", 100, 12.0, "2026-01-20")],
+        "nav": NAV,
+        "market": {"fx": {}, "benchmark": SP500, "benchmarks": {"TSX": TSX}},
+    },
+    # the same series compared against the S&P/TSX instead
+    "nav_against_the_tsx": {
+        "today": "2026-09-07",
+        "activities": [buy("b1", "AAA", 100, 10.0, "2026-01-05"), sell("s1", "AAA", 100, 12.0, "2026-01-20")],
+        "nav": NAV,
+        "market": {"fx": {}, "benchmark": SP500, "benchmarks": {"TSX": TSX}},
+        "filters": {"benchmark": "TSX"},
+    },
+    # no filter: every trade and position, the journal on the trades, the dashboard cards
+    "dashboard_journal_monthly_by_symbol_queue": {
+        "today": "2026-09-07",
+        "activities": FILTER_ACTS, "securities": FILTER_SECS, "journal": FILTER_JOURNAL, "nav": NAV,
+        "nav_by_account": {"Trading": NAV[:6]},
+        "market": FILTER_MARKET,
+    },
+    # one account and this year: trades scoped by close date, positions by account, the
+    # equity series of that account, Cashflow scoped to the account and the dates
+    "filters_account_and_ytd": {
+        "today": "2026-09-07",
+        "activities": FILTER_ACTS, "securities": FILTER_SECS, "journal": FILTER_JOURNAL, "nav": NAV,
+        "nav_by_account": {"Trading": NAV[:6]},
+        "market": FILTER_MARKET,
+        "filters": {"lists": {"account": ["Trading"]}, "preset": "ytd"},
+    },
+    # a symbol filter matches an option by its underlying; Result keeps the winners
+    "filters_symbol_by_underlying_and_result": {
+        "today": "2026-09-07",
+        "activities": FILTER_ACTS, "securities": FILTER_SECS, "journal": FILTER_JOURNAL, "nav": NAV,
+        "market": FILTER_MARKET,
+        "filters": {"lists": {"symbol": ["ZZZ", "AAA"], "result": ["Winners"]}},
+    },
+    # a year, a tag, a grade and a range together; Cashflow ignores the ones it cannot apply
+    "filters_year_tag_grade_and_range": {
+        "today": "2026-09-07",
+        "activities": FILTER_ACTS, "securities": FILTER_SECS, "journal": FILTER_JOURNAL, "nav": NAV,
+        "market": FILTER_MARKET,
+        "filters": {"years": ["2026"], "lists": {"tag": ["earnings"], "grade": ["A", "Ungraded"]}, "ranges": {"hold": {"op": ">", "v": 5}}},
+    },
+    # kind and a date range; then exchange from the security record; then free text
+    "filters_kind_and_date_range": {
+        "today": "2026-09-07",
+        "activities": FILTER_ACTS, "securities": FILTER_SECS, "journal": FILTER_JOURNAL, "nav": NAV,
+        "market": FILTER_MARKET,
+        "filters": {"lists": {"kind": ["Options", "Shares"]}, "from": "2026-02-01", "to": "2026-05-31"},
+    },
+    "filters_exchange_and_search": {
+        "today": "2026-09-07",
+        "activities": FILTER_ACTS, "securities": FILTER_SECS, "journal": FILTER_JOURNAL, "nav": NAV,
+        "market": FILTER_MARKET,
+        "filters": {"lists": {"exchange": ["TSX"]}, "search": "a"},
+    },
     # no declared record: the rate and frequency come from the payments received
     # (quarterly, read from the gaps), the ex-date from the quote, the pay day
     # from the last payment
@@ -229,29 +335,46 @@ def pick(d, keys):
     return {k: d[k] for k in keys if k in d}
 
 
-def expect_from(snap, market, today, filters):
-    """What every implementation must produce for one case."""
-    base = model.build_base(snap, market, {}, today=today)
+def expect_from(snap, market, today, filters, journal=None):
+    """What every implementation must produce for one case: the view for the filters."""
+    base = model.build_base(snap, market, journal or {}, today=today)
     view = model.build_view(base, filters)
     trades = sorted(view["trades"], key=lambda t: (t["entryDate"], t["exitDate"], t["symbol"]))
+    cf = view["cashflow"]
     out = {
         "kpi": pick(view["kpi"], KPI_KEYS),
         "trades": [dict(pick(t, TRADE_KEYS), fills=[f["sub"] for f in sorted(t["fills"], key=lambda f: f["when"])]) for t in trades],
-        "positions": [pick(p, POSITION_KEYS) for p in sorted(view["positions"], key=lambda p: p["symbol"])],
+        "positions": [pick(p, POSITION_KEYS) for p in sorted(view["positions"], key=lambda p: (p["symbol"], p["account"]))],
+        "positionsSummary": view["positionsSummary"],
+        "equity": {"label": view["equity"]["label"], "series": [{"d": p["d"], "v": p["v"]} for p in view["equity"]["series"]],
+                   "drawdown": view["equity"]["drawdown"], "annualized": view["equity"]["annualized"]},
+        "years": [pick(y, YEAR_KEYS) for y in view["years"]],
+        "benchmark": view["benchmark"],
+        "monthly": [pick(m, MONTH_KEYS) for m in view["monthly"]],
+        "bySymbol": [pick(r, SYMBOL_KEYS) for r in view["bySymbol"]],
+        "grades": {"buckets": [pick(b, ("grade", "n", "pnl")) for b in view["grades"]["buckets"]], "ungraded": view["grades"]["ungraded"], "graded": view["grades"]["graded"]},
+        "queue": [pick(q, QUEUE_KEYS) for q in view["queue"]],
+        "options": {k: view["options"][k] for k in ("accounts", "symbols", "tags", "exchanges", "kinds", "years")},
+        "cashflowHoldings": [pick(h, HOLDING_KEYS) for h in sorted(cf["holdings"], key=lambda h: h["symbol"])],
+        "cashflowTiles": [pick(t, TILE_KEYS) for t in cf["tiles"]],
+        "cashflowMonths": [pick(m, MONTH_KEYS) for m in cf["months"]],
+        "cashflowTotal": cf["total"], "cashflowCount": cf["count"], "cashflowSkipped": cf["skippedFilters"],
     }
-    if any(a.get("category") == "dividend" for a in snap.get("activities") or []):
-        out["cashflowHoldings"] = [pick(h, HOLDING_KEYS) for h in sorted(view["cashflow"]["holdings"], key=lambda h: h["symbol"])]
-        out["cashflowTiles"] = [pick(t, TILE_KEYS) for t in view["cashflow"]["tiles"]]
     return rounded(out)
 
 
+def case_snapshot(case):
+    return snapshot(case["activities"], case.get("securities"), case.get("nav"), case.get("nav_by_account"))
+
+
 def expect(case):
-    return expect_from(snapshot(case["activities"], case.get("securities")), case["market"], case["today"], {})
+    return expect_from(case_snapshot(case), case["market"], case["today"], case.get("filters") or {}, case.get("journal"))
 
 
 def main():
     for name, case in CASES.items():
-        doc = {"today": case["today"], "snapshot": snapshot(case["activities"], case.get("securities")), "market": case["market"], "filters": {}, "expect": expect(case)}
+        doc = {"today": case["today"], "snapshot": case_snapshot(case), "market": case["market"], "filters": case.get("filters") or {},
+               "journal": case.get("journal") or {}, "expect": expect(case)}
         path = os.path.join(HERE, "cases", name + ".json")
         with open(path, "w") as f:
             json.dump(doc, f, indent=2, sort_keys=True)

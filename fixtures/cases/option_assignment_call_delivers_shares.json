@@ -1,23 +1,172 @@
 {
   "expect": {
+    "benchmark": {
+      "key": "SP500",
+      "label": "S&P 500"
+    },
+    "bySymbol": [
+      {
+        "avgHold": 40.5,
+        "legs": 2,
+        "n": 2,
+        "pnl": 3142.5,
+        "symbol": "ASTS",
+        "winRate": 1.0
+      }
+    ],
+    "cashflowCount": 0,
+    "cashflowHoldings": [],
+    "cashflowMonths": [],
+    "cashflowSkipped": [],
+    "cashflowTiles": [
+      {
+        "count": 0,
+        "label": "2024",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2025",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2026 YTD",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "All time",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "book": 0,
+        "earned": 0,
+        "label": "Yield on cost",
+        "yield": null
+      }
+    ],
+    "cashflowTotal": 0,
+    "equity": {
+      "annualized": {
+        "count": 0,
+        "first": "",
+        "last": "",
+        "rate": null,
+        "years": 0.0
+      },
+      "drawdown": {
+        "abs": null,
+        "at": "",
+        "pct": null,
+        "peakAt": ""
+      },
+      "label": "All accounts",
+      "series": []
+    },
+    "grades": {
+      "buckets": [
+        {
+          "grade": "A",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "B",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "C",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "F",
+          "n": 0,
+          "pnl": 0
+        }
+      ],
+      "graded": 0,
+      "ungraded": 2
+    },
     "kpi": {
       "avgHold": 40.5,
       "avgLoss": 0.0,
       "avgWin": 1571.25,
+      "breakeven": 0,
       "count": 2,
       "expectancy": 1571.25,
+      "grossLoss": 0,
+      "grossWin": 3142.5,
       "losses": 0,
       "profitFactor": null,
       "realized": 3142.5,
       "winRate": 1.0,
       "wins": 2
     },
+    "monthly": [
+      {
+        "count": 2,
+        "key": "2025-03",
+        "label": "Mar '25",
+        "value": 3142.5
+      }
+    ],
+    "options": {
+      "accounts": [
+        "Trading"
+      ],
+      "exchanges": [
+        "NASDAQ"
+      ],
+      "kinds": [
+        "Shares",
+        "Options"
+      ],
+      "symbols": [
+        "ASTS",
+        "ASTS 07MAR25 31.00 CALL"
+      ],
+      "tags": [],
+      "years": [
+        "2025"
+      ]
+    },
     "positions": [],
+    "positionsSummary": {
+      "book": 0,
+      "count": 0,
+      "mv": 0,
+      "unreal": 0
+    },
+    "queue": [
+      {
+        "date": "2025-03-07",
+        "id": "rt:sto",
+        "missing": "no grade or thesis",
+        "pnl": 643.5,
+        "symbol": "ASTS 07MAR25 31.00 CALL"
+      },
+      {
+        "date": "2025-03-07",
+        "id": "rt:b1",
+        "missing": "no grade or thesis",
+        "pnl": 2499.0,
+        "symbol": "ASTS"
+      }
+    ],
     "trades": [
       {
+        "account": "Trading",
         "currency": "USD",
         "entry": 25.0,
         "entryDate": "2025-01-10",
+        "exchange": "NASDAQ",
         "exit": 31.0,
         "exitDate": "2025-03-07",
         "fees": 0.0,
@@ -25,7 +174,9 @@
           "BUY",
           "SELL"
         ],
+        "grade": "",
         "holdDays": 56,
+        "id": "rt:b1",
         "kind": "Shares",
         "mult": 1,
         "pnl": 1800.0,
@@ -34,12 +185,15 @@
         "qty": 300.0,
         "side": "SELL",
         "status": "closed",
-        "symbol": "ASTS"
+        "symbol": "ASTS",
+        "tags": []
       },
       {
+        "account": "Trading",
         "currency": "USD",
         "entry": 1.5,
         "entryDate": "2025-02-10",
+        "exchange": "NASDAQ",
         "exit": 0.0,
         "exitDate": "2025-03-07",
         "fees": 0.0,
@@ -47,7 +201,9 @@
           "SELL TO OPEN",
           "BUY TO CLOSE"
         ],
+        "grade": "",
         "holdDays": 25,
+        "id": "rt:sto",
         "kind": "Options",
         "mult": 100,
         "pnl": 450.0,
@@ -56,11 +212,14 @@
         "qty": 3.0,
         "side": "COVER",
         "status": "closed",
-        "symbol": "ASTS 07MAR25 31.00 CALL"
+        "symbol": "ASTS 07MAR25 31.00 CALL",
+        "tags": []
       }
-    ]
+    ],
+    "years": []
   },
   "filters": {},
+  "journal": {},
   "market": {
     "benchmark": {},
     "fx": {

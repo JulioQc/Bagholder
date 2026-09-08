@@ -68,7 +68,15 @@ data class Market(
     val fx: Map<String, Double> = emptyMap(),
     val distributions: Map<String, List<Distribution>> = emptyMap(),
     val quotes: Map<String, Quote> = emptyMap(),
+    val benchmark: Map<String, Double> = emptyMap(),
+    val benchmarks: Map<String, Map<String, Double>> = emptyMap(),
 )
+
+/** One day of Wealthsimple's NAV history. */
+data class NavPoint(val date: String = "", val equity: Double? = null, val netDeposits: Double? = null)
+
+/** A journal entry, keyed by the round trip that opened the trade or position. */
+data class JournalEntry(val grade: String = "", val thesis: String = "", val tags: List<String> = emptyList())
 
 class Lot(
     var qty: Double, var price: Double, var date: String, var whenAt: String, var commission: Double, var direction: String,
@@ -112,6 +120,8 @@ class Trade {
     var legCount = 0
     var fills: List<FillRow> = emptyList()
     var flags: List<String> = emptyList()
+    var grade = ""; var thesis = ""
+    var tags: List<String> = emptyList()
 }
 
 data class PositionLot(val opened: String, val qty: Double, val price: Double, val basis: Double, val held: Int, val flags: List<String>, val activityId: String)
@@ -130,6 +140,8 @@ class Position {
     var rt: String? = null
     var lots: List<PositionLot> = emptyList()
     var alloc = 0.0
+    var thesis = ""
+    var tags: List<String> = emptyList()
 }
 
 class CashRow {
@@ -169,11 +181,17 @@ data class KPI(
 data class CashflowView(
     val tiles: List<Tile>, val months: List<MonthBar>, val holdings: List<Holding>, val rows: List<CashRow>, val other: List<CashRow>,
     val total: Double, val count: Int, val interest: Double, val withholding: Double,
+    val skippedFilters: List<String> = emptyList(),
 )
 
 class Base {
     var today = ""
     var fx: Map<String, Double> = emptyMap()
+    var benchmark: Map<String, Double> = emptyMap()
+    var benchmarks: Map<String, Map<String, Double>> = emptyMap()
+    var equity: List<EquityPoint> = emptyList()
+    var equityByAccount: Map<String, List<EquityPoint>> = emptyMap()
+    var journal: Map<String, JournalEntry> = emptyMap()
     var distributions: Map<String, List<Distribution>> = emptyMap()
     var quotes: Map<String, Quote> = emptyMap()
     var activities: List<Act> = emptyList()
@@ -191,6 +209,9 @@ object Model {
     val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
     val KINDS = listOf("Shares", "Options", "Crypto", "Futures")
     val SCHEDULES = listOf(52, 26, 24, 12, 6, 4, 2, 1)
+    val GRADES = listOf("A", "B", "C", "F")
+    val BENCHMARK_LABELS = mapOf("SP500" to "S&P 500", "TSX" to "S&P/TSX", "TSX60" to "TSX 60")
+    val PRESET_DAYS = mapOf("1d" to 1, "1w" to 7, "1m" to 30, "3m" to 90, "6m" to 180, "1y" to 365, "5y" to 1826)
     val TIME_ZONE: ZoneId = ZoneId.of("America/Edmonton")
 
     // MARK: small helpers
@@ -1318,7 +1339,7 @@ object Model {
         return f
     }
 
-    fun collapseTrade(gid: String, members: List<Slice>, status: String, actsById: Map<String, Act>, securities: Securities): Trade {
+    fun collapseTrade(gid: String, members: List<Slice>, status: String, actsById: Map<String, Act>, securities: Securities, journal: Map<String, JournalEntry> = emptyMap()): Trade {
         val slices = members.sortedWith(compareBy({ it.exitDate }, { it.entryDate }, { sliceMemberKey(it) }))
         val t0 = slices[0]
         val qty = slices.sumOf { it.quantity }
@@ -1393,16 +1414,20 @@ object Model {
         t.legCount = slices.size
         t.fills = fills
         t.flags = slices.flatMap { it.flags }.toSet().sorted()
+        val note = journal[gid]
+        t.grade = note?.grade ?: ""
+        t.thesis = note?.thesis ?: ""
+        t.tags = note?.tags ?: emptyList()
         return t
     }
 
-    fun buildTrades(closed: List<Slice>, actsById: Map<String, Act>, securities: Securities): List<Trade> {
+    fun buildTrades(closed: List<Slice>, actsById: Map<String, Act>, securities: Securities, journal: Map<String, JournalEntry> = emptyMap()): List<Trade> {
         val byRt = LinkedHashMap<String, MutableList<Slice>>()
         for (s in closed) {
             val rt = s.rt ?: ("rt:" + sliceMemberKey(s))
             byRt.getOrPut(rt) { mutableListOf() }.add(s)
         }
-        return byRt.entries.map { collapseTrade(it.key, it.value, "closed", actsById, securities) }
+        return byRt.entries.map { collapseTrade(it.key, it.value, "closed", actsById, securities, journal) }
             .sortedWith(compareByDescending<Trade> { it.exitDate }.thenByDescending { it.id })
     }
 
@@ -1416,7 +1441,7 @@ object Model {
         return out
     }
 
-    fun buildPositions(openLots: List<Lot>, lastPrices: Map<String, Pair<Double, String>>, securities: Securities, today: String, quotes: Map<String, Quote>): List<Position> {
+    fun buildPositions(openLots: List<Lot>, lastPrices: Map<String, Pair<Double, String>>, securities: Securities, today: String, quotes: Map<String, Quote>, journal: Map<String, JournalEntry> = emptyMap()): List<Position> {
         val groups = LinkedHashMap<String, MutableList<Lot>>()
         for (lot in openLots) {
             val k = listOf(lot.symbol, lot.accountType, lot.currency, lot.direction).joinToString("\u0001")
@@ -1477,6 +1502,11 @@ object Model {
             p.opened = lots[0].date
             p.rt = lots[0].rt
             p.lots = lots.map { PositionLot(it.date, it.qty, it.price, it.qty * it.price * mult, daysBetween(it.date, today), it.flags.toList(), it.activityId) }
+            // A position and the trade it becomes when it closes share one journal
+            // entry: both are keyed by the round trip that opened the position.
+            val note = journal[p.id] ?: journal[legacyPid]
+            p.thesis = note?.thesis ?: ""
+            p.tags = note?.tags ?: emptyList()
             rows.add(p)
         }
         val book = rows.sumOf { abs(it.cost) }
@@ -1523,7 +1553,7 @@ object Model {
 
     // MARK: build
 
-    fun buildBase(raw: List<Act>, securityRows: List<Security>, market: Market, today: String): Base {
+    fun buildBase(raw: List<Act>, securityRows: List<Security>, market: Market, today: String, navHistory: List<NavPoint> = emptyList(), navByAccount: Map<String, List<NavPoint>> = emptyMap(), journal: Map<String, JournalEntry> = emptyMap()): Base {
         var acts = normalizeActivities(raw)
         val securities = Securities(securityRows)
         val delivered = synthesizeAssignmentShares(acts, securities)
@@ -1540,14 +1570,21 @@ object Model {
         val base = Base()
         base.today = today
         base.fx = market.fx
+        base.benchmark = market.benchmark
+        val benchmarks = LinkedHashMap(market.benchmarks)
+        if (!benchmarks.containsKey("SP500")) benchmarks["SP500"] = market.benchmark
+        base.benchmarks = benchmarks
+        base.equity = ModelView.equitySeries(navHistory)
+        base.equityByAccount = navByAccount.entries.associate { normAccountName(it.key) to ModelView.equitySeries(it.value) }
+        base.journal = journal
         base.distributions = market.distributions
         base.quotes = market.quotes
         base.activities = acts
         base.closed = fifo.closed
         base.openLots = fifo.open
         base.unmatched = fifo.unmatched
-        base.trades = buildTrades(fifo.closed, actsById, securities)
-        base.positions = buildPositions(fifo.open, lastFillPrices(acts), securities, today, market.quotes)
+        base.trades = buildTrades(fifo.closed, actsById, securities, journal)
+        base.positions = buildPositions(fifo.open, lastFillPrices(acts), securities, today, market.quotes, journal)
         base.cashflow = buildCashflow(acts, securities, market.fx)
         return base
     }
@@ -1597,157 +1634,4 @@ object Model {
     }
 
     private class Rate(val per: Double, val freq: Int, val annual: Double, val verified: Boolean, val source: String)
-
-    /** The Cashflow page, unfiltered. */
-    fun cashflowView(base: Base): CashflowView {
-        val today = base.today
-        val everything = base.cashflow
-        val recs = everything.filter { it.kind == "Dividend" }
-
-        val keys = mutableListOf<String>()
-        val bucket = HashMap<String, DoubleArray>()   // [sum, n]
-        if (recs.isNotEmpty()) {
-            val monthsSeen = recs.map { it.date.take(7) }.toSet().sorted()
-            val first = monthsSeen.first()
-            var last = monthsSeen.last()
-            val endDay = today
-            last = maxOf(last, endDay.take(7))
-            var y = first.substring(0, 4).toInt()
-            var m = first.substring(5, 7).toInt()
-            while (true) {
-                val k = String.format(Locale.ROOT, "%04d-%02d", y, m)
-                if (k > last) break
-                keys.add(k)
-                bucket[k] = doubleArrayOf(0.0, 0.0)
-                m += 1
-                if (m > 12) { m = 1; y += 1 }
-            }
-        }
-        for (r in recs) {
-            val b = bucket[r.date.take(7)] ?: continue
-            b[0] += r.amountCad
-            b[1] += 1
-        }
-        val months = keys.map { MonthBar(it, monthLabel(it), bucket[it]!![0], bucket[it]!![1].toInt()) }
-
-        val payers = base.cashflow.filter { it.kind == "Dividend" }.map { it.symbol }.toSet()
-        val held = base.positions.filter { payers.contains(it.symbol) && !it.short }
-        val forYoc = base.cashflow.filter { it.kind == "Dividend" }
-        val lastRec = recs.firstOrNull()?.date ?: today
-        var cm = lastRec.substring(5, 7).toInt() - 11
-        var cy = lastRec.substring(0, 4).toInt()
-        while (cm <= 0) { cm += 12; cy -= 1 }
-        val cut = String.format(Locale.ROOT, "%04d-%02d", cy, cm)
-        val thisYear = today.take(4)
-
-        fun sumFor(sym: String, pred: (CashRow) -> Boolean) = forYoc.filter { it.symbol == sym && pred(it) }.sumOf { it.amountCad }
-
-        val pub = base.distributions
-        val quotes = base.quotes
-
-        fun rateFor(sym: String): Rate? {
-            // Preferred: the fund's own declared record (TMX Money): the latest
-            // distribution that has gone ex, and payments per year from the gaps
-            // between its recent ex-dates, so a schedule change shows at once.
-            val declared = (pub[sym] ?: emptyList()).filter { it.exDate <= today }.sortedByDescending { it.exDate }
-            if (declared.isNotEmpty()) {
-                val per = declared[0].amount
-                val freq = paymentsPerYear((pub[sym] ?: emptyList()).map { it.exDate })
-                if (per != 0.0 && freq != null) return Rate(per, freq, per * freq, true, "declared")
-            }
-            // Otherwise this holding's own payment rows.
-            val rs = forYoc.filter { it.symbol == sym && (it.per ?: 0.0) != 0.0 }.sortedByDescending { it.date }
-            val per = rs.firstOrNull()?.per ?: return null
-            if (per == 0.0) return null
-            val freq = paymentsPerYear(forYoc.filter { it.symbol == sym }.map { it.date })
-            val verified = freq != null
-            val f = freq ?: 12
-            return Rate(per, f, per * f, verified, "payments")
-        }
-
-        /** (ex-date, pay date, ex passed, pay passed): the next distribution still
-         * to be paid, whether or not it has gone ex, else the last known one. */
-        fun distributionDates(sym: String): List<Any> {
-            fun payOf(d: Distribution): String { val p = d.payDate.take(10); return if (p.isEmpty()) d.exDate else p }
-            val recs2 = (pub[sym] ?: emptyList()).sortedWith(compareBy({ payOf(it) }, { it.exDate }))
-            val unpaid = recs2.filter { payOf(it) >= today }
-            val pick = unpaid.firstOrNull() ?: recs2.lastOrNull()
-            val ex: String
-            val pay: String
-            if (pick != null) {
-                ex = pick.exDate
-                pay = pick.payDate.take(10)
-            } else {
-                ex = (quotes[sym]?.exDividendDate ?: "").take(10)
-                val paid = forYoc.filter { it.symbol == sym }.map { it.date }.sorted()
-                pay = paid.lastOrNull() ?: ""
-            }
-            return listOf(ex, pay, ex.isNotEmpty() && ex < today, pay.isNotEmpty() && pay < today)
-        }
-
-        fun lastPrice(p: Position): Pair<Double, String> {
-            val px = quotes[p.symbol]?.price
-            if (px != null && px > 0) return Pair(px, "close")
-            return Pair(p.last, "fill")
-        }
-
-        val holdings = mutableListOf<Holding>()
-        for (p in held) {
-            val r = rateFor(p.symbol)
-            val basis = p.cost
-            val avg = p.avg
-            val (lastPx, priceSource) = lastPrice(p)
-            val dd = distributionDates(p.symbol)
-            val h = Holding()
-            h.id = p.id
-            h.symbol = p.symbol
-            h.account = p.account
-            h.qty = p.qty
-            h.per = r?.per
-            h.freq = r?.freq
-            h.freqVerified = r?.verified ?: false
-            h.rateSource = r?.source ?: ""
-            h.cost = basis
-            h.avg = avg
-            h.last = lastPx
-            h.priceSource = priceSource
-            h.ytd = sumFor(p.symbol) { it.date.take(4) == thisYear }
-            h.ttm = sumFor(p.symbol) { it.date.take(7) >= cut }
-            h.all = sumFor(p.symbol) { true }
-            h.nextExDate = dd[0] as String
-            h.nextPayDate = dd[1] as String
-            h.exPast = dd[2] as Boolean
-            h.payPast = dd[3] as Boolean
-            h.yob = r?.let { it.per * p.qty }
-            h.annual = r?.let { it.annual * p.qty }
-            h.yoc = if (r != null && avg != 0.0) r.annual / avg else null
-            h.currentYield = if (r != null && lastPx != 0.0) r.annual / lastPx else null
-            holdings.add(h)
-        }
-        val verified = holdings.filter { it.annual != null }
-        val basisAll = verified.sumOf { it.cost }
-        val earnedAll = verified.sumOf { it.ttm }
-        val annualAll = verified.sumOf { it.annual!! }
-        val total = recs.sumOf { it.amountCad }
-        val thisYr = thisYear.toInt()
-        val tiles = mutableListOf<Tile>()
-        for (y in listOf(thisYr - 2, thisYr - 1, thisYr)) {
-            val ys = y.toString()
-            val rs = recs.filter { it.date.take(4) == ys }
-            val sm = rs.sumOf { it.amountCad }
-            var paid = keys.count { it.take(4) == ys && bucket[it]!![1] > 0.0 }
-            if (paid == 0) paid = 1
-            tiles.add(Tile(label = if (y == thisYr) "$y YTD" else ys, total = sm, perMonth = sm / paid, count = rs.size))
-        }
-        var monthsInScope = keys.count { bucket[it]!![1] > 0.0 }
-        if (monthsInScope == 0) monthsInScope = 1
-        tiles.add(Tile(label = "All time", total = total, perMonth = total / monthsInScope, count = recs.size))
-        tiles.add(Tile(label = "Yield on cost", yield = if (basisAll != 0.0) annualAll / basisAll else null, earned = earnedAll, book = basisAll))
-        val other = everything.filter { it.kind != "Dividend" }
-        return CashflowView(
-            tiles = tiles, months = months, holdings = holdings, rows = recs, other = other, total = total, count = recs.size,
-            interest = other.filter { it.kind == "Interest" }.sumOf { it.amountCad },
-            withholding = other.filter { it.kind == "Withholding tax" }.sumOf { it.amountCad },
-        )
-    }
 }

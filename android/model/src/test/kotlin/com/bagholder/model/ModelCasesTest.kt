@@ -11,9 +11,8 @@ import kotlin.test.assertTrue
 /** The shared model cases in ../../fixtures/cases, run through the Kotlin model.
  * The same files run through the Python (test_fixtures.py) and Swift
  * (ModelCasesTests) models; a rule changed in one place fails here.
- * fixtures/README.md describes the format: `expect` holds the trades, KPIs,
- * positions and, when the case has a dividend row, the Cashflow holdings and
- * tiles, floats rounded to six places. */
+ * fixtures/README.md describes the format: `expect` is the view for the
+ * case's filters, floats rounded to six places. */
 class ModelCasesTest {
     private val casesDir = File("../../fixtures/cases")
 
@@ -40,9 +39,17 @@ class ModelCasesTest {
         primaryExchange = str(d, "primaryExchange"), primaryMic = str(d, "primaryMic"), currency = str(d, "currency"),
     )
 
+    private fun navPoint(d: JSONObject) = NavPoint(str(d, "date"), numOrNull(d, "equity"), numOrNull(d, "netDeposits"))
+
+    private fun closes(o: JSONObject?): Map<String, Double> {
+        val out = HashMap<String, Double>()
+        if (o != null) for (k in o.keys()) out[k] = o.getDouble(k)
+        return out
+    }
+
     private fun market(d: JSONObject): Market {
-        val fx = HashMap<String, Double>()
-        d.optJSONObject("fx")?.let { o -> for (k in o.keys()) fx[k] = o.getDouble(k) }
+        val benchmarks = HashMap<String, Map<String, Double>>()
+        d.optJSONObject("benchmarks")?.let { o -> for (k in o.keys()) benchmarks[k] = closes(o.getJSONObject(k)) }
         val dists = HashMap<String, List<Distribution>>()
         d.optJSONObject("distributions")?.let { o ->
             for (sym in o.keys()) {
@@ -60,56 +67,94 @@ class ModelCasesTest {
                 quotes[sym] = Quote(numOrNull(q, "price"), numOrNull(q, "priceChange"), numOrNull(q, "percentChange"), str(q, "fetchedAt"), str(q, "exDividendDate"))
             }
         }
-        return Market(fx, dists, quotes)
+        return Market(closes(d.optJSONObject("fx")), dists, quotes, closes(d.optJSONObject("benchmark")), benchmarks)
+    }
+
+    private fun journal(d: JSONObject?): Map<String, JournalEntry> {
+        val out = HashMap<String, JournalEntry>()
+        if (d != null) for (k in d.keys()) {
+            val e = d.getJSONObject(k)
+            val tags = e.optJSONArray("tags") ?: JSONArray()
+            out[k] = JournalEntry(str(e, "grade"), str(e, "thesis"), (0 until tags.length()).map { tags.getString(it) })
+        }
+        return out
+    }
+
+    /** JSON filters as the loose map Filters.clean reads. */
+    private fun loose(v: Any?): Any? = when (v) {
+        is JSONObject -> v.keys().asSequence().associateWith { loose(v.get(it)) }
+        is JSONArray -> (0 until v.length()).map { loose(v.get(it)) }
+        JSONObject.NULL -> null
+        else -> v
     }
 
     // What the Kotlin model produces, in the fixture's shape.
 
     private fun opt(v: Double?): Any = v ?: JSONObject.NULL
 
-    private fun expect(base: Base, hasDividends: Boolean): Map<String, Any> {
-        val trades = base.trades.sortedWith(compareBy({ it.entryDate }, { it.exitDate }, { it.symbol }))
-        val k = Model.kpi(base.trades)
+    private fun expect(v: View): Map<String, Any> {
+        val trades = v.trades.sortedWith(compareBy({ it.entryDate }, { it.exitDate }, { it.symbol }))
+        val k = v.kpi
+        val cf = v.cashflow
         val out = LinkedHashMap<String, Any>()
         out["kpi"] = mapOf(
-            "count" to k.count, "wins" to k.wins, "losses" to k.losses, "winRate" to opt(k.winRate), "realized" to k.realized,
+            "count" to k.count, "wins" to k.wins, "losses" to k.losses, "breakeven" to k.breakeven, "winRate" to opt(k.winRate), "realized" to k.realized,
             "expectancy" to opt(k.expectancy), "profitFactor" to opt(k.profitFactor), "avgHold" to opt(k.avgHold),
-            "avgWin" to k.avgWin, "avgLoss" to k.avgLoss,
+            "avgWin" to k.avgWin, "avgLoss" to k.avgLoss, "grossWin" to k.grossWin, "grossLoss" to k.grossLoss,
         )
         out["trades"] = trades.map { t ->
             mapOf(
-                "symbol" to t.symbol, "kind" to t.kind, "currency" to t.currency, "side" to t.side, "qty" to t.qty, "mult" to t.mult,
+                "id" to t.id, "symbol" to t.symbol, "kind" to t.kind, "currency" to t.currency, "side" to t.side, "qty" to t.qty, "mult" to t.mult,
                 "entry" to t.entry, "exit" to t.exit, "entryDate" to t.entryDate, "exitDate" to t.exitDate, "holdDays" to t.holdDays,
                 "pnl" to t.pnl, "pnlCad" to t.pnlCad, "pnlPct" to opt(t.pnlPct), "status" to t.status, "fees" to t.fees,
+                "account" to t.account, "exchange" to t.exchange, "grade" to t.grade, "tags" to t.tags,
                 "fills" to t.fills.sortedBy { it.whenAt }.map { it.sub },
             )
         }
-        out["positions"] = base.positions.sortedBy { it.symbol }.map { p ->
-            mapOf("symbol" to p.symbol, "kind" to p.kind, "currency" to p.currency, "qty" to p.qty, "avg" to p.avg, "cost" to p.cost)
+        out["positions"] = v.positions.sortedWith(compareBy({ it.symbol }, { it.account })).map { p ->
+            mapOf("id" to p.id, "symbol" to p.symbol, "kind" to p.kind, "currency" to p.currency, "account" to p.account, "exchange" to p.exchange,
+                "qty" to p.qty, "avg" to p.avg, "cost" to p.cost, "held" to p.held, "alloc" to p.alloc, "short" to p.short)
         }
-        if (hasDividends) {
-            val cf = Model.cashflowView(base)
-            out["cashflowHoldings"] = cf.holdings.sortedBy { it.symbol }.map { h ->
-                mapOf(
-                    "symbol" to h.symbol, "qty" to h.qty, "per" to opt(h.per), "freq" to (h.freq ?: JSONObject.NULL),
-                    "freqVerified" to h.freqVerified, "annual" to opt(h.annual), "yoc" to opt(h.yoc), "ytd" to h.ytd, "ttm" to h.ttm, "all" to h.all,
-                    "nextExDate" to h.nextExDate, "nextPayDate" to h.nextPayDate, "exPast" to h.exPast, "payPast" to h.payPast,
-                )
-            }
-            out["cashflowTiles"] = cf.tiles.map { t ->
-                val d = LinkedHashMap<String, Any>()
-                d["label"] = t.label
-                t.total?.let { d["total"] = it }
-                t.perMonth?.let { d["perMonth"] = it }
-                t.count?.let { d["count"] = it }
-                if (t.label == "Yield on cost") {
-                    d["yield"] = opt(t.yield)
-                    d["earned"] = t.earned ?: 0.0
-                    d["book"] = t.book ?: 0.0
-                }
-                d
-            }
+        out["positionsSummary"] = mapOf("count" to v.positionsSummary.count, "book" to v.positionsSummary.book, "mv" to v.positionsSummary.mv, "unreal" to v.positionsSummary.unreal)
+        out["equity"] = mapOf(
+            "label" to v.equity.label,
+            "series" to v.equity.series.map { mapOf("d" to it.d, "v" to it.v) },
+            "drawdown" to mapOf("pct" to opt(v.equity.drawdown.pct), "abs" to opt(v.equity.drawdown.abs), "at" to v.equity.drawdown.at, "peakAt" to v.equity.drawdown.peakAt),
+            "annualized" to mapOf("rate" to opt(v.equity.annualized.rate), "years" to v.equity.annualized.years, "count" to v.equity.annualized.count,
+                "first" to v.equity.annualized.first, "last" to v.equity.annualized.last),
+        )
+        out["years"] = v.years.map { y -> mapOf("year" to y.year, "r" to y.r, "days" to y.days, "from" to y.from, "to" to y.to, "flow" to opt(y.flow), "endV" to opt(y.endV), "spR" to opt(y.spR)) }
+        out["benchmark"] = mapOf("key" to v.benchmarkKey, "label" to v.benchmarkLabel)
+        out["monthly"] = v.monthly.map { mapOf("key" to it.key, "label" to it.label, "value" to it.value, "count" to it.count) }
+        out["bySymbol"] = v.bySymbol.map { mapOf("symbol" to it.symbol, "pnl" to it.pnl, "n" to it.n, "legs" to it.legs, "winRate" to it.winRate, "avgHold" to it.avgHold) }
+        out["grades"] = mapOf("buckets" to v.grades.buckets.map { mapOf("grade" to it.grade, "n" to it.n, "pnl" to it.pnl) }, "ungraded" to v.grades.ungraded, "graded" to v.grades.graded)
+        out["queue"] = v.queue.map { mapOf("id" to it.id, "symbol" to it.symbol, "date" to it.date, "pnl" to it.pnl, "missing" to it.missing) }
+        out["options"] = mapOf("accounts" to v.options.accounts, "symbols" to v.options.symbols, "tags" to v.options.tags, "exchanges" to v.options.exchanges,
+            "kinds" to v.options.kinds, "years" to v.options.years)
+        out["cashflowHoldings"] = cf.holdings.sortedBy { it.symbol }.map { h ->
+            mapOf(
+                "symbol" to h.symbol, "qty" to h.qty, "per" to opt(h.per), "freq" to (h.freq ?: JSONObject.NULL),
+                "freqVerified" to h.freqVerified, "annual" to opt(h.annual), "yoc" to opt(h.yoc), "ytd" to h.ytd, "ttm" to h.ttm, "all" to h.all,
+                "nextExDate" to h.nextExDate, "nextPayDate" to h.nextPayDate, "exPast" to h.exPast, "payPast" to h.payPast,
+            )
         }
+        out["cashflowTiles"] = cf.tiles.map { t ->
+            val d = LinkedHashMap<String, Any>()
+            d["label"] = t.label
+            t.total?.let { d["total"] = it }
+            t.perMonth?.let { d["perMonth"] = it }
+            t.count?.let { d["count"] = it }
+            if (t.label == "Yield on cost") {
+                d["yield"] = opt(t.yield)
+                d["earned"] = t.earned ?: 0.0
+                d["book"] = t.book ?: 0.0
+            }
+            d
+        }
+        out["cashflowMonths"] = cf.months.map { mapOf("key" to it.key, "label" to it.label, "value" to it.value, "count" to it.count) }
+        out["cashflowTotal"] = cf.total
+        out["cashflowCount"] = cf.count
+        out["cashflowSkipped"] = cf.skippedFilters
         return out
     }
 
@@ -153,10 +198,21 @@ class ModelCasesTest {
             val acts = (0 until rows.length()).map { activity(rows.getJSONObject(it)) }
             val secRows = snapshot.optJSONArray("securities") ?: JSONArray()
             val secs = (0 until secRows.length()).map { security(secRows.getJSONObject(it)) }
-            val base = Model.buildBase(acts, secs, market(doc.getJSONObject("market")), doc.getString("today"))
-            val hasDividends = (0 until rows.length()).any { rows.getJSONObject(it).optString("category") == "dividend" }
+            val navRows = snapshot.optJSONArray("navHistory") ?: JSONArray()
+            val nav = (0 until navRows.length()).map { navPoint(navRows.getJSONObject(it)) }
+            val navByAccount = HashMap<String, List<NavPoint>>()
+            snapshot.optJSONObject("navByAccount")?.let { o ->
+                for (nick in o.keys()) {
+                    val pts = o.getJSONArray(nick)
+                    navByAccount[nick] = (0 until pts.length()).map { navPoint(pts.getJSONObject(it)) }
+                }
+            }
+            val base = Model.buildBase(acts, secs, market(doc.getJSONObject("market")), doc.getString("today"), nav, navByAccount, journal(doc.optJSONObject("journal")))
+            @Suppress("UNCHECKED_CAST")
+            val filters = Filters.clean(loose(doc.optJSONObject("filters")) as? Map<String, Any?>)
+            val view = ModelView.buildView(base, filters)
             val problems = mutableListOf<String>()
-            diff(expect(base, hasDividends), doc.getJSONObject("expect"), file.name, problems)
+            diff(expect(view), doc.getJSONObject("expect"), file.name, problems)
             assertTrue(problems.isEmpty(), problems.joinToString("\n"))
         }
     }

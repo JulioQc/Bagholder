@@ -20,7 +20,7 @@ class FixtureTest(unittest.TestCase):
         for path in paths:
             with open(path) as f:
                 doc = json.load(f)
-            got = make_fixtures.expect_from(doc["snapshot"], doc["market"], doc["today"], doc["filters"])
+            got = make_fixtures.expect_from(doc["snapshot"], doc["market"], doc["today"], doc["filters"], doc.get("journal"))
             self.assertEqual(got, doc["expect"], os.path.basename(path))
 
     def test_cases_are_current(self):

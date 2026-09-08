@@ -1,0 +1,814 @@
+{
+  "expect": {
+    "benchmark": {
+      "key": "SP500",
+      "label": "S&P 500"
+    },
+    "bySymbol": [
+      {
+        "avgHold": 44.0,
+        "legs": 1,
+        "n": 1,
+        "pnl": 540.0,
+        "symbol": "ZZZ",
+        "winRate": 1.0
+      },
+      {
+        "avgHold": 11.5,
+        "legs": 2,
+        "n": 2,
+        "pnl": 150.0,
+        "symbol": "AAA",
+        "winRate": 0.5
+      },
+      {
+        "avgHold": 11.0,
+        "legs": 1,
+        "n": 1,
+        "pnl": -146.0,
+        "symbol": "CCC",
+        "winRate": 0.0
+      }
+    ],
+    "cashflowCount": 1,
+    "cashflowHoldings": [
+      {
+        "all": 15.0,
+        "annual": 180.0,
+        "exPast": false,
+        "freq": 12,
+        "freqVerified": false,
+        "nextExDate": "",
+        "nextPayDate": "2026-08-15",
+        "payPast": true,
+        "per": 0.05,
+        "qty": 300.0,
+        "symbol": "DDD",
+        "ttm": 15.0,
+        "yoc": 0.3,
+        "ytd": 15.0
+      }
+    ],
+    "cashflowMonths": [
+      {
+        "count": 1,
+        "key": "2026-08",
+        "label": "Aug '26",
+        "value": 15.0
+      },
+      {
+        "count": 0,
+        "key": "2026-09",
+        "label": "Sep '26",
+        "value": 0.0
+      }
+    ],
+    "cashflowSkipped": [],
+    "cashflowTiles": [
+      {
+        "count": 0,
+        "label": "2024",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2025",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 1,
+        "label": "2026 YTD",
+        "perMonth": 15.0,
+        "total": 15.0
+      },
+      {
+        "count": 1,
+        "label": "All time",
+        "perMonth": 15.0,
+        "total": 15.0
+      },
+      {
+        "book": 600.0,
+        "earned": 15.0,
+        "label": "Yield on cost",
+        "yield": 0.3
+      }
+    ],
+    "cashflowTotal": 15.0,
+    "equity": {
+      "annualized": {
+        "count": 1,
+        "first": "2024",
+        "last": "2024",
+        "rate": 0.186459,
+        "years": 0.960986
+      },
+      "drawdown": {
+        "abs": -15000.0,
+        "at": "2024-06-03",
+        "pct": -0.136364,
+        "peakAt": "2024-03-01"
+      },
+      "label": "Trading",
+      "series": []
+    },
+    "grades": {
+      "buckets": [
+        {
+          "grade": "A",
+          "n": 1,
+          "pnl": 200.0
+        },
+        {
+          "grade": "B",
+          "n": 1,
+          "pnl": 540.0
+        },
+        {
+          "grade": "C",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "F",
+          "n": 1,
+          "pnl": -50.0
+        }
+      ],
+      "graded": 3,
+      "ungraded": 1
+    },
+    "kpi": {
+      "avgHold": 19.5,
+      "avgLoss": -98.0,
+      "avgWin": 370.0,
+      "breakeven": 0,
+      "count": 4,
+      "expectancy": 136.0,
+      "grossLoss": 196.0,
+      "grossWin": 740.0,
+      "losses": 2,
+      "profitFactor": 3.77551,
+      "realized": 544.0,
+      "winRate": 0.5,
+      "wins": 2
+    },
+    "monthly": [
+      {
+        "count": 1,
+        "key": "2026-01",
+        "label": "Jan '26",
+        "value": 200.0
+      },
+      {
+        "count": 1,
+        "key": "2026-02",
+        "label": "Feb '26",
+        "value": -50.0
+      },
+      {
+        "count": 1,
+        "key": "2026-05",
+        "label": "May '26",
+        "value": 540.0
+      },
+      {
+        "count": 1,
+        "key": "2026-06",
+        "label": "Jun '26",
+        "value": -146.0
+      }
+    ],
+    "options": {
+      "accounts": [
+        "TFSA",
+        "Trading"
+      ],
+      "exchanges": [
+        "NASDAQ",
+        "TSX"
+      ],
+      "kinds": [
+        "Shares",
+        "Options"
+      ],
+      "symbols": [
+        "AAA",
+        "BBB",
+        "CCC",
+        "DDD",
+        "EEE",
+        "ZZZ 21AUG26 10.00 CALL"
+      ],
+      "tags": [
+        "breakout",
+        "earnings",
+        "income"
+      ],
+      "years": [
+        "2026"
+      ]
+    },
+    "positions": [
+      {
+        "account": "Trading",
+        "alloc": 0.375,
+        "avg": 2.0,
+        "cost": 600.0,
+        "currency": "CAD",
+        "exchange": "TSX",
+        "held": 68,
+        "id": "rt:b5",
+        "kind": "Shares",
+        "qty": 300.0,
+        "short": false,
+        "symbol": "DDD"
+      }
+    ],
+    "positionsSummary": {
+      "book": 600.0,
+      "count": 1,
+      "mv": 600.0,
+      "unreal": 0.0
+    },
+    "queue": [
+      {
+        "date": "2026-06-12",
+        "id": "rt:b4",
+        "missing": "no grade or thesis",
+        "pnl": -146.0,
+        "symbol": "CCC"
+      },
+      {
+        "date": "2026-02-10",
+        "id": "rt:b2",
+        "missing": "no thesis",
+        "pnl": -50.0,
+        "symbol": "AAA"
+      }
+    ],
+    "trades": [
+      {
+        "account": "Trading",
+        "currency": "CAD",
+        "entry": 10.0,
+        "entryDate": "2026-01-05",
+        "exchange": "TSX",
+        "exit": 12.0,
+        "exitDate": "2026-01-20",
+        "fees": 0.0,
+        "fills": [
+          "BUY",
+          "SELL"
+        ],
+        "grade": "A",
+        "holdDays": 15,
+        "id": "rt:b1",
+        "kind": "Shares",
+        "mult": 1,
+        "pnl": 200.0,
+        "pnlCad": 200.0,
+        "pnlPct": 0.2,
+        "qty": 100.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "AAA",
+        "tags": [
+          "earnings",
+          "breakout"
+        ]
+      },
+      {
+        "account": "Trading",
+        "currency": "CAD",
+        "entry": 12.0,
+        "entryDate": "2026-02-02",
+        "exchange": "TSX",
+        "exit": 11.0,
+        "exitDate": "2026-02-10",
+        "fees": 0.0,
+        "fills": [
+          "BUY",
+          "SELL"
+        ],
+        "grade": "F",
+        "holdDays": 8,
+        "id": "rt:b2",
+        "kind": "Shares",
+        "mult": 1,
+        "pnl": -50.0,
+        "pnlCad": -50.0,
+        "pnlPct": -0.083333,
+        "qty": 50.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "AAA",
+        "tags": []
+      },
+      {
+        "account": "Trading",
+        "currency": "USD",
+        "entry": 3.0,
+        "entryDate": "2026-04-01",
+        "exchange": "",
+        "exit": 1.0,
+        "exitDate": "2026-05-15",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "grade": "B",
+        "holdDays": 44,
+        "id": "rt:sto",
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 400.0,
+        "pnlCad": 540.0,
+        "pnlPct": 0.666667,
+        "qty": 2.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "tags": [
+          "income"
+        ]
+      },
+      {
+        "account": "Trading",
+        "currency": "USD",
+        "entry": 100.0,
+        "entryDate": "2026-06-01",
+        "exchange": "",
+        "exit": 90.0,
+        "exitDate": "2026-06-12",
+        "fees": 0.0,
+        "fills": [
+          "BUY",
+          "SELL"
+        ],
+        "grade": "",
+        "holdDays": 11,
+        "id": "rt:b4",
+        "kind": "Shares",
+        "mult": 1,
+        "pnl": -100.0,
+        "pnlCad": -146.0,
+        "pnlPct": -0.1,
+        "qty": 10.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "CCC",
+        "tags": []
+      }
+    ],
+    "years": [
+      {
+        "days": 351,
+        "endV": 150000.0,
+        "flow": 129950.0,
+        "from": "2024-01-15",
+        "r": 0.178571,
+        "spR": 0.255319,
+        "to": "2024-12-31",
+        "year": "2024"
+      }
+    ]
+  },
+  "filters": {
+    "lists": {
+      "account": [
+        "Trading"
+      ]
+    },
+    "preset": "ytd"
+  },
+  "journal": {
+    "rt:b1": {
+      "grade": "A",
+      "tags": [
+        "earnings",
+        "breakout"
+      ],
+      "thesis": "Breakout after earnings."
+    },
+    "rt:b2": {
+      "grade": "F",
+      "tags": [],
+      "thesis": ""
+    },
+    "rt:b5": {
+      "grade": "",
+      "tags": [
+        "income"
+      ],
+      "thesis": "Holding for the distribution."
+    },
+    "rt:sto": {
+      "grade": "B",
+      "tags": [
+        "income"
+      ],
+      "thesis": "Covered call on a flat name."
+    }
+  },
+  "market": {
+    "benchmark": {
+      "2023-12-29": 4700.0,
+      "2024-06-28": 5400.0,
+      "2024-12-31": 5900.0,
+      "2025-06-30": 6200.0,
+      "2025-12-31": 6800.0,
+      "2026-09-04": 7200.0
+    },
+    "benchmarks": {
+      "TSX": {
+        "2023-12-29": 20900.0,
+        "2024-06-28": 21800.0,
+        "2024-12-31": 24700.0,
+        "2025-06-30": 26800.0,
+        "2025-12-31": 28100.0,
+        "2026-09-04": 29500.0
+      }
+    },
+    "fx": {
+      "2026-06-01": 1.37,
+      "2026-06-12": 1.36
+    }
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b1",
+        "name": "LUNR",
+        "netCashAmount": -1000.0,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": 100,
+        "rawType": "DIY_BUY",
+        "securityId": "sec-aaa",
+        "symbol": "AAA",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 10.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELL",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "s1",
+        "name": "LUNR",
+        "netCashAmount": 1200.0,
+        "occurredAt": "2026-01-20T15:00:00+00:00",
+        "quantity": -100,
+        "rawType": "DIY_SELL",
+        "securityId": "sec-aaa",
+        "symbol": "AAA",
+        "transactionDate": "2026-01-20",
+        "unitPrice": 12.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b2",
+        "name": "LUNR",
+        "netCashAmount": -600.0,
+        "occurredAt": "2026-02-02T15:00:00+00:00",
+        "quantity": 50,
+        "rawType": "DIY_BUY",
+        "securityId": "sec-aaa",
+        "symbol": "AAA",
+        "transactionDate": "2026-02-02",
+        "unitPrice": 12.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELL",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "s2",
+        "name": "LUNR",
+        "netCashAmount": 550.0,
+        "occurredAt": "2026-02-10T15:00:00+00:00",
+        "quantity": -50,
+        "rawType": "DIY_SELL",
+        "securityId": "sec-aaa",
+        "symbol": "AAA",
+        "transactionDate": "2026-02-10",
+        "unitPrice": 11.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "TFSA",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b3",
+        "name": "LUNR",
+        "netCashAmount": -1000.0,
+        "occurredAt": "2025-11-03T15:00:00+00:00",
+        "quantity": 200,
+        "rawType": "DIY_BUY",
+        "securityId": "sec-bbb",
+        "symbol": "BBB",
+        "transactionDate": "2025-11-03",
+        "unitPrice": 5.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "TFSA",
+        "activitySubType": "SELL",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "s3",
+        "name": "LUNR",
+        "netCashAmount": 1200.0,
+        "occurredAt": "2026-03-16T15:00:00+00:00",
+        "quantity": -200,
+        "rawType": "DIY_SELL",
+        "securityId": "sec-bbb",
+        "symbol": "BBB",
+        "transactionDate": "2026-03-16",
+        "unitPrice": 6.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto",
+        "name": "LUNR",
+        "netCashAmount": 600,
+        "occurredAt": "2026-04-01T15:00:00+00:00",
+        "quantity": -2,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "transactionDate": "2026-04-01",
+        "unitPrice": 3
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOCLOSE",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "cover",
+        "name": "LUNR",
+        "netCashAmount": -200,
+        "occurredAt": "2026-05-15T15:00:00+00:00",
+        "quantity": 2,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "transactionDate": "2026-05-15",
+        "unitPrice": 1
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "b4",
+        "name": "LUNR",
+        "netCashAmount": -1000.0,
+        "occurredAt": "2026-06-01T15:00:00+00:00",
+        "quantity": 10,
+        "rawType": "DIY_BUY",
+        "securityId": "",
+        "symbol": "CCC",
+        "transactionDate": "2026-06-01",
+        "unitPrice": 100.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELL",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "s4",
+        "name": "LUNR",
+        "netCashAmount": 900.0,
+        "occurredAt": "2026-06-12T15:00:00+00:00",
+        "quantity": -10,
+        "rawType": "DIY_SELL",
+        "securityId": "",
+        "symbol": "CCC",
+        "transactionDate": "2026-06-12",
+        "unitPrice": 90.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b5",
+        "name": "LUNR",
+        "netCashAmount": -600.0,
+        "occurredAt": "2026-07-01T15:00:00+00:00",
+        "quantity": 300,
+        "rawType": "DIY_BUY",
+        "securityId": "sec-ddd",
+        "symbol": "DDD",
+        "transactionDate": "2026-07-01",
+        "unitPrice": 2.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "TFSA",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b6",
+        "name": "LUNR",
+        "netCashAmount": -1000.0,
+        "occurredAt": "2026-08-01T15:00:00+00:00",
+        "quantity": 40,
+        "rawType": "DIY_BUY",
+        "securityId": "",
+        "symbol": "EEE",
+        "transactionDate": "2026-08-01",
+        "unitPrice": 25.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "",
+        "activityType": "Dividend",
+        "category": "dividend",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "d1",
+        "name": "LUNR",
+        "netCashAmount": 15.0,
+        "occurredAt": "2026-08-15T15:00:00+00:00",
+        "quantity": 300,
+        "rawType": "DIVIDEND",
+        "securityId": "",
+        "symbol": "DDD",
+        "transactionDate": "2026-08-15",
+        "unitPrice": 0.05
+      }
+    ],
+    "balances": [],
+    "navByAccount": {
+      "Trading": [
+        {
+          "date": "2023-12-15",
+          "equity": 50.0,
+          "netDeposits": 50.0
+        },
+        {
+          "date": "2024-01-15",
+          "equity": 100000.0,
+          "netDeposits": 100000.0
+        },
+        {
+          "date": "2024-03-01",
+          "equity": 110000.0,
+          "netDeposits": 100000.0
+        },
+        {
+          "date": "2024-06-03",
+          "equity": 95000.0,
+          "netDeposits": 100000.0
+        },
+        {
+          "date": "2024-09-03",
+          "equity": 140000.0,
+          "netDeposits": 130000.0
+        },
+        {
+          "date": "2024-12-31",
+          "equity": 150000.0,
+          "netDeposits": 130000.0
+        }
+      ]
+    },
+    "navHistory": [
+      {
+        "date": "2023-12-15",
+        "equity": 50.0,
+        "netDeposits": 50.0
+      },
+      {
+        "date": "2024-01-15",
+        "equity": 100000.0,
+        "netDeposits": 100000.0
+      },
+      {
+        "date": "2024-03-01",
+        "equity": 110000.0,
+        "netDeposits": 100000.0
+      },
+      {
+        "date": "2024-06-03",
+        "equity": 95000.0,
+        "netDeposits": 100000.0
+      },
+      {
+        "date": "2024-09-03",
+        "equity": 140000.0,
+        "netDeposits": 130000.0
+      },
+      {
+        "date": "2024-12-31",
+        "equity": 150000.0,
+        "netDeposits": 130000.0
+      },
+      {
+        "date": "2025-03-03",
+        "equity": 170000.0,
+        "netDeposits": 130000.0
+      },
+      {
+        "date": "2025-06-02",
+        "equity": 150000.0,
+        "netDeposits": 130000.0
+      },
+      {
+        "date": "2025-12-31",
+        "equity": 200000.0,
+        "netDeposits": 130000.0
+      },
+      {
+        "date": "2026-03-02",
+        "equity": 230000.0,
+        "netDeposits": 130000.0
+      },
+      {
+        "date": "2026-06-01",
+        "equity": 190000.0,
+        "netDeposits": 120000.0
+      },
+      {
+        "date": "2026-09-04",
+        "equity": 215000.0,
+        "netDeposits": 120000.0
+      }
+    ],
+    "notes": {},
+    "securities": [
+      {
+        "id": "sec-aaa",
+        "name": "Triple A Corp",
+        "primaryExchange": "TSX",
+        "symbol": "AAA"
+      },
+      {
+        "id": "sec-bbb",
+        "name": "Bee Inc",
+        "primaryExchange": "NASDAQ",
+        "symbol": "BBB"
+      },
+      {
+        "id": "sec-ddd",
+        "name": "Dee Fund",
+        "primaryExchange": "TSX",
+        "symbol": "DDD"
+      }
+    ],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-09-07"
+}
