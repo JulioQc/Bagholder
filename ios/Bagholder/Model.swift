@@ -275,19 +275,55 @@ enum BHModel {
 
     static let spacePattern = "[\\s\\u00a0\\u2000-\\u200b\\u202f\\u205f\\u3000]+"
 
+    /// The unicode spaces the page's regex collapses (`_SPACE_RE` in model.py).
+    static func isSpaceLike(_ c: Character) -> Bool {
+        if c.isWhitespace || c.isNewline { return true }
+        guard let v = c.unicodeScalars.first?.value else { return false }
+        return v == 0xA0 || (0x2000...0x200B).contains(v) || v == 0x202F || v == 0x205F || v == 0x3000
+    }
+
+    /// Upper case with every space, underscore and hyphen removed (no regex: this runs on every row, many times).
     static func compact(_ s: String) -> String {
-        reSub("[\\s_\\-]+", s.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), "")
+        var out = ""
+        out.reserveCapacity(s.utf8.count)
+        for c in s.uppercased() where !(isSpaceLike(c) || c == "_" || c == "-") { out.append(c) }
+        return out
     }
 
-    static func normAccountName(_ s: String) -> String {
-        reSub(spacePattern, s, " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Runs of space-like characters collapsed to one space, trimmed.
+    static func collapseSpaces(_ s: String) -> String {
+        var out = ""
+        out.reserveCapacity(s.utf8.count)
+        var pendingSpace = false
+        for c in s {
+            if isSpaceLike(c) { pendingSpace = !out.isEmpty; continue }
+            if pendingSpace { out.append(" "); pendingSpace = false }
+            out.append(c)
+        }
+        return out
     }
 
-    static func spaced(_ symbol: String) -> String {
-        reSub(spacePattern, symbol.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), " ")
+    static func normAccountName(_ s: String) -> String { collapseSpaces(s) }
+
+    static func spaced(_ symbol: String) -> String { collapseSpaces(symbol.uppercased()) }
+
+    // The symbol questions are asked for every fill, lot and slice: answered once per symbol.
+    private static var symbolCache: [String: (option: Bool, underlying: String, right: String)] = [:]
+    private static let symbolLock = NSLock()
+
+    private static func symbolFacts(_ symbol: String) -> (option: Bool, underlying: String, right: String) {
+        symbolLock.lock(); defer { symbolLock.unlock() }
+        if let f = symbolCache[symbol] { return f }
+        let f = (isOptionSymbolSlow(symbol), underlyingSymbolSlow(symbol), optionRightSlow(symbol))
+        symbolCache[symbol] = f
+        return f
     }
 
-    static func isOptionSymbol(_ symbol: String) -> Bool {
+    static func isOptionSymbol(_ symbol: String) -> Bool { symbolFacts(symbol).option }
+    static func underlyingSymbol(_ symbol: String) -> String { symbolFacts(symbol).underlying }
+    static func optionRight(_ symbol: String) -> String { symbolFacts(symbol).right }
+
+    private static func isOptionSymbolSlow(_ symbol: String) -> Bool {
         let u = spaced(symbol)
         if u.isEmpty { return false }
         if reTest("\\b(PUT|CALL)\\b", u) || reTest("\\s[CP]$", u) { return true }
@@ -295,7 +331,7 @@ enum BHModel {
         return false
     }
 
-    static func underlyingSymbol(_ symbol: String) -> String {
+    private static func underlyingSymbolSlow(_ symbol: String) -> String {
         let s = symbol.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty { return "—" }
         let u = spaced(s)
@@ -310,7 +346,7 @@ enum BHModel {
 
     static func optionMultiplier(_ symbol: String) -> Double { isOptionSymbol(symbol) ? 100 : 1 }
 
-    static func optionRight(_ symbol: String) -> String {
+    private static func optionRightSlow(_ symbol: String) -> String {
         let u = spaced(symbol)
         if u.hasSuffix(" PUT") || u.hasSuffix(" P") || reTest(" \\d{6}P\\d+", u) { return "PUT" }
         return "CALL"
@@ -323,12 +359,18 @@ enum BHModel {
     }
 
     /// Days since the civil epoch for an ISO date, nil when it is not one.
+    private static var dayCache: [String: Int] = [:]
+
     static func dayNumber(_ iso: String) -> Int? {
         let s = String(iso.prefix(10))
-        guard reTest("^\\d{4}-\\d{2}-\\d{2}$", s) else { return nil }
-        let p = s.split(separator: "-").map { Int($0)! }
-        var y = p[0]
-        let m = p[1], d = p[2]
+        let u = Array(s.utf8)
+        guard u.count == 10, u[4] == 45, u[7] == 45 else { return nil }
+        for (i, b) in u.enumerated() where i != 4 && i != 7 { if b < 48 || b > 57 { return nil } }
+        symbolLock.lock()
+        if let cached = dayCache[s] { symbolLock.unlock(); return cached }
+        symbolLock.unlock()
+        var y = Int(u[0] - 48) * 1000 + Int(u[1] - 48) * 100 + Int(u[2] - 48) * 10 + Int(u[3] - 48)
+        let m = Int(u[5] - 48) * 10 + Int(u[6] - 48), d = Int(u[8] - 48) * 10 + Int(u[9] - 48)
         guard (1...12).contains(m), (1...31).contains(d) else { return nil }
         if d > daysInMonth(y, m) { return nil }
         if m <= 2 { y -= 1 }
@@ -337,7 +379,9 @@ enum BHModel {
         let mp = (m + 9) % 12
         let doy = (153 * mp + 2) / 5 + d - 1
         let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
-        return era * 146097 + doe - 719468
+        let n = era * 146097 + doe - 719468
+        symbolLock.lock(); dayCache[s] = n; symbolLock.unlock()
+        return n
     }
 
     static func daysInMonth(_ y: Int, _ m: Int) -> Int {
@@ -379,33 +423,36 @@ enum BHModel {
         return f.string(from: Date())
     }
 
+    private static let isoFractional: ISO8601DateFormatter = { let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f }()
+    private static let isoPlain: ISO8601DateFormatter = { let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]; return f }()
+    private static let localDay: DateFormatter = { let f = DateFormatter(); f.timeZone = timeZone; f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f }()
+    private static let localClock: DateFormatter = { let f = DateFormatter(); f.timeZone = timeZone; f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "HH:mm"; return f }()
+    private static var whenCache: [String: (String, String)] = [:]
+
     /// ISO instant -> (YYYY-MM-DD, HH:MM) in the app's local time zone.
     static func whenParts(_ occurred: String) -> (String, String) {
         let s = occurred.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty { return ("", "") }
         if !s.contains("T") { return (String(s.prefix(10)), "") }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var dt = iso.date(from: s)
-        if dt == nil {
-            iso.formatOptions = [.withInternetDateTime]
-            dt = iso.date(from: s)
-        }
-        if dt == nil {
-            iso.formatOptions = [.withInternetDateTime]
-            dt = iso.date(from: s + "Z")
-        }
+        symbolLock.lock()
+        if let hit = whenCache[s] { symbolLock.unlock(); return hit }
+        symbolLock.unlock()
+        let dt = isoFractional.date(from: s) ?? isoPlain.date(from: s) ?? isoPlain.date(from: s + "Z")
         guard let date = dt else { return (String(s.prefix(10)), "") }
-        let f = DateFormatter()
-        f.timeZone = timeZone
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        let day = f.string(from: date)
-        f.dateFormat = "HH:mm"
-        return (day, f.string(from: date))
+        let out = (localDay.string(from: date), localClock.string(from: date))
+        symbolLock.lock(); whenCache[s] = out; symbolLock.unlock()
+        return out
     }
 
-    static func fmt8(_ v: Double) -> String { String(format: "%.8f", v) }
+    /// `%.8f`, without the formatter: this keys every slice.
+    static func fmt8(_ v: Double) -> String {
+        if !v.isFinite || abs(v) > 9e9 { return String(format: "%.8f", v) }
+        let scaled = (abs(v) * 1e8).rounded()
+        let whole = Int64(scaled / 1e8), frac = Int64(scaled.truncatingRemainder(dividingBy: 1e8))
+        var f = String(frac)
+        if f.count < 8 { f = String(repeating: "0", count: 8 - f.count) + f }
+        return (v < 0 && scaled > 0 ? "-" : "") + String(whole) + "." + f
+    }
 
     /// store.trade_side.
     static func tradeSide(_ a: BHAct) -> String {
@@ -663,7 +710,7 @@ enum BHModel {
                 continue
             }
             let raw = compact(a.rawType) + compact(a.aftType)
-            if reTest("CODECHANGE|SYMBOLCHANGE|TICKERCHANGE|LISTINGSTATUS|SECURITYSWAP", raw) {
+            if ["CODECHANGE", "SYMBOLCHANGE", "TICKERCHANGE", "LISTINGSTATUS", "SECURITYSWAP"].contains(where: { raw.contains($0) }) {
                 if !d.isEmpty && (idx.removed[key] == nil || d < idx.removed[key]!) { idx.removed[key] = d }
             }
             if (a.category == "trade" || a.category == "option_event") && !tradeSide(a).isEmpty {
@@ -974,7 +1021,8 @@ enum BHModel {
             if side.isEmpty { continue }
             fills.append(Fill(a: a, side: side, qty: abs(a.quantity)))
         }
-        fills.sort { fillSortKey($0) < fillSortKey($1) }
+        let keyed = fills.map { ($0, fillSortKey($0)) }.sorted { $0.1 < $1.1 }
+        fills = keyed.map { $0.0 }
         inferZeroQtyOptionFills(fills)
         let usable = fills.filter { $0.qty > 0 }
 
@@ -1258,20 +1306,28 @@ enum BHModel {
         }
         func dayOf(_ s: String) -> String { String(s.prefix(10)) }
 
-        var covers = closed.filter { $0.openDirection == "SHORT" && isOptionSymbol($0.symbol) }
-        covers.sort { (dayOf($0.entryDate), dayOf($0.exitDate), $0.id) < (dayOf($1.entryDate), dayOf($1.exitDate), $1.id) }
+        // the covers are visited in an order fixed now, but each is read as it is
+        // when its turn comes: a fold into a row that is itself a later cover
+        // changes that cover's basis, P&L and id (as the Python's shared rows do)
+        let shortOption = closed.map { $0.openDirection == "SHORT" && isOptionSymbol($0.symbol) }
+        let books = closed.map(rollBook)
+        var coverIdx = closed.indices.filter { shortOption[$0] }
+        coverIdx.sort { (dayOf(closed[$0].entryDate), dayOf(closed[$0].exitDate), closed[$0].id) < (dayOf(closed[$1].entryDate), dayOf(closed[$1].exitDate), closed[$1].id) }
+        // the short option slices by (book, entry day): the candidates a cover can fold into
+        var byBookDay: [String: [Int]] = [:]
+        for i in coverIdx { byBookDay[books[i] + "@" + dayOf(closed[i].entryDate), default: []].append(i) }
         var drop = Set<String>()
-        for cover in covers {
+        for ci in coverIdx {
+            let cover = closed[ci]
             if drop.contains(cover.id) { continue }
             let d = dayOf(cover.exitDate)
             if d.isEmpty { continue }
             let under = underlyingSymbol(cover.symbol)
             if under.isEmpty || under == "—" { continue }
-            let ck = rollBook(cover)
-            let closedCands = closed.indices.filter { i in
+            let ck = books[ci]
+            let closedCands = (byBookDay[ck + "@" + d] ?? []).filter { i in
                 let t = closed[i]
-                return t.id != cover.id && !drop.contains(t.id) && t.openDirection == "SHORT" && isOptionSymbol(t.symbol)
-                    && t.symbol != cover.symbol && rollBook(t) == ck && dayOf(t.entryDate) == d
+                return t.id != cover.id && !drop.contains(t.id) && t.symbol != cover.symbol
             }
             let openCands = openLots.indices.filter { i in
                 let l = openLots[i]

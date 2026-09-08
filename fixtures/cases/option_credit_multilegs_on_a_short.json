@@ -1,0 +1,260 @@
+{
+  "expect": {
+    "benchmark": {
+      "key": "SP500",
+      "label": "S&P 500"
+    },
+    "bySymbol": [
+      {
+        "avgHold": 27.0,
+        "legs": 4,
+        "n": 1,
+        "pnl": 580.5,
+        "symbol": "BBAI",
+        "winRate": 1.0
+      }
+    ],
+    "cashflowCount": 0,
+    "cashflowHoldings": [],
+    "cashflowMonths": [],
+    "cashflowSkipped": [],
+    "cashflowTiles": [
+      {
+        "count": 0,
+        "label": "2024",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2025",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2026 YTD",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "All time",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "book": 0,
+        "earned": 0,
+        "label": "Yield on cost",
+        "yield": null
+      }
+    ],
+    "cashflowTotal": 0,
+    "equity": {
+      "annualized": {
+        "count": 0,
+        "first": "",
+        "last": "",
+        "rate": null,
+        "years": 0.0
+      },
+      "drawdown": {
+        "abs": null,
+        "at": "",
+        "pct": null,
+        "peakAt": ""
+      },
+      "label": "All accounts",
+      "series": []
+    },
+    "grades": {
+      "buckets": [
+        {
+          "grade": "A",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "B",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "C",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "F",
+          "n": 0,
+          "pnl": 0
+        }
+      ],
+      "graded": 0,
+      "ungraded": 1
+    },
+    "kpi": {
+      "avgHold": 27.0,
+      "avgLoss": 0.0,
+      "avgWin": 580.5,
+      "breakeven": 0,
+      "count": 1,
+      "expectancy": 580.5,
+      "grossLoss": 0,
+      "grossWin": 580.5,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 580.5,
+      "winRate": 1.0,
+      "wins": 1
+    },
+    "monthly": [
+      {
+        "count": 1,
+        "key": "2026-02",
+        "label": "Feb '26",
+        "value": 580.5
+      }
+    ],
+    "options": {
+      "accounts": [
+        "Trading"
+      ],
+      "exchanges": [],
+      "kinds": [
+        "Options"
+      ],
+      "symbols": [
+        "BBAI 21JAN28 10.00 CALL"
+      ],
+      "tags": [],
+      "years": [
+        "2026"
+      ]
+    },
+    "positions": [],
+    "positionsSummary": {
+      "book": 0,
+      "count": 0,
+      "mv": 0,
+      "unreal": 0
+    },
+    "queue": [
+      {
+        "date": "2026-02-01",
+        "id": "rt:sto",
+        "missing": "no grade or thesis",
+        "pnl": 580.5,
+        "symbol": "BBAI 21JAN28 10.00 CALL"
+      }
+    ],
+    "trades": [
+      {
+        "account": "Trading",
+        "currency": "USD",
+        "entry": 0.716667,
+        "entryDate": "2026-01-05",
+        "exchange": "",
+        "exit": 0.0,
+        "exitDate": "2026-02-01",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY (close + open)",
+          "BUY (close + open)"
+        ],
+        "grade": "",
+        "holdDays": 27,
+        "id": "rt:sto",
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 430.0,
+        "pnlCad": 580.5,
+        "pnlPct": 1.0,
+        "qty": 6.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "BBAI 21JAN28 10.00 CALL",
+        "tags": []
+      }
+    ],
+    "years": []
+  },
+  "filters": {},
+  "journal": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto",
+        "name": "LUNR",
+        "netCashAmount": 359.99999999999994,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": -3,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "BBAI 21JAN28 10.00 CALL",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 1.2
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOCLOSE",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "cr1",
+        "name": "LUNR",
+        "netCashAmount": 14,
+        "occurredAt": "2026-02-01T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "OPTIONS_MULTILEG",
+        "securityId": "",
+        "symbol": "BBAI 21JAN28 10.00 CALL",
+        "transactionDate": "2026-02-01",
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "FILLED",
+        "activityType": "OPTIONS_MULTILEG",
+        "category": "other",
+        "commission": 0,
+        "currency": "USD",
+        "id": "cr2",
+        "name": "LUNR",
+        "netCashAmount": 56,
+        "occurredAt": "2026-02-01T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "OPTIONS_MULTILEG",
+        "securityId": "",
+        "symbol": "BBAI 21JAN28 10.00 CALL",
+        "transactionDate": "2026-02-01",
+        "unitPrice": 0
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-09-08"
+}

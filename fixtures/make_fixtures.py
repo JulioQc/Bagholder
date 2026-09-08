@@ -161,6 +161,76 @@ CASES = {
         ],
         "market": {"fx": {}, "benchmark": {}},
     },
+    # two multileg debits on one contract, a day apart, close 16 shorts (1, then the
+    # 15 left) and carry them to the far contract; a second contract on the same
+    # underlying is its own trade; 6 more sold on the far contract; all 22 bought
+    # back in three fills. One chain trade, and the other contract's trade.
+    "option_two_multilegs_then_chain": {
+        "today": "2026-09-08",
+        "activities": [
+            sto("sto16", "LUNR 15JAN27 12.00 CALL", 16, 6.2225, "2025-07-24"),
+            sto("sto2", "LUNR 15JAN27 10.00 CALL", 2, 6.9025, "2025-07-24"),
+            btc("btc2", "LUNR 15JAN27 10.00 CALL", 2, 4.55, "2025-11-06", sub="BUYTOOPEN"),
+            multileg("ml1", "LUNR 15JAN27 12.00 CALL", -128, "2025-11-13"),
+            multileg("ml2", "LUNR 15JAN27 12.00 CALL", -2025, "2025-11-14"),
+            sto("sto6", "LUNR 21JAN28 12.00 CALL", 6, 6.75, "2025-12-10"),
+            btc("b7", "LUNR 21JAN28 12.00 CALL", 7, 13.3, "2026-06-26", sub="BUYTOOPEN"),
+            btc("b10", "LUNR 21JAN28 12.00 CALL", 10, 13.3, "2026-06-26", sub="BUYTOOPEN"),
+            btc("b5", "LUNR 21JAN28 12.00 CALL", 5, 13.45, "2026-06-26", sub="BUYTOOPEN"),
+        ],
+        "market": {"fx": {}, "benchmark": {}},
+    },
+    # short Dec puts rolled forward: the roll's only posted leg names a contract never
+    # opened; the June buy-back of 26 closes the 11 known shorts, the carried leg and
+    # the 9 old puts (nearest expiry first), and nothing stays open
+    "option_rolled_chain_buy_back_closes_older_contracts": {
+        "today": "2026-09-08",
+        "activities": [
+            sto("s1", "BBAI 26DEC25 5.50 PUT", 3, 0.12, "2025-12-05"),
+            sto("s2", "BBAI 02JAN26 5.50 PUT", 5, 0.2, "2025-12-11"),
+            sto("s4", "BBAI 19DEC25 6.00 PUT", 6, 0.2, "2025-12-12"),
+            sto("s3", "BBAI 26DEC25 6.00 PUT", 1, 0.4, "2025-12-15"),
+            multileg("ml1", "BBAI 19DEC25 6.00 PUT", -18, "2025-12-15"),
+            multileg("ml2", "BBAI 18JUN26 5.00 PUT", -1830, "2025-12-18"),
+            sto("s5", "BBAI 21JAN28 5.00 PUT", 11, 2.4, "2026-02-27"),
+            btc("btc", "BBAI 21JAN28 5.00 PUT", 26, 2.74, "2026-06-29", sub="BUYTOOPEN"),
+        ],
+        "market": {"fx": {}, "benchmark": {}},
+    },
+    # two multileg debits with quantity 0 close a short in two pieces (1, then 15)
+    "option_two_multilegs_close_a_short": {
+        "today": "2026-09-08",
+        "activities": [
+            sto("sto", "LUNR 15JAN27 12.00 CALL", 16, 6.2225, "2026-01-10"),
+            multileg("ml1", "LUNR 15JAN27 12.00 CALL", -128, "2026-03-01"),
+            multileg("ml2", "LUNR 15JAN27 12.00 CALL", -2025, "2026-03-01"),
+        ],
+        "market": {"fx": {}, "benchmark": {}},
+    },
+    # credit multilegs on a short are a roll, one of them posted as SELLTOCLOSE
+    "option_credit_multilegs_on_a_short": {
+        "today": "2026-09-08",
+        "activities": [
+            sto("sto", "BBAI 21JAN28 10.00 CALL", 3, 1.2, "2026-01-05"),
+            act(id="cr1", category="trade", activityType="OPTIONS_SELL", activitySubType="SELLTOCLOSE", rawType="OPTIONS_MULTILEG", quantity=0, netCashAmount=14, transactionDate="2026-02-01", symbol="BBAI 21JAN28 10.00 CALL"),
+            multileg("cr2", "BBAI 21JAN28 10.00 CALL", 56, "2026-02-01"),
+        ],
+        "market": {"fx": {}, "benchmark": {}},
+    },
+    # a chain that folds twice: the first cover folds into the second contract, which is
+    # then itself covered and folds, with that adjusted P&L, into the third
+    "option_roll_chain_folded_twice": {
+        "today": "2026-09-08",
+        "activities": [
+            sto("s1", "QQQ 20MAR26 5.00 PUT", 1, 0.5, "2025-12-01"),
+            btc("c1", "QQQ 20MAR26 5.00 PUT", 1, 1.5, "2025-12-15"),
+            sto("s2", "QQQ 17APR26 5.00 PUT", 1, 2.0, "2025-12-15"),
+            btc("c2", "QQQ 17APR26 5.00 PUT", 1, 3.0, "2025-12-18"),
+            sto("s3", "QQQ 15MAY26 5.00 PUT", 1, 4.0, "2025-12-18"),
+            btc("c3", "QQQ 15MAY26 5.00 PUT", 1, 1.0, "2026-02-02"),
+        ],
+        "market": {"fx": {}, "benchmark": {}},
+    },
     # a credit roll up: two multileg credits on the 10 call move 5 shorts to
     # the 12 call, then the 12 calls are bought back
     "option_credit_roll_up": {
