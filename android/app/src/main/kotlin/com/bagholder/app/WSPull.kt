@@ -69,6 +69,14 @@ data class WSSecurityListing(
     }
 }
 
+/** One day of Wealthsimple's NAV history. */
+data class WSNavPoint(val date: String, val equity: Double, val currency: String, val netDeposits: Double?) {
+    fun toJson(): JSONObject = JSONObject().put("date", date).put("equity", equity).put("currency", currency).put("netDeposits", netDeposits ?: JSONObject.NULL)
+    companion object {
+        fun fromJson(d: JSONObject) = WSNavPoint(d.optString("date"), d.optDouble("equity", 0.0), d.optString("currency", "CAD"), if (d.has("netDeposits") && !d.isNull("netDeposits")) d.optDouble("netDeposits") else null)
+    }
+}
+
 class WSSession(
     var accessToken: String, var refreshToken: String, var clientId: String, var identityCanonicalId: String,
     var expiresAt: String, var sessionId: String, var wssdi: String,
@@ -387,10 +395,12 @@ object WSPull {
 
     // MARK: the pull
 
-    class PullResult(val activities: List<WSActivity>, val listings: List<WSSecurityListing>, val newRows: Boolean)
+    class PullResult(val activities: List<WSActivity>, val listings: List<WSSecurityListing>, val newRows: Boolean,
+                     val nav: List<WSNavPoint>, val navByAccount: Map<String, List<WSNavPoint>>)
 
     fun run(
         oauthCookie: String, wssdi: String?, storedActivities: List<WSActivity>, storedListings: List<WSSecurityListing>,
+        storedNav: List<WSNavPoint> = emptyList(), storedNavByAccount: Map<String, List<WSNavPoint>> = emptyMap(),
         onProgress: (String) -> Unit,
     ): PullResult {
         val oauthObj = jsonWithAccessToken(oauthCookie) ?: throw PullException("No Wealthsimple session")
@@ -462,9 +472,169 @@ object WSPull {
         for (a in mapped) a.fifoId = pools[a.accountId] ?: a.accountId
         val merged = mergeActivities(storedActivities, mapped)
         for (a in merged) a.fifoId = pools[a.accountId] ?: a.accountId
+        onProgress("Fetching equity history…")
+        val sinceNav = if (navMissingDeposits(storedNav)) null else storedNav.map { it.date }.filter { it.isNotEmpty() }.maxOrNull()
+        val nav = mergeNav(storedNav, fetchNavHistory(box, box.sess.identityCanonicalId, sinceNav))
+        val navByAccount = LinkedHashMap(storedNavByAccount)
+        for ((nick, ids) in navAccountGroups(accounts)) {
+            onProgress("Fetching equity history for $nick…")
+            val storedSeries = navByAccount[nick] ?: emptyList()
+            val sinceNick = if (navMissingDeposits(storedSeries)) null else storedSeries.map { it.date }.filter { it.isNotEmpty() }.maxOrNull()
+            try {
+                val series = ids.map { fetchAccountNavHistory(box, it, sinceNick) }
+                navByAccount[nick] = mergeNav(storedSeries, mergeNavPoints(series))
+            } catch (e: Exception) {
+                if (!navByAccount.containsKey(nick) && storedSeries.isNotEmpty()) navByAccount[nick] = storedSeries
+            }
+        }
         onProgress("Fetching listings…")
         val listings = storedListings + fetchListings(box, merged, storedListings)
-        return PullResult(merged, listings, work.isNotEmpty())
+        return PullResult(merged, listings, work.isNotEmpty(), nav, navByAccount)
+    }
+
+    // MARK: NAV history
+
+    private fun navMissingDeposits(stored: List<WSNavPoint>): Boolean {
+        var seen = false
+        for (p in stored) {
+            val y = p.date.take(4)
+            if (y != "2024" && y != "2025" && y != "2026") continue
+            seen = true
+            if (p.netDeposits == null) return true
+        }
+        return !seen
+    }
+
+    private fun mergeNav(stored: List<WSNavPoint>, incoming: List<WSNavPoint>): List<WSNavPoint> {
+        val byDate = HashMap<String, WSNavPoint>()
+        for (r in stored) byDate[r.date] = r
+        for (r in incoming) {
+            val old = byDate[r.date]
+            byDate[r.date] = if (r.netDeposits != null) r else if (old?.netDeposits != null) r.copy(netDeposits = old.netDeposits) else r
+        }
+        return byDate.keys.sorted().map { byDate[it]!! }
+    }
+
+    private fun mergeNavPoints(seriesList: List<List<WSNavPoint>>): List<WSNavPoint> {
+        val byDate = HashMap<String, WSNavPoint>()
+        for (series in seriesList) for (rec in series) {
+            val d = rec.date.take(10)
+            if (d.isEmpty()) continue
+            val cur = byDate[d]
+            byDate[d] = if (cur == null) WSNavPoint(d, rec.equity, rec.currency.ifEmpty { "CAD" }, rec.netDeposits)
+            else cur.copy(equity = cur.equity + rec.equity, currency = rec.currency.ifEmpty { cur.currency },
+                netDeposits = if (rec.netDeposits != null) (cur.netDeposits ?: 0.0) + rec.netDeposits else cur.netDeposits)
+        }
+        return byDate.keys.sorted().map { byDate[it]!! }
+    }
+
+    private fun navAccountGroups(accounts: List<JSONObject>): List<Pair<String, List<String>>> {
+        val groups = HashMap<String, MutableList<String>>()
+        for (acc in accounts) {
+            val aid = str(acc, "id").trim()
+            if (aid.isEmpty()) continue
+            val nick = str(acc, "nickname").trim().ifEmpty { str(acc, "unifiedAccountType").trim().ifEmpty { str(acc, "type").trim() } }
+            if (nick.isEmpty()) continue
+            val ids = groups.getOrPut(nick) { mutableListOf() }
+            if (!ids.contains(aid)) ids.add(aid)
+        }
+        return groups.keys.sorted().map { Pair(it, groups[it]!!) }
+    }
+
+    private fun moneyAmount(node: JSONObject, keys: List<String>): Pair<Double?, String> {
+        for (key in keys) {
+            val money = dict(node.opt(key))
+            if (!money.has("amount") || money.isNull("amount")) continue
+            val amt = num(money.opt("amount"), Double.NaN)
+            if (amt.isNaN()) continue
+            return Pair(amt, str(money, "currency"))
+        }
+        return Pair(null, "")
+    }
+
+    private fun navPointsFromPayload(data: JSONObject): Pair<List<WSNavPoint>, JSONObject> {
+        val ident = dict(data.opt("identity"))
+        val acc = dict(data.opt("account"))
+        val fin = if (ident.has("financials")) dict(ident.opt("financials")) else dict(acc.opt("financials"))
+        val hist = dict(fin.opt("historicalDaily"))
+        val points = mutableListOf<WSNavPoint>()
+        val edges = arr(hist.opt("edges"))
+        for (i in 0 until edges.length()) {
+            val node = dict(dict(edges.opt(i)).opt("node"))
+            val (amt, cur) = moneyAmount(node, listOf("netLiquidationValue", "netLiquidationValueV2"))
+            val d = str(node, "date").take(10)
+            if (d.isEmpty() || amt == null) continue
+            val (nd, _) = moneyAmount(node, listOf("netDeposits", "netDepositsV2"))
+            points.add(WSNavPoint(d, amt, cur.ifEmpty { "CAD" }, nd))
+        }
+        return Pair(points, dict(hist.opt("pageInfo")))
+    }
+
+    private fun paginateNavHistory(box: TokenBox, operation: String, query: String, extra: JSONObject, sinceDate: String?): List<WSNavPoint> {
+        val today = utcFormat("yyyy-MM-dd").format(Date())
+        val sinceDay = (sinceDate ?: "").trim().take(10)
+        if (sinceDay.isNotEmpty() && sinceDay > today) return emptyList()
+        val year0 = if (sinceDay.length >= 4) sinceDay.take(4).toIntOrNull() ?: 2020 else 2020
+        val year1 = today.take(4).toIntOrNull() ?: year0
+        if (year1 < year0) return emptyList()
+        val points = mutableListOf<WSNavPoint>()
+        for (year in year0..year1) {
+            var start = "$year-01-01"
+            if (sinceDay.isNotEmpty() && start < sinceDay) start = sinceDay
+            val end = if (year == year1) today else "$year-12-31"
+            if (start > end) continue
+            var cursor: String? = null
+            for (page in 0 until 8) {
+                val variables = JSONObject(extra.toString()).put("startDate", start).put("endDate", end)
+                if (cursor != null) variables.put("cursor", cursor)
+                val data = graphql(box, operation, variables, query)
+                val (chunk, info) = navPointsFromPayload(data)
+                points.addAll(chunk)
+                if (!info.optBoolean("hasNextPage", false)) break
+                val next = str(info, "endCursor")
+                if (next.isEmpty()) break
+                cursor = next
+            }
+        }
+        val byDate = HashMap<String, WSNavPoint>()
+        for (r in points) byDate[r.date] = r
+        return byDate.keys.sorted().map { byDate[it]!! }
+    }
+
+    private fun fetchNavHistory(box: TokenBox, identityId: String, sinceDate: String?): List<WSNavPoint> =
+        paginateNavHistory(box, "IdentityHistoricalFinancialsQuery", Queries.IDENTITY_HISTORICAL_FINANCIALS,
+            JSONObject().put("identityId", identityId).put("currency", "CAD").put("limit", 400).put("includeNetDeposits", true), sinceDate)
+
+    private fun fetchAccountNavHistory(box: TokenBox, accountId: String, sinceDate: String?): List<WSNavPoint> {
+        val aid = accountId.trim()
+        if (aid.isEmpty()) return emptyList()
+        return paginateNavHistory(box, "FetchAccountHistoricalFinancials", Queries.FETCH_ACCOUNT_HISTORICAL_FINANCIALS,
+            JSONObject().put("id", aid).put("currency", "CAD").put("resolution", "DAILY").put("first", 400), sinceDate)
+    }
+
+    // MARK: the S&P 500 from FRED
+
+    /** FRED's daily closes as YYYY-MM-DD -> close; empty on any failure. */
+    fun fetchSp500(): Map<String, Double> {
+        val out = HashMap<String, Double>()
+        try {
+            val conn = URL("https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500").openConnection() as HttpURLConnection
+            conn.connectTimeout = 45_000; conn.readTimeout = 45_000
+            conn.setRequestProperty("Accept", "text/csv,*/*")
+            val text = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            for (line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")) {
+                val parts = line.split(",")
+                if (parts.size < 2) continue
+                val d = parts[0].trim().trim('"').take(10)
+                val raw = parts[1].trim().trim('"')
+                if (!Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(d) || raw.isEmpty() || raw == ".") continue
+                val px = raw.toDoubleOrNull() ?: continue
+                if (px > 0) out[d] = px
+            }
+        } catch (e: Exception) {
+        }
+        return out
     }
 
     private fun fetchAllAccounts(box: TokenBox, identityId: String): List<JSONObject> {
