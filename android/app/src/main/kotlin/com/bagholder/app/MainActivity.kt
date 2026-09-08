@@ -868,6 +868,7 @@ fun CashflowScreen(chrome: Chrome) {
     val v = Book.view
     var allocBy by remember { mutableStateOf(Store.allocationBy) }
     var picked by remember { mutableStateOf<Int?>(null) }
+    var distPick by remember { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxSize()) {
         Header(chrome)
         FilterChips()
@@ -877,9 +878,12 @@ fun CashflowScreen(chrome: Chrome) {
             if (cf.skippedFilters.isNotEmpty()) item { Text("Ignoring " + cf.skippedFilters.joinToString(", ") + ".", fontSize = 13.sp, color = t.ink55) }
             item { CashflowTiles(cf) }
             item {
-                Card("Monthly distributions") {
+                // the projected month at the card's top right; the pressed month's payout while the chart is pressed
+                val projected = cf.holdings.sumOf { (it.annual ?: 0.0) / 12 }
+                val shown = distPick?.let { cf.months.getOrNull(it)?.value } ?: projected
+                Card("Distributions", trailing = { Text(Fmt.money(shown), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink) }) {
                     if (cf.months.isEmpty()) Muted("No distributions in this span.")
-                    else MonthlyBarsChart(cf.months.map { m -> com.bagholder.model.MonthBucket(m.key, m.label).apply { value = m.value; count = m.count } }, countLabel = "payment")
+                    else PnlBarsChart(cf.months.map { m -> com.bagholder.model.MonthBucket(m.key, m.label).apply { value = m.value; count = m.count } }, distPick, { distPick = it }, color = t.accent)
                 }
             }
             item {
@@ -911,19 +915,21 @@ fun CashflowScreen(chrome: Chrome) {
                 }
             }
             item {
-                Card("Cashflow Positions") {
+                Card("Positions") {
                     if (cf.holdings.isEmpty()) Muted("No income holdings in scope.")
                     Column {
                         for ((i, h) in cf.holdings.withIndex()) {
                             Column(Modifier.padding(top = if (i == 0) 0.dp else 10.dp, bottom = if (i == cf.holdings.size - 1) 0.dp else 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                                    Text(h.symbol, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = t.ink, modifier = Modifier.weight(1f))
-                                    Text(h.annual?.let { Fmt.money(it / 12) + " / mo" } ?: Fmt.DASH, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.ink)
-                                }
-                                Text(rateLine(h), fontSize = 13.sp, color = t.ink60)
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Fact("YTD", Fmt.money(h.ytd)); Fact("All", Fmt.money(h.all))
-                                    Fact("YoC", Fmt.pct(h.yoc, 2, false)); Fact("Yield", Fmt.pct(h.currentYield, 2, false))
+                                // the month's projected payout at the right with the yield on cost under it
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(h.symbol, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
+                                        Text(rateLine(h), fontSize = 13.sp, color = t.ink60)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(h.annual?.let { Fmt.money(it / 12) + " / mo" } ?: Fmt.DASH, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.ink)
+                                        Text(Fmt.pct(h.yoc, 2, false), fontSize = 13.sp, color = t.ink60)
+                                    }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Fact("Ex-Div", h.nextExDate.ifEmpty { Fmt.DASH }, h.exPast)
@@ -936,16 +942,13 @@ fun CashflowScreen(chrome: Chrome) {
                 }
             }
             item {
-                Card("Distribution history") {
+                Card("History") {
                     if (cf.rows.isEmpty()) Muted("No distributions in this span.")
                     Column {
                         for ((i, r) in cf.rows.take(60).withIndex()) {
                             Row(Modifier.fillMaxWidth().padding(top = if (i == 0) 0.dp else 9.dp, bottom = if (i == minOf(cf.rows.size, 60) - 1) 0.dp else 9.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
-                                        Text(r.symbol, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
-                                        Text(r.kind, fontSize = 12.sp, color = t.ink55)
-                                    }
+                                    Text(r.symbol, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
                                     var line = r.date
                                     r.qty?.let { line += " · " + Fmt.qty(it) + " × " + Fmt.perUnit(r.per) }
                                     Text(line, fontSize = 13.sp, color = t.ink60, maxLines = 1, overflow = TextOverflow.Ellipsis)

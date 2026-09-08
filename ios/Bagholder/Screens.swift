@@ -978,6 +978,7 @@ struct CashflowScreen: View {
     let chrome: Chrome
     @AppStorage("bagholder.allocationBy") private var allocBy = "market"
     @State private var picked: Int?
+    @State private var distPick: Int? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -991,10 +992,7 @@ struct CashflowScreen: View {
                             Text("Ignoring " + cf.skipped.joined(separator: ", ") + ".").font(.system(size: 13)).foregroundStyle(t.ink55).frame(maxWidth: .infinity, alignment: .leading)
                         }
                         tiles(cf)
-                        Card(title: "Monthly distributions") {
-                            if cf.months.isEmpty { Text("No distributions in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
-                            else { MonthlyBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }, countLabel: "payment") }
-                        }
+                        distributions(cf)
                         allocation(cf)
                         holdings(cf)
                         history(cf)
@@ -1024,6 +1022,19 @@ struct CashflowScreen: View {
         let years = cf.tiles.filter { !$0.label.hasSuffix("YTD") && $0.label != "Yield on cost" && $0.label != "All time" }.reversed()
         let ordered = [ytd, yoc, all].compactMap { $0 } + years
         return TilePager(tiles: ordered.map(tile))
+    }
+
+    /// The projected month at the card's top right; the pressed month's payout while the chart is pressed.
+    private func distributions(_ cf: BHCashflowView) -> some View {
+        let projected = cf.holdings.reduce(0.0) { $0 + ($1.annual ?? 0) / 12 }
+        let value = distPick.flatMap { i in cf.months.indices.contains(i) ? cf.months[i].value : nil } ?? projected
+        let amount = Text(BHFmt.money(value)).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(t.ink)
+        return Card(title: "Distributions", trailing: AnyView(amount)) {
+            if cf.months.isEmpty { Text("No distributions in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
+            else {
+                PnlBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }, pick: $distPick, color: t.accent)
+            }
+        }
     }
 
     private func allocation(_ cf: BHCashflowView) -> some View {
@@ -1060,22 +1071,22 @@ struct CashflowScreen: View {
     }
 
     private func holdings(_ cf: BHCashflowView) -> some View {
-        Card(title: "Cashflow Positions") {
+        Card(title: "Positions") {
             if cf.holdings.isEmpty { Text("No income holdings in scope.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             VStack(spacing: 0) {
                 ForEach(Array(cf.holdings.enumerated()), id: \.element.id) { i, h in
+                    // the month's projected payout at the right with the yield on cost under it
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(h.symbol).font(.system(size: 16, weight: .semibold)).foregroundStyle(t.ink)
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(h.symbol).font(.system(size: 16, weight: .semibold)).foregroundStyle(t.ink)
+                                Text(Self.rateLine(h)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.ink60)
+                            }
                             Spacer()
-                            Text(h.annual.map { BHFmt.money($0 / 12) + " / mo" } ?? BHFmt.dash).font(.system(size: 15, weight: .medium)).monospacedDigit().foregroundStyle(t.ink)
-                        }
-                        Text(Self.rateLine(h)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.ink60)
-                        HStack(spacing: 12) {
-                            fact("YTD", BHFmt.money(h.ytd))
-                            fact("All", BHFmt.money(h.all))
-                            fact("YoC", BHFmt.pct(h.yoc, digits: 2, signed: false))
-                            fact("Yield", BHFmt.pct(h.currentYield, digits: 2, signed: false))
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(h.annual.map { BHFmt.money($0 / 12) + " / mo" } ?? BHFmt.dash).font(.system(size: 15, weight: .medium)).monospacedDigit().foregroundStyle(t.ink)
+                                Text(BHFmt.pct(h.yoc, digits: 2, signed: false)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.ink60)
+                            }
                         }
                         HStack(spacing: 12) {
                             fact("Ex-Div", h.nextExDate.isEmpty ? BHFmt.dash : h.nextExDate, muted: h.exPast)
@@ -1111,16 +1122,13 @@ struct CashflowScreen: View {
     }
 
     private func history(_ cf: BHCashflowView) -> some View {
-        Card(title: "Distribution history") {
+        Card(title: "History") {
             if cf.rows.isEmpty { Text("No distributions in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             VStack(spacing: 0) {
                 ForEach(Array(cf.rows.prefix(60).enumerated()), id: \.element.id) { i, r in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(r.symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(t.ink)
-                                Text(r.kind).font(.system(size: 12)).foregroundStyle(t.ink55)
-                            }
+                            Text(r.symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(t.ink)
                             Text(Self.historyLine(r)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.ink60).lineLimit(1)
                         }
                         Spacer()

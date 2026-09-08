@@ -214,7 +214,7 @@ fun equityDateLabels(series: List<EquityPoint>): List<String> {
  * the month sits under the finger at the bottom; a tap opens it.
  */
 @Composable
-fun PnlBarsChart(months: List<MonthBucket>, pick: Int?, onPickChange: (Int?) -> Unit, height: Int = 130, onOpen: ((MonthBucket) -> Unit)? = null) {
+fun PnlBarsChart(months: List<MonthBucket>, pick: Int?, onPickChange: (Int?) -> Unit, height: Int = 130, color: Color? = null, onOpen: ((MonthBucket) -> Unit)? = null) {
     val t = LocalTheme.current
     val sc = monthlyScale(months, height.toFloat())
     Column(Modifier.fillMaxWidth()) {
@@ -227,7 +227,7 @@ fun PnlBarsChart(months: List<MonthBucket>, pick: Int?, onPickChange: (Int?) -> 
         }.pressReadout(months.size, onPickChange)) {
             val n = max(months.size, 1).toFloat()
             val pitch = size.width / n
-            val barW = max(2f, min(14.dp.toPx(), pitch * 0.6f))
+            val barW = max(2f, pitch - 4.dp.toPx())   // the page's bars: 5 px apart, filling the month's slot
             val zeroY = sc.posH.dp.toPx()
             drawLine(t.hair, Offset(0f, zeroY), Offset(size.width, zeroY), 1f)
             for ((i, m) in months.withIndex()) {
@@ -235,7 +235,7 @@ fun PnlBarsChart(months: List<MonthBucket>, pick: Int?, onPickChange: (Int?) -> 
                 val x = i * pitch + (pitch - barW) / 2
                 val y = if (m.value >= 0) zeroY - h else zeroY
                 val dim = pick != null && pick != i
-                drawRect((if (m.value >= 0) t.pos else t.neg).copy(alpha = if (dim) 0.35f else 1f), Offset(x, y), Size(barW, max(h, 1.5f)))
+                drawRect((color ?: if (m.value >= 0) t.pos else t.neg).copy(alpha = if (dim) 0.35f else 1f), Offset(x, y), Size(barW, max(h, 1.5f)))
             }
         }
         Spacer(Modifier.height(6.dp))

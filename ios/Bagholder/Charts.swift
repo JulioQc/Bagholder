@@ -151,6 +151,7 @@ struct PnlBarsChart: View {
     let months: [BHMonthBucket]
     @Binding var pick: Int?
     var height: CGFloat = 130
+    var color: Color? = nil   // nil: gains in `pos`, losses in `neg`
     var onPick: ((BHMonthBucket) -> Void)?
 
     var body: some View {
@@ -160,7 +161,7 @@ struct PnlBarsChart: View {
                 let w = geo.size.width
                 let n = CGFloat(max(months.count, 1))
                 let pitch = w / n
-                let barW = max(2, min(14, pitch * 0.6))
+                let barW = max(2, pitch - 4)   // the page's bars: 5 px apart, filling the month's slot
                 let zeroY = sc.posH
                 ZStack(alignment: .topLeading) {
                     Path { p in p.move(to: CGPoint(x: 0, y: zeroY)); p.addLine(to: CGPoint(x: w, y: zeroY)) }
@@ -170,7 +171,7 @@ struct PnlBarsChart: View {
                         let x = CGFloat(i) * pitch + (pitch - barW) / 2
                         let y = m.value >= 0 ? zeroY - h : zeroY
                         RoundedRectangle(cornerRadius: 2)
-                            .fill((m.value >= 0 ? t.pos : t.neg).opacity(pick == nil || pick == i ? 1 : 0.35))
+                            .fill((color ?? (m.value >= 0 ? t.pos : t.neg)).opacity(pick == nil || pick == i ? 1 : 0.35))
                             .frame(width: barW, height: max(h, 1.5))
                             .offset(x: x, y: y)
                             .onTapGesture { onPick?(m) }
