@@ -3205,7 +3205,6 @@ def status_payload():
             "dataVersion": store.data_version() + "|" + model.today_local(),
             "protocol": PROTOCOL,
             "startedAt": STARTED_AT,
-            "sources": market.source_health(),
             "version": APP_VERSION,
             "latestVersion": str(update_status().get("latest") or ""),
             "updateAvailable": bool(update_status().get("updateAvailable")),
