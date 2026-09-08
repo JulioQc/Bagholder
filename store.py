@@ -1560,6 +1560,11 @@ def _migrate_history_sources(conn):
         "(SELECT symbol, MIN(date) AS first FROM price_history GROUP BY symbol) p ON p.symbol = h.symbol "
         "WHERE julianday(p.first) - julianday(h.start) > 7)"
     )
+    conn.execute(
+        "DELETE FROM bar_fetches WHERE (symbol, tf) IN (SELECT b.symbol, b.tf FROM bar_fetches b JOIN "
+        "(SELECT symbol, tf, MIN(ts) AS first FROM price_bars GROUP BY symbol, tf) p ON p.symbol = b.symbol AND p.tf = b.tf "
+        "WHERE p.first - b.start_ts > 7 * 86400)"
+    )
     conn.execute("INSERT INTO meta(key, value) VALUES ('history_sources_migrated', '1')")
     conn.commit()
 

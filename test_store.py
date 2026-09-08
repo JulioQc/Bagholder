@@ -1019,6 +1019,10 @@ class HistorySourceMigrationTest(unittest.TestCase):
                 store.mark_history_fetched("RDDY", "2026-02-02", "2026-09-07T00:00:00Z")
                 store.upsert_price_history("USDC", [{"date": "2026-02-25", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}], "coinbase")
                 store.mark_history_fetched("USDC", "2026-01-10", "2026-09-07T00:00:00Z")   # claimed January, has late February
+                store.upsert_price_bars("USDC", "1h", [{"time": 1772000000, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 0}], "coinbase")   # 2026-02-25
+                store.mark_bars_fetched("USDC", "1h", 1768000000, "2026-09-07T00:00:00Z")   # claimed from 2026-01-10
+                store.upsert_price_bars("RDDY", "1h", [{"time": 1768003200, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 0}], "tmx")
+                store.mark_bars_fetched("RDDY", "1h", 1768000000, "2026-09-07T00:00:00Z")
                 conn = store._connect()
                 try:
                     conn.execute("DELETE FROM meta WHERE key = 'history_sources_migrated'")
@@ -1034,6 +1038,8 @@ class HistorySourceMigrationTest(unittest.TestCase):
                 self.assertIsNotNone(store.history_fetch("RDDY"))
                 self.assertEqual(len(store.price_history("USDC")), 1, "real bars stay")
                 self.assertIsNone(store.history_fetch("USDC"), "a stamp claiming days its bars do not reach is dropped")
+                self.assertIsNone(store.bar_fetch("USDC", "1h"), "the same for intraday stamps")
+                self.assertIsNotNone(store.bar_fetch("RDDY", "1h"), "an honest intraday stamp stays")
                 # Runs once: rows added afterwards under an old source name are left alone.
                 store.upsert_price_history("DOT", [{"date": "2026-02-03", "open": None, "high": None, "low": None, "close": 9.6, "volume": None}], "coingecko")
                 conn = store._connect()
