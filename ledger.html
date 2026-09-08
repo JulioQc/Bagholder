@@ -1508,7 +1508,15 @@ function act(name, arg, ev) {
     case "pieBy": setPieBy(arg.by); render(); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
-    case "toggleList": { const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value); setFilters({}); const vq = document.getElementById("valueQuery") || document.getElementById("searchInput"); if (vq) { vq.focus(); vq.select(); } break; }
+    case "toggleList": {
+      const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value);
+      // a value picked from the search's matches, by click or Enter: the box clears and the field list
+      // comes back showing the value against its field, so the pick is visibly taken
+      if (document.getElementById("popMatches")) { state.fieldQuery = ""; state.valueHi = 0; if (f.search) f.search = ""; }
+      setFilters({});
+      const vq = document.getElementById("valueQuery") || document.getElementById("searchInput"); if (vq) { vq.focus(); vq.select(); }
+      break;
+    }
     case "toggleYear": { const i = f.years.indexOf(arg.year); if (i >= 0) f.years.splice(i, 1); else f.years.push(arg.year); setFilters({ from: "", to: "", preset: "all" }); break; }
     case "preset": setFilters({ preset: f.preset === arg.preset ? "all" : arg.preset, years: [], from: "", to: "" }); break;
     case "rangeOp": f.ranges[arg.key].op = arg.op; if (f.ranges[arg.key].v != null) setFilters({}); else render(); break;
