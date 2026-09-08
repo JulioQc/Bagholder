@@ -68,6 +68,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.material3.Icon
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -163,17 +168,49 @@ fun App() {
     }
 }
 
+/** The iOS tab bar's symbols (gauge, list, briefcase, dollar circle), drawn as 24-pt outline vectors. */
+object TabIcons {
+    private fun outline(name: String, draw: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit): ImageVector =
+        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
+            path(fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) { draw() }
+        }.build()
+
+    val gauge: ImageVector by lazy { outline("gauge") {
+        moveTo(4.5f, 16.5f); arcTo(8.5f, 8.5f, 0f, true, true, 19.5f, 16.5f)   // the dial, open at the bottom
+        moveTo(12f, 16.5f); lineTo(15.8f, 10.2f)                                  // the needle
+        moveTo(6.2f, 11.5f); lineTo(6.2f, 11.5f); moveTo(17.8f, 11.5f); lineTo(17.8f, 11.5f); moveTo(12f, 7.2f); lineTo(12f, 7.2f)   // dots
+    } }
+    val list: ImageVector by lazy { outline("list") {
+        moveTo(5f, 5f); lineTo(19f, 5f); lineTo(19f, 19f); lineTo(5f, 19f); close()
+        moveTo(8f, 9.5f); lineTo(8f, 9.5f); moveTo(11f, 9.5f); lineTo(16f, 9.5f)
+        moveTo(8f, 12f); lineTo(8f, 12f); moveTo(11f, 12f); lineTo(16f, 12f)
+        moveTo(8f, 14.5f); lineTo(8f, 14.5f); moveTo(11f, 14.5f); lineTo(16f, 14.5f)
+    } }
+    val briefcase: ImageVector by lazy { outline("briefcase") {
+        moveTo(3.5f, 8f); lineTo(20.5f, 8f); lineTo(20.5f, 19f); lineTo(3.5f, 19f); close()
+        moveTo(9f, 8f); lineTo(9f, 5.5f); lineTo(15f, 5.5f); lineTo(15f, 8f)
+        moveTo(3.5f, 12.5f); lineTo(20.5f, 12.5f)
+    } }
+    val dollar: ImageVector by lazy { outline("dollar") {
+        moveTo(12f, 3f); arcTo(9f, 9f, 0f, true, true, 12f, 21f); arcTo(9f, 9f, 0f, true, true, 12f, 3f)
+        moveTo(12f, 6.8f); lineTo(12f, 17.2f)
+        moveTo(14.6f, 9.6f); curveTo(14.6f, 8.5f, 13.4f, 8.1f, 12f, 8.1f); curveTo(10.5f, 8.1f, 9.4f, 8.7f, 9.4f, 9.9f); curveTo(9.4f, 11.1f, 10.8f, 11.5f, 12f, 11.8f); curveTo(13.3f, 12.1f, 14.6f, 12.6f, 14.6f, 13.9f); curveTo(14.6f, 15.1f, 13.4f, 15.9f, 12f, 15.9f); curveTo(10.5f, 15.9f, 9.4f, 15.3f, 9.4f, 14.2f)
+    } }
+}
+
 @Composable
 private fun TabBar(tab: Int, onTab: (Int) -> Unit) {
     val t = LocalTheme.current
+    val items = listOf("Dashboard" to TabIcons.gauge, "Trades" to TabIcons.list, "Positions" to TabIcons.briefcase, "Cashflow" to TabIcons.dollar)
     Column(Modifier.fillMaxWidth().background(t.surface)) {
         HorizontalDivider(color = t.hair)
         Row(Modifier.fillMaxWidth()) {
-            for ((i, name) in listOf("Dashboard", "Trades", "Positions", "Cashflow").withIndex()) {
-                Column(Modifier.weight(1f).clickable { onTab(i) }.padding(bottom = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            for ((i, item) in items.withIndex()) {
+                val color = if (tab == i) t.ink else t.ink55
+                Column(Modifier.weight(1f).clickable { onTab(i) }.padding(bottom = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(Modifier.fillMaxWidth().height(2.dp).background(if (tab == i) t.accent else Color.Transparent))
-                    Spacer(Modifier.height(10.dp))
-                    Text(name, fontSize = 12.sp, fontWeight = if (tab == i) FontWeight.SemiBold else FontWeight.Normal, color = if (tab == i) t.ink else t.ink55)
+                    Icon(item.second, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                    Text(item.first, fontSize = 11.sp, fontWeight = if (tab == i) FontWeight.SemiBold else FontWeight.Normal, color = color)
                 }
             }
         }
