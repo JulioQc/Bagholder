@@ -58,6 +58,9 @@ YAHOO_SUFFIX = {"TSX": ".TO", "TSX-V": ".V", "TSXV": ".V", "CSE": ".CN", "CBOE C
 YAHOO_FORMS = {"CAD": (".TO", ".V", ".CN", ".NE"), "USD": ("",)}
 YAHOO_INTRADAY_DAYS = 729
 YAHOO_MIN_INTERVAL_SEC = 2.0    # Yahoo rate-limits bursts: one request at a time, well spaced
+# Yahoo refuses the app's usual Safari User-Agent and CSV-first Accept header with
+# 429 while answering a plain browser signature at once; it gets its own.
+YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 YAHOO_BACKOFF_SEC = 600         # after a 429, leave Yahoo alone for this long
 SOURCE_INTRADAY_DAYS = {"tmx": 365, "yahoo": YAHOO_INTRADAY_DAYS}   # coinbase: full history
 TMX_CHART_QUERY = (
@@ -121,8 +124,8 @@ def _today():
     return datetime.now(timezone.utc).date()
 
 
-def _get_text(url, ssl_context=None):
-    req = Request(url, headers={"User-Agent": UA, "Accept": "text/csv,application/json,*/*;q=0.8"})
+def _get_text(url, ssl_context=None, headers=None):
+    req = Request(url, headers=headers or {"User-Agent": UA, "Accept": "text/csv,application/json,*/*;q=0.8"})
     ctx = ssl_context or default_ssl_context()
     with urlopen(req, timeout=TIMEOUT_SEC, context=ctx) as resp:
         raw = resp.read()
@@ -1015,7 +1018,7 @@ def _yahoo_get(url, ssl_context=None, now=None):
             _time.sleep(wait)
         _yahoo_next_at = _time.monotonic() + YAHOO_MIN_INTERVAL_SEC
         try:
-            return _get_text(url, ssl_context)
+            return _get_text(url, ssl_context, headers=YAHOO_HEADERS)
         except Exception as e:
             if getattr(e, "code", None) == 429:
                 _yahoo_backoff_until = _time.monotonic() + YAHOO_BACKOFF_SEC

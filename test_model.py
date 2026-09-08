@@ -1635,7 +1635,7 @@ class MarketParseTest(unittest.TestCase):
                         return {"data": {"getQuoteBySymbol": {"symbol": sym, "exchangeName": venues[sym], "price": 1.0} if sym in venues else None}}
                     return {"data": {"getTimeSeriesData": [{"dateTime": "2026-02-02T16:00:00-05:00", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}] if sym in venues else []}}
                 rec = {"symbol": "QIMC", "exchange": "", "currency": "CAD", "kind": "Shares"}
-                with mock.patch.object(market, "_post_json", side_effect=post):
+                with mock.patch.object(market, "_post_json", side_effect=post), mock.patch.object(market, "_get_text", side_effect=OSError("offline")):
                     # A record with no venue asks for the bare form, gets nothing, and
                     # resolves the form whose quote names a venue: remembered from then on.
                     bars, _ = market.fetch_history(rec, "2026-02-01", "2026-02-03")
@@ -1644,13 +1644,13 @@ class MarketParseTest(unittest.TestCase):
                 self.assertEqual([s for op, s in asked if op == "getQuoteBySymbol"], ["QIMC", "QIMC:CNX"], "the bare form is probed first, the CSE form answers")
                 self.assertEqual(market.tmx_remembered("QIMC"), "QIMC:CNX")
                 asked.clear()
-                with mock.patch.object(market, "_post_json", side_effect=post):
+                with mock.patch.object(market, "_post_json", side_effect=post), mock.patch.object(market, "_get_text", side_effect=OSError("offline")):
                     market.fetch_history(rec, "2026-02-01", "2026-02-03")
                 self.assertEqual(asked, [("getTimeSeriesData", "QIMC:CNX")], "remembered: no probing, straight to the right form")
                 # A Canadian record never resolves to a US form, and a miss is remembered for a day.
                 asked.clear()
                 hg = {"symbol": "HG", "exchange": "CSE", "currency": "CAD", "kind": "Shares"}
-                with mock.patch.object(market, "_post_json", side_effect=post):
+                with mock.patch.object(market, "_post_json", side_effect=post), mock.patch.object(market, "_get_text", side_effect=OSError("offline")):
                     self.assertEqual(market.fetch_history(hg, "2026-02-01", "2026-02-03")[0], [])
                     self.assertEqual(market.fetch_history(hg, "2026-02-01", "2026-02-03")[0], [])
                 probes = [s for op, s in asked if op == "getQuoteBySymbol"]
@@ -1658,7 +1658,7 @@ class MarketParseTest(unittest.TestCase):
                 self.assertEqual(market.tmx_remembered("HG"), "HG")
                 # The quote path and the record path resolve the same way.
                 asked.clear()
-                with mock.patch.object(market, "_post_json", side_effect=post):
+                with mock.patch.object(market, "_post_json", side_effect=post), mock.patch.object(market, "_get_text", side_effect=OSError("offline")):
                     self.assertEqual(market.fetch_tmx_quote("QIMC")["exchange"], "Canadian Securities Exchange")
                 self.assertEqual(asked, [("getQuoteBySymbol", "QIMC:CNX")])
             finally:
@@ -1718,13 +1718,16 @@ class MarketParseTest(unittest.TestCase):
                 market._yahoo_backoff_until = 0.0
                 market._yahoo_next_at = 0.0
                 calls = []
+                kw = {}
                 def get(url, *a, **k):
                     calls.append(url)
+                    kw.update(k)
                     if "/GONE.CN?" in url:
                         raise HTTPError(url, 404, "Not Found", {}, None)
                     raise HTTPError(url, 429, "Too Many Requests", {}, None)
                 with mock.patch.object(market, "_get_text", side_effect=get), mock.patch.object(market, "YAHOO_MIN_INTERVAL_SEC", 0):
                     self.assertEqual(market.fetch_yahoo("GONE.CN", 0, 1, "1d"), [])
+                    self.assertEqual(kw.get("headers"), market.YAHOO_HEADERS, "Yahoo is asked with its own headers, not the app's usual ones")
                     self.assertEqual(market.fetch_yahoo("GONE.CN", 0, 1, "1d"), [])
                     self.assertEqual(len(calls), 1, "a symbol Yahoo does not carry is not asked again today")
                     self.assertEqual(market.fetch_yahoo("BUSY.TO", 0, 1, "1d"), [])
