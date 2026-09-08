@@ -181,6 +181,7 @@ struct FilterChips: View {
 }
 
 struct Card<Content: View>: View {
+    static var headerHeight: CGFloat { 24 }
     @Environment(\.theme) private var t
     var title: String? = nil
     var subtitle: String? = nil
@@ -190,7 +191,8 @@ struct Card<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if title != nil || trailing != nil {
-                HStack(alignment: .firstTextBaseline) {
+                // one header height whatever sits at the right, so cards in a row match
+                HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
                         if let title { Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(t.ink) }
                         if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(t.ink55) }
@@ -198,10 +200,12 @@ struct Card<Content: View>: View {
                     Spacer()
                     if let trailing { trailing }
                 }
+                .frame(minHeight: Card.headerHeight)
             }
             content
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(t.surface))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(t.hair, lineWidth: 1))
@@ -342,7 +346,7 @@ struct DashboardScreen: View {
 
     /// The swiping row's cards share one body height; the row is that plus the card's header and padding.
     static let bodyHeight: CGFloat = 150
-    static let rowHeight: CGFloat = bodyHeight + 12 + 20 + 32
+    static let rowHeight: CGFloat = bodyHeight + 12 + Card<EmptyView>.headerHeight + 24
 
     var body: some View {
         VStack(spacing: 0) {
@@ -407,7 +411,7 @@ struct DashboardScreen: View {
                 Text("Vs " + v.benchmarkLabel).font(.system(size: 13, weight: .medium))
                 Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
             }
-            .foregroundStyle(t.ink75).padding(.horizontal, 10).padding(.vertical, 6).background(RoundedRectangle(cornerRadius: 7).fill(t.well))
+            .foregroundStyle(t.ink75).padding(.horizontal, 10).padding(.vertical, 4).background(RoundedRectangle(cornerRadius: 7).fill(t.well))
         }
         // the years scroll inside the card's fixed body
         return Card(title: "Annual returns", trailing: AnyView(picker)) {
@@ -519,7 +523,8 @@ struct DashboardScreen: View {
                             Spacer()
                             Text(BHFmt.wholeMoney(r.pnl)).font(.system(size: 17, weight: .medium)).monospacedDigit().foregroundStyle(t.signed(r.pnl))
                         }
-                        .padding(.vertical, 12)
+                        .padding(.top, i == 0 ? 0 : 12)
+                        .padding(.bottom, i == min(rows.count, 12) - 1 ? 0 : 12)
                     }
                     .buttonStyle(.plain)
                     if i < min(rows.count, 12) - 1 { Divider().overlay(t.hair) }
@@ -1030,7 +1035,7 @@ struct CashflowScreen: View {
             ForEach(["market", "projected"], id: \.self) { k in
                 Button(k == "market" ? "Market" : "Projected") { allocBy = k; picked = nil }
                     .font(.system(size: 13, weight: .medium)).foregroundStyle(allocBy == k ? t.ink : t.ink55)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(RoundedRectangle(cornerRadius: 7).fill(allocBy == k ? t.well : .clear))
             }
         }
@@ -1077,7 +1082,8 @@ struct CashflowScreen: View {
                             fact("Pay Day", h.nextPayDate.isEmpty ? BHFmt.dash : h.nextPayDate, muted: h.payPast)
                         }
                     }
-                    .padding(.vertical, 10)
+                    .padding(.top, i == 0 ? 0 : 10)
+                    .padding(.bottom, i == cf.holdings.count - 1 ? 0 : 10)
                     if i < cf.holdings.count - 1 { Divider().overlay(t.hair) }
                 }
             }
@@ -1123,7 +1129,8 @@ struct CashflowScreen: View {
                             Text(r.currency).font(.system(size: 12)).foregroundStyle(t.ink55)
                         }
                     }
-                    .padding(.vertical, 9)
+                    .padding(.top, i == 0 ? 0 : 9)
+                    .padding(.bottom, i == min(cf.rows.count, 60) - 1 ? 0 : 9)
                     if i < min(cf.rows.count, 60) - 1 { Divider().overlay(t.hair) }
                 }
             }

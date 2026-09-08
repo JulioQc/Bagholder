@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -259,9 +260,10 @@ fun FilterChips() {
 @Composable
 fun Card(title: String? = null, subtitle: String? = null, trailing: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
     val t = LocalTheme.current
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(t.surface).border(1.dp, t.hair, RoundedCornerShape(12.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(t.surface).border(1.dp, t.hair, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (title != null || trailing != null) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            // one header height whatever sits at the right, so cards in a row match
+            Row(Modifier.fillMaxWidth().heightIn(min = 24.dp), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     if (title != null) Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
                     if (subtitle != null) Text(subtitle, fontSize = 13.sp, color = t.ink55)
@@ -434,7 +436,7 @@ private fun AnnualizedCard(v: View) {
     Card("Annual returns", trailing = {
         Box {
             Text("Vs " + v.benchmarkLabel + " ▾", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = t.ink75,
-                modifier = Modifier.clip(RoundedCornerShape(7.dp)).background(t.well).clickable { pick = !pick }.padding(horizontal = 10.dp, vertical = 6.dp))
+                modifier = Modifier.clip(RoundedCornerShape(7.dp)).background(t.well).clickable { pick = !pick }.padding(horizontal = 10.dp, vertical = 4.dp))
         }
     }) {
         if (pick) {
@@ -517,7 +519,7 @@ private fun BySymbolCard(v: View, onTrades: () -> Unit) {
                     f.lists["symbol"] = listOf(r.symbol)
                     Book.applyFilters(f)
                     onTrades()
-                }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                }.padding(top = if (i == 0) 0.dp else 12.dp, bottom = if (i == minOf(rows.size, 12) - 1) 0.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(r.symbol, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
                         Text(symbolLine(r), fontSize = 13.sp, color = t.ink60)
@@ -889,7 +891,7 @@ fun CashflowScreen(chrome: Chrome) {
                     Row {
                         for (k in listOf("market", "projected")) {
                             Text(if (k == "market") "Market" else "Projected", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (allocBy == k) t.ink else t.ink55,
-                                modifier = Modifier.clip(RoundedCornerShape(7.dp)).background(if (allocBy == k) t.well else Color.Transparent).clickable { allocBy = k; Store.allocationBy = k; picked = null }.padding(horizontal = 10.dp, vertical = 6.dp))
+                                modifier = Modifier.clip(RoundedCornerShape(7.dp)).background(if (allocBy == k) t.well else Color.Transparent).clickable { allocBy = k; Store.allocationBy = k; picked = null }.padding(horizontal = 10.dp, vertical = 4.dp))
                         }
                     }
                 }) {
@@ -913,7 +915,7 @@ fun CashflowScreen(chrome: Chrome) {
                     if (cf.holdings.isEmpty()) Muted("No income holdings in scope.")
                     Column {
                         for ((i, h) in cf.holdings.withIndex()) {
-                            Column(Modifier.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(Modifier.padding(top = if (i == 0) 0.dp else 10.dp, bottom = if (i == cf.holdings.size - 1) 0.dp else 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                                     Text(h.symbol, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = t.ink, modifier = Modifier.weight(1f))
                                     Text(h.annual?.let { Fmt.money(it / 12) + " / mo" } ?: Fmt.DASH, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.ink)
@@ -938,7 +940,7 @@ fun CashflowScreen(chrome: Chrome) {
                     if (cf.rows.isEmpty()) Muted("No distributions in this span.")
                     Column {
                         for ((i, r) in cf.rows.take(60).withIndex()) {
-                            Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().padding(top = if (i == 0) 0.dp else 9.dp, bottom = if (i == minOf(cf.rows.size, 60) - 1) 0.dp else 9.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
                                         Text(r.symbol, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
