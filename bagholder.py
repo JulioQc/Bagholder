@@ -3458,9 +3458,15 @@ def _install_files(staging, names, tag):
         if cur.exists():
             (previous / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(cur, previous / name)
-    for name in names:
-        (APP_DIR / name).parent.mkdir(parents=True, exist_ok=True)
-        os.replace(staging / name, APP_DIR / name)
+    try:
+        for name in names:
+            (APP_DIR / name).parent.mkdir(parents=True, exist_ok=True)
+            os.replace(staging / name, APP_DIR / name)
+    except Exception:
+        # a replace failed part way (a file held open, a permission): every file
+        # goes back to its previous copy before the failure is reported
+        _rollback()
+        raise
     (HOME / "update-pending").write_text(tag)
 
 

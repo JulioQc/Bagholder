@@ -1269,6 +1269,28 @@ class InAppUpdateTest(unittest.TestCase):
                 self.assertEqual(restarts, [1])
                 bagholder._state["updating"] = ""
 
+    def test_a_swap_that_fails_part_way_puts_every_file_back(self):
+        import bagholder
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as app, tempfile.TemporaryDirectory() as stage:
+            bagholder.HOME = Path(home)
+            bagholder.APP_DIR = Path(app)
+            (Path(app) / "a.py").write_text("old a")
+            (Path(app) / "b.py").write_text("old b")
+            (Path(stage) / "a.py").write_text("new a")
+            (Path(stage) / "b.py").write_text("new b")
+            real = os.replace
+            def flaky(src, dst):
+                if str(dst).endswith("b.py"):
+                    raise PermissionError("held open")
+                real(src, dst)
+            with mock.patch.object(bagholder.os, "replace", side_effect=flaky):
+                with self.assertRaises(PermissionError):
+                    bagholder._install_files(Path(stage), ["a.py", "b.py"], "v9.9.9")
+            self.assertEqual((Path(app) / "a.py").read_text(), "old a", "the file already swapped is back")
+            self.assertEqual((Path(app) / "b.py").read_text(), "old b")
+            self.assertFalse((Path(home) / "update-pending").exists())
+
     def test_update_button_refuses_during_a_sync(self):
         import bagholder
         from unittest import mock
