@@ -232,7 +232,7 @@ Avg and Market belong to the row's own position, matched by position id, never b
 
 ## 5. Filters
 
-One filter set applies to every page: Date (presets 1D 1W 1M 3M 6M YTD 1Y 5Y, years, or a range), Account, Symbol, Grade, Tag, Side, Kind, Exchange, Result, and ranges on Price, Hold, P&L and Qty. Trades are scoped by close date. Cashflow honours only Date, Account and Symbol and says which other filters it ignored.
+One filter set applies to every page: Date (presets 1D 1W 1M 3M 6M YTD 1Y 5Y, years, or a range), Account, Symbol, Grade, Tag, Side, Kind, Exchange, Result, and ranges on Price, Hold, P&L and Qty. Trades are scoped by close date. Cashflow honours only Date, Account and Symbol and says which other filters it ignored. ⌘K on a Mac, Ctrl+K elsewhere, opens the filter popover on Symbol with its search box focused, from anywhere on the page; Escape closes it.
 
 ## 6. Layout
 
