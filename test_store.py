@@ -1076,18 +1076,32 @@ class LoginBrowserTest(unittest.TestCase):
             clock[0] += 5
             return clock[0]
         closed = []
+        captured = []
         bagholder._state["capturing"] = True
         bagholder._state["error"] = ""
         bagholder._state["chrome_proc"] = proc
+        bagholder._state["login_attempt"] = 7
         # Chrome is still running (only a service worker answers on the debug port), the window is gone.
         with mock.patch.object(bagholder, "_cdp_list", return_value=[{"type": "service_worker", "id": "SW", "webSocketDebuggerUrl": "ws://x"}]), \
-             mock.patch.object(bagholder, "_try_capture_from_cdp", return_value=None), \
-             mock.patch.object(bagholder, "_close_login_browser", side_effect=lambda: closed.append(1)), \
+             mock.patch.object(bagholder, "_try_capture_from_cdp", side_effect=lambda port: captured.append(1)), \
+             mock.patch.object(bagholder, "_close_login_browser", side_effect=lambda only=None: closed.append(only)), \
              mock.patch.object(bagholder.time, "time", side_effect=now), mock.patch.object(bagholder.time, "sleep", lambda s: None):
-            bagholder._poll_chrome_session(proc, 18765)
+            bagholder._poll_chrome_session(proc, 18765, attempt=7)
         self.assertFalse(bagholder._state["capturing"], "waiting stopped")
         self.assertIn("closed before a session", bagholder._state["error"])
-        self.assertEqual(closed, [1], "and the app closes its own lingering instance; nothing is relaunched")
+        self.assertEqual(closed, [proc], "and the app closes the instance it was watching; nothing is relaunched")
+        self.assertEqual(captured, [], "no capture call is made against a window that is not there")
+        # A watcher from an earlier attempt exits without touching the newer window.
+        bagholder._state["capturing"] = True
+        bagholder._state["error"] = ""
+        bagholder._state["login_attempt"] = 8
+        closed.clear()
+        with mock.patch.object(bagholder, "_cdp_list", return_value=[]), mock.patch.object(bagholder, "_close_login_browser", side_effect=lambda only=None: closed.append(only)), \
+             mock.patch.object(bagholder.time, "time", side_effect=now), mock.patch.object(bagholder.time, "sleep", lambda s: None):
+            bagholder._poll_chrome_session(proc, 18765, attempt=7)
+        self.assertTrue(bagholder._state["capturing"], "the newer attempt is still waiting")
+        self.assertEqual(bagholder._state["error"], "")
+        self.assertEqual(closed, [], "and nothing was closed")
 
     def test_second_connect_reuses_the_window_and_cancel_closes_it(self):
         import bagholder
@@ -1107,9 +1121,11 @@ class LoginBrowserTest(unittest.TestCase):
                  mock.patch.object(bagholder, "_cdp_list", return_value=[{"type": "page", "id": "T1", "webSocketDebuggerUrl": "ws://x"}]):
                 bagholder._state["chrome_proc"] = None
                 bagholder._state["capturing"] = False
+                bagholder._state["login_attempt"] = 0
                 self.assertEqual(bagholder.start_login_browser(), {"ok": True})
                 self.assertEqual(popen.call_count, 1)
                 self.assertTrue(bagholder._state["capturing"])
+                self.assertEqual(bagholder._state["login_attempt"], 1, "each launch is a new attempt; earlier watchers stand down")
                 # Connect again while the window is up: no second Chrome, the window is brought forward.
                 self.assertEqual(bagholder.start_login_browser(), {"ok": True, "reused": True})
                 self.assertEqual(popen.call_count, 1, "never a second window")
