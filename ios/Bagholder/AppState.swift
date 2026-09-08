@@ -492,17 +492,15 @@ struct WealthsimpleLoginWebView: UIViewRepresentable {
         init(onSession: @escaping (String, String?) -> Void) { self.onSession = onSession }
 
         func start() {
-            WKWebsiteDataStore.default().httpCookieStore.add(self)
             timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.inspectCookies() }
         }
 
         func stop() {
             timer?.invalidate()
             timer = nil
-            WKWebsiteDataStore.default().httpCookieStore.remove(self)
         }
 
-        func cookiesDidChange(in cookieStore: WKHTTPCookieStore) { inspectCookies() }
+        func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {}
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { inspectCookies() }
 
@@ -518,10 +516,12 @@ struct WealthsimpleLoginWebView: UIViewRepresentable {
                 var wssdi: String?
                 for cookie in cookies {
                     if cookie.name == "wssdi", !cookie.value.isEmpty { wssdi = cookie.value }
-                    if cookie.name == "_oauth2_access_v2", WSPull.jsonWithAccessToken(cookie.value) != nil {
-                        oauth = cookie.value
-                    } else if oauth == nil, WSPull.jsonWithAccessToken(cookie.value) != nil {
-                        oauth = cookie.value
+                    else if cookie.name == "_oauth2_access_v2", WSPull.jsonWithAccessToken(cookie.value) != nil { oauth = cookie.value }
+                }
+                // fall back to any cookie holding an access token only once the named one is absent
+                if oauth == nil {
+                    for cookie in cookies where cookie.name != "wssdi" {
+                        if WSPull.jsonWithAccessToken(cookie.value) != nil { oauth = cookie.value; break }
                     }
                 }
                 guard let oauth else { return }
