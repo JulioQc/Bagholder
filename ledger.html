@@ -187,7 +187,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
-const PROTOCOL = "2026-09-08.2"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-08.3"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -428,7 +428,7 @@ function showingEmpty() { return !!(state.model && !state.model.activityCount &&
 function syncLine() {
   const s = state.status;
   if (s.protocol && s.protocol !== PROTOCOL) return '<span class="status-err">Restart Bagholder to finish the update</span>';
-  if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login…';
+  if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login… <button class="pill" data-act="cancelConnect" style="padding:1px 8px;font-size:11px;width:auto;margin-left:6px">Cancel</button>';
   if (state.busy === "refresh") return '<span class="spin"></span>Refreshing session…';
   if (s.syncing) return '<span class="spin"></span>' + esc(s.syncStep || "Syncing…");
   if (s.error && !showingEmpty()) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
@@ -1281,11 +1281,20 @@ function cfLeave() { ["cfX", "cfTip"].forEach((id) => { const el = document.getE
 // ---------------------------------------------------------------------------
 // shell
 // ---------------------------------------------------------------------------
+// The page with nothing to show yet, in three states: not connected (connect),
+// connected and syncing (the first pull is under way), connected with nothing
+// back (sync again).
 function emptyHtml() {
   const s = state.status;
-  return '<div class="empty" style="min-height:60vh"><img src="favicon.png" alt="" style="width:48px;height:48px;border-radius:10px;opacity:.9"><div style="font-size:16px;font-weight:500">No activity yet</div>' +
-    '<div class="dim" style="font-size:12.5px;max-width:420px">Connect your Wealthsimple account and Bagholder will pull your full history, then keep it up to date every weekday after the close. Nothing leaves this machine.</div>' +
-    (s.connected ? '<button class="btn btn-primary" data-act="sync" ' + (s.syncing ? "disabled" : "") + ">" + (s.syncing ? "Syncing…" : "Sync now") + "</button>" : '<button class="btn btn-primary" data-act="connect">Connect Wealthsimple</button>') +
+  const head = !s.connected ? "No activity yet" : s.syncing ? "Pulling your history" : "No activity yet";
+  const body = !s.connected
+    ? "Connect your Wealthsimple account and Bagholder will pull your full history, then keep it up to date every weekday after the close. Nothing leaves this machine."
+    : s.syncing ? "Your full Wealthsimple history is on its way. The first sync can take a minute."
+    : "Connected to Wealthsimple, but no activity has come back yet.";
+  const action = !s.connected ? '<button class="btn btn-primary" data-act="connect">Connect Wealthsimple</button>'
+    : s.syncing ? "" : '<button class="btn btn-primary" data-act="sync">Sync now</button>';
+  return '<div class="empty" style="min-height:60vh"><div style="font-size:16px;font-weight:500">' + head + "</div>" +
+    '<div class="dim" style="font-size:12.5px;max-width:420px">' + body + "</div>" + action +
     (s.error ? '<div class="status-err" style="font-size:12px">' + esc(s.error) + "</div>" : "") + "</div>";
 }
 function pageHtml() {
@@ -1383,13 +1392,25 @@ function connect() {
     if (!res || !res.ok) { state.busy = ""; state.status.error = (res && res.error) || "Install Chrome. Passkey login has to happen on Wealthsimple’s site."; render(); return; }
     const t0 = Date.now();
     const tick = () => api("GET", "/api/status").then((st) => {
-      applyStatus(st); renderHeaderOnly();
+      if (state.busy !== "connecting") return;   // cancelled meanwhile
+      const before = JSON.stringify([state.status.connected, state.status.capturing, state.status.error, state.status.syncing]);
+      applyStatus(st);
+      // redraw the header only on a change: a redraw restarts the spinner's animation
+      if (JSON.stringify([state.status.connected, state.status.capturing, state.status.error, state.status.syncing]) !== before) renderHeaderOnly();
       if (st && st.connected) { state.busy = ""; return syncNow(); }
+      // the server stopped waiting: the window closed, or nothing showed up in time
+      if (st && !st.capturing) { state.busy = ""; state.status.error = st.error || "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
       if (Date.now() - t0 > 180000) { state.busy = ""; state.status.error = "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
-      setTimeout(tick, 1500);
+      setTimeout(tick, 500);
     });
     tick();
   });
+}
+function cancelConnect() {
+  state.busy = "";
+  state.status.error = "";
+  render();
+  api("POST", "/api/login/cancel").then(() => pollStatus());
 }
 function syncNow() {
   state.menuOpen = false;
@@ -1452,6 +1473,7 @@ function act(name, arg, ev) {
     case "menu": state.menuOpen = !state.menuOpen; state.picker = null; render(); break;
     case "sync": syncNow(); break;
     case "connect": connect(); break;
+    case "cancelConnect": cancelConnect(); break;
     case "refreshSession": refreshSession(); break;
     case "disconnect": disconnect(); break;
     case "exportCsv": state.menuOpen = false; render(); exportCsv(); break;

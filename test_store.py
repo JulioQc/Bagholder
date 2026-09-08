@@ -1052,6 +1052,119 @@ class HistorySourceMigrationTest(unittest.TestCase):
                 os.environ.pop("BAGHOLDER_HOME", None)
 
 
+class LoginBrowserTest(unittest.TestCase):
+    """The login window is opened once, brought forward on a second Connect,
+    closed by Cancel, and never relaunched by the app."""
+
+    class _Proc:
+        def __init__(self):
+            self.returncode = None
+            self.terminated = False
+        def poll(self):
+            return self.returncode
+        def wait(self, timeout=None):
+            if self.returncode is None:
+                raise TimeoutError()
+            return self.returncode
+        def terminate(self):
+            self.terminated = True
+            self.returncode = -15
+        @property
+        def pid(self):
+            return 4242
+
+    def test_a_closed_window_is_noticed_even_when_chrome_lingers(self):
+        import bagholder
+        from unittest import mock
+        proc = self._Proc()
+        clock = [1000.0]
+        def now():
+            clock[0] += 5
+            return clock[0]
+        closed = []
+        captured = []
+        bagholder._state["capturing"] = True
+        bagholder._state["error"] = ""
+        bagholder._state["chrome_proc"] = proc
+        bagholder._state["login_attempt"] = 7
+        # Chrome is still running (only a service worker answers on the debug port), the window is gone.
+        with mock.patch.object(bagholder, "_cdp_list", return_value=[{"type": "service_worker", "id": "SW", "webSocketDebuggerUrl": "ws://x"}]), \
+             mock.patch.object(bagholder, "_try_capture_from_cdp", side_effect=lambda port: captured.append(1)), \
+             mock.patch.object(bagholder, "_close_login_browser", side_effect=lambda only=None: closed.append(only)), \
+             mock.patch.object(bagholder.threading, "Thread") as thread, \
+             mock.patch.object(bagholder.time, "time", side_effect=now), mock.patch.object(bagholder.time, "sleep", lambda s: None):
+            bagholder._poll_chrome_session(proc, 18765, attempt=7)
+            self.assertEqual(thread.call_args.kwargs.get("target"), bagholder._capture_loop, "the capture runs beside the watcher, never delaying it")
+        self.assertFalse(bagholder._state["capturing"], "waiting stopped")
+        self.assertIn("closed before a session", bagholder._state["error"])
+        self.assertEqual(closed, [proc], "and the app closes the instance it was watching; nothing is relaunched")
+        self.assertEqual(captured, [], "no capture call is made against a window that is not there")
+        # A watcher from an earlier attempt exits without touching the newer window.
+        bagholder._state["capturing"] = True
+        bagholder._state["error"] = ""
+        bagholder._state["login_attempt"] = 8
+        closed.clear()
+        with mock.patch.object(bagholder, "_cdp_list", return_value=[]), mock.patch.object(bagholder, "_close_login_browser", side_effect=lambda only=None: closed.append(only)), \
+             mock.patch.object(bagholder.threading, "Thread"), \
+             mock.patch.object(bagholder.time, "time", side_effect=now), mock.patch.object(bagholder.time, "sleep", lambda s: None):
+            bagholder._poll_chrome_session(proc, 18765, attempt=7)
+        self.assertTrue(bagholder._state["capturing"], "the newer attempt is still waiting")
+        self.assertEqual(bagholder._state["error"], "")
+        self.assertEqual(closed, [], "and nothing was closed")
+
+    def test_second_connect_reuses_the_window_and_cancel_closes_it(self):
+        import bagholder
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            bagholder.HOME = __import__("pathlib").Path(tmp)
+            proc = self._Proc()
+            calls = []
+            fake_ws = type("WS", (), {"close": lambda self: None})()
+            with mock.patch.object(bagholder, "find_chrome", return_value="/fake/chrome"), \
+                 mock.patch.object(bagholder.subprocess, "Popen", return_value=proc) as popen, \
+                 mock.patch.object(bagholder.threading, "Thread") as thread, \
+                 mock.patch.object(bagholder, "_login_browser_ws", return_value="ws://127.0.0.1:18765/devtools/browser/x"), \
+                 mock.patch.object(bagholder, "_ws_connect", return_value=fake_ws), \
+                 mock.patch.object(bagholder, "_cdp_call", side_effect=lambda ws, m, p=None: calls.append(m) or {"id": 1, "result": {}}), \
+                 mock.patch.object(bagholder, "_cdp_list", return_value=[{"type": "page", "id": "T1", "webSocketDebuggerUrl": "ws://x"}]):
+                bagholder._state["chrome_proc"] = None
+                bagholder._state["capturing"] = False
+                bagholder._state["login_attempt"] = 0
+                self.assertEqual(bagholder.start_login_browser(), {"ok": True})
+                self.assertEqual(popen.call_count, 1)
+                self.assertTrue(bagholder._state["capturing"])
+                self.assertEqual(bagholder._state["login_attempt"], 1, "each launch is a new attempt; earlier watchers stand down")
+                # Connect again while the window is up: no second Chrome, the window is brought forward.
+                self.assertEqual(bagholder.start_login_browser(), {"ok": True, "reused": True})
+                self.assertEqual(popen.call_count, 1, "never a second window")
+                self.assertIn("Target.activateTarget", calls)
+                self.assertNotIn("Target.createTarget", calls, "the app never opens a window inside a running Chrome")
+                # Cancel: the wait ends and the app closes the window it opened.
+                self.assertEqual(bagholder.cancel_login(), {"ok": True, "cancelled": True})
+                self.assertFalse(bagholder._state["capturing"])
+                self.assertIn("Browser.close", calls)
+                self.assertTrue(proc.terminated, "a lingering process is ended")
+                self.assertIsNone(bagholder._state["chrome_proc"])
+                # A Connect after that opens a fresh window: the old one is not reused.
+                proc2 = self._Proc()
+                popen.return_value = proc2
+                with mock.patch.object(bagholder, "_login_browser_ws", return_value=None):
+                    self.assertEqual(bagholder.start_login_browser(), {"ok": True})
+                self.assertEqual(popen.call_count, 2)
+                # Connect while Chrome lingers with no window: that leftover is closed and one fresh window launched.
+                bagholder._state["capturing"] = False
+                with mock.patch.object(bagholder, "_cdp_list", return_value=[{"type": "service_worker", "id": "SW", "webSocketDebuggerUrl": "ws://x"}]):
+                    proc3 = self._Proc()
+                    popen.return_value = proc3
+                    self.assertEqual(bagholder.start_login_browser(), {"ok": True})
+                self.assertEqual(popen.call_count, 3)
+                self.assertTrue(proc2.terminated, "the windowless leftover was closed first")
+                self.assertNotIn("Target.createTarget", calls)
+                bagholder.cancel_login()
+            os.environ.pop("BAGHOLDER_HOME", None)
+
+
 class WealthsimpleHttpTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

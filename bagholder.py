@@ -530,7 +530,7 @@ UPDATE_CHECK_HOURS = 24
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-08.2"
+PROTOCOL = "2026-09-08.3"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 QUERIES = {
@@ -1179,6 +1179,7 @@ _state = {
     "lastSync": "",
     "error": "",
     "chrome_proc": None,
+    "login_attempt": 0,
     "listingsFilling": False,
 }
 _stop = threading.Event()
@@ -2437,12 +2438,12 @@ def find_chrome():
     return ""
 
 
-def _cdp_list(port):
+def _cdp_list(port, timeout=1):
     for path in ("/json/list", "/json"):
         try:
             url = "http://127.0.0.1:%s%s" % (port, path)
             req = Request(url, headers={"Host": "127.0.0.1:%s" % port})
-            with urlopen(req, timeout=2) as resp:
+            with urlopen(req, timeout=timeout) as resp:
                 raw = resp.read()
             if not raw:
                 continue
@@ -2711,24 +2712,29 @@ def _cdp_cookie_list(msg):
     return []
 
 
+CAPTURE_CALL_SEC = 2   # each DevTools call while capturing: short, so a closed window is noticed quickly
+WINDOW_CHECK_SEC = 0.5   # how often the watcher looks for the window
+CAPTURE_EVERY_SEC = 1.5  # how often it tries to capture the session
+
+
 def _cdp_cookies_from_target(ws_url):
     ws = None
     try:
-        ws = _ws_connect(ws_url)
+        ws = _ws_connect(ws_url, timeout=CAPTURE_CALL_SEC)
         ua = ""
-        ver = _cdp_call(ws, "Browser.getVersion")
+        ver = _cdp_call(ws, "Browser.getVersion", timeout=CAPTURE_CALL_SEC)
         if ver and isinstance(ver.get("result"), dict):
             ua = _s(ver["result"].get("userAgent")).strip()
         if ua:
             save_user_agent(ua)
-        _cdp_call(ws, "Network.enable")
-        cookies = _cdp_cookie_list(_cdp_call(ws, "Network.getAllCookies"))
+        _cdp_call(ws, "Network.enable", timeout=CAPTURE_CALL_SEC)
+        cookies = _cdp_cookie_list(_cdp_call(ws, "Network.getAllCookies", timeout=CAPTURE_CALL_SEC))
         body = _tokens_from_cookie_list(cookies)
         if body:
             if ua:
                 body["user_agent"] = ua
             return body
-        extra = _cdp_cookie_list(_cdp_call(ws, "Storage.getCookies"))
+        extra = _cdp_cookie_list(_cdp_call(ws, "Storage.getCookies", timeout=CAPTURE_CALL_SEC))
         if extra:
             cookies = list(cookies) + list(extra)
         body = _tokens_from_cookie_list(cookies)
@@ -2740,6 +2746,7 @@ def _cdp_cookies_from_target(ws_url):
             ws,
             "Runtime.evaluate",
             {"expression": "document.cookie", "returnByValue": True},
+            timeout=CAPTURE_CALL_SEC,
         )
         val = ""
         if ev:
@@ -2777,45 +2784,199 @@ def _try_capture_from_cdp(port):
     return None
 
 
-def _poll_chrome_session(proc, debug_port):
+def _cdp_pages(port):
+    """The open windows and tabs of the app's login Chrome. A Chrome left running
+    with no window still answers on the debug port with background targets; only
+    page targets mean a window is up."""
+    return [t for t in _cdp_list(port, timeout=WINDOW_CHECK_SEC) if isinstance(t, dict) and t.get("type") == "page" and t.get("id")]
+
+
+def _attempt_is(attempt):
+    with _lock:
+        return attempt is None or _state.get("login_attempt") == attempt
+
+
+def _capture_loop(proc, debug_port, attempt):
+    """Try to capture the session every CAPTURE_EVERY_SEC while the attempt is
+    live. Runs beside the window watcher so a capture call stuck on a window
+    that just closed never delays noticing the close."""
+    while _attempt_is(attempt):
+        with _lock:
+            if not _state.get("capturing"):
+                return
+        body = None
+        try:
+            if _cdp_pages(debug_port):
+                body = _try_capture_from_cdp(debug_port)
+        except Exception:
+            body = None
+        if body and body.get("access_token") and _attempt_is(attempt):
+            with _lock:
+                if not _state.get("capturing"):
+                    return
+            capture_tokens(body)
+            sys.stderr.write("bagholder captured Wealthsimple session\n")
+            _close_login_browser(proc)
+            return
+        time.sleep(CAPTURE_EVERY_SEC)
+
+
+def _poll_chrome_session(proc, debug_port, attempt=None):
+    """Watch one login attempt's window: every WINDOW_CHECK_SEC, is it still
+    there? The capture runs in its own thread (_capture_loop). A watcher belongs
+    to the attempt it was started for; once a later Connect has started
+    another, it exits without touching anything."""
     deadline = time.time() + CAPTURE_WAIT_SEC
     start = time.time()
+    seen_page = False
+    threading.Thread(target=_capture_loop, args=(proc, debug_port, attempt), name="bagholder-cdp-capture", daemon=True).start()
     while time.time() < deadline:
+        if not _attempt_is(attempt):
+            return
         with _lock:
             still = bool(_state.get("capturing"))
         if not still:
             return
-        body = None
         try:
-            body = _try_capture_from_cdp(debug_port)
+            pages = _cdp_pages(debug_port) if proc.poll() is None else []
         except Exception:
-            body = None
-        if body and body.get("access_token"):
-            capture_tokens(body)
-            sys.stderr.write("bagholder captured Wealthsimple session\n")
-            return
-        if (
-            proc.poll() is not None
-            and not _cdp_list(debug_port)
-            and (time.time() - start) > 4
-        ):
+            pages = []
+        seen_page = seen_page or bool(pages)
+        gone = proc.poll() is not None or (not pages and (seen_page or time.time() - start > 10))
+        if gone:
+            # the window is gone (Chrome quit, or the window closed with Chrome
+            # lingering without one): the attempt is over, nothing is relaunched
+            if not _attempt_is(attempt):
+                return
             with _lock:
                 if _state.get("capturing"):
                     _state["error"] = (
-                        "The Chrome window closed before a session showed up."
+                        "The Chrome window closed before a session showed up. Choose Connect Wealthsimple to try again."
                     )
                     _state["capturing"] = False
+            sys.stderr.write("bagholder login: window closed, waiting stopped\n")
+            _close_login_browser(proc)
             return
-        time.sleep(1.5)
+        time.sleep(WINDOW_CHECK_SEC)
+    if not _attempt_is(attempt):
+        return
     with _lock:
         if _state.get("capturing"):
             _state["error"] = (
                 "No session yet. Finish login in the Chrome window, then wait a few seconds."
             )
             _state["capturing"] = False
+    _close_login_browser(proc)
+
+
+def _login_browser_ws():
+    """DevTools browser endpoint of the Chrome the app launched, or None."""
+    port = DEBUG_PORTS[0]
+    try:
+        req = Request("http://127.0.0.1:%s/json/version" % port, headers={"Host": "127.0.0.1:%s" % port})
+        with urlopen(req, timeout=2) as resp:
+            v = json.loads(resp.read().decode("utf-8"))
+        return v.get("webSocketDebuggerUrl") or None
+    except Exception:
+        return None
+
+
+def _close_login_browser(only=None):
+    """Close the Chrome the app launched for login: gracefully through DevTools,
+    then by ending the process if it lingers. Only ever the app's own instance,
+    never the user's Chrome. With `only`, a watcher closes just the instance it
+    was watching, never a later attempt's window."""
+    with _lock:
+        proc = _state.get("chrome_proc")
+        if only is not None and proc is not only:
+            proc = only
+            current = False
+        else:
+            current = True
+        if current:
+            _state["chrome_proc"] = None
+    if proc is None:
+        return
+    if not current:
+        # an older instance: it is no longer on the debug port, just end it if it lingers
+        try:
+            proc.wait(timeout=0.1)
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        return
+    ws_url = _login_browser_ws()
+    if ws_url:
+        try:
+            ws = _ws_connect(ws_url)
+            try:
+                _cdp_call(ws, "Browser.close")
+            finally:
+                ws.close()
+        except Exception:
+            pass
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+
+def _login_browser_alive():
+    """True only while the app's login Chrome has a window up."""
+    with _lock:
+        proc = _state.get("chrome_proc")
+    if proc is None or proc.poll() is not None or not _login_browser_ws():
+        return False
+    try:
+        return bool(_cdp_pages(DEBUG_PORTS[0]))
+    except Exception:
+        return False
+
+
+def cancel_login():
+    """Stop waiting for a login and close the window the app opened."""
+    with _lock:
+        was = bool(_state.get("capturing"))
+        _state["capturing"] = False
+        _state["error"] = ""
+    sys.stderr.write("bagholder login: cancelled\n")
+    _close_login_browser()
+    return {"ok": True, "cancelled": was}
 
 
 def start_login_browser():
+    """Open the login window. Only a press of Connect reaches here, and this is
+    the only place the app opens a browser window: a window the app's Chrome
+    still has up is brought forward instead; anything else (no window, a
+    lingering windowless Chrome) is closed and one fresh window is launched."""
+    sys.stderr.write("bagholder login: connect requested\n")
+    if _login_browser_alive():
+        try:
+            ws = _ws_connect(_login_browser_ws())
+            try:
+                _cdp_call(ws, "Target.activateTarget", {"targetId": _cdp_pages(DEBUG_PORTS[0])[0]["id"]})
+            finally:
+                ws.close()
+        except Exception:
+            pass
+        with _lock:
+            already = bool(_state.get("capturing"))
+            _state["capturing"] = True
+            _state["error"] = ""
+            proc = _state.get("chrome_proc")
+            if not already:
+                _state["login_attempt"] += 1
+            attempt = _state["login_attempt"]
+        if not already:
+            threading.Thread(target=_poll_chrome_session, args=(proc, DEBUG_PORTS[0], attempt), name="bagholder-cdp-capture", daemon=True).start()
+        sys.stderr.write("bagholder login: window already up, brought forward\n")
+        return {"ok": True, "reused": True}
+    _close_login_browser()   # a windowless leftover of ours, if any
     chrome = find_chrome()
     if not chrome:
         return {
@@ -2846,13 +3007,16 @@ def start_login_browser():
         if os.name != "nt":
             kwargs["start_new_session"] = True
         proc = subprocess.Popen(args, **kwargs)
+        sys.stderr.write("bagholder login: chrome launched (pid %s)\n" % proc.pid)
         with _lock:
             _state["chrome_proc"] = proc
             _state["capturing"] = True
             _state["error"] = ""
+            _state["login_attempt"] += 1   # any watcher of an earlier attempt now exits quietly
+            attempt = _state["login_attempt"]
         t = threading.Thread(
             target=_poll_chrome_session,
-            args=(proc, debug_port),
+            args=(proc, debug_port, attempt),
             name="bagholder-cdp-capture",
             daemon=True,
         )
@@ -3414,6 +3578,10 @@ class Handler(BaseHTTPRequestHandler):
             self._read_json()
             result = start_login_browser()
             self._send(200 if result.get("ok") else 200, result)
+            return
+        if path == "/api/login/cancel":
+            self._read_json()
+            self._send(200, cancel_login())
             return
         if path == "/api/capture":
             body = self._read_json()
