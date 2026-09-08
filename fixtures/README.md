@@ -1,6 +1,6 @@
 # Shared model cases
 
-One file per case in `cases/`. Every implementation of the Bagholder model (Python here, Swift in `ios/`, Kotlin in `android/`) reads these files in its own test suite, runs the rows through its own model, and compares with `expect`. A change to a rule that is not made in every implementation fails that implementation's tests.
+One file per case in `cases/`. Every implementation of the Bagholder model (Python here, Swift in `ios/Bagholder/Model.swift`, Kotlin in `android/model`) reads these files in its own test suite, runs the rows through its own model, and compares with `expect`. A change to a rule that is not made in every implementation fails that implementation's tests.
 
 ```
 {
