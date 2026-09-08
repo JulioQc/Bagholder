@@ -93,6 +93,8 @@ textarea.input{resize:none;line-height:1.5}
 .pop-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
 .pop-row.on{background:var(--accent-900);color:var(--accent-300)}
 .pop-row.on:hover{background:rgba(var(--accent-rgb),.28)}
+.pop-row.hi{background:rgba(var(--ink-rgb),var(--hover))}
+.pop-row.on.hi{background:rgba(var(--accent-rgb),.28)}
 .pill{cursor:pointer;border:0;font:400 11.5px Inter,system-ui,sans-serif;padding:4px 0;border-radius:6px;background:rgba(var(--ink-rgb),.06);color:rgba(var(--ink-rgb),.7);font-variant-numeric:tabular-nums}
 .pill:hover{background:rgba(var(--ink-rgb),.18)}
 .pill.on{background:var(--accent-900);color:var(--accent-300)}
@@ -176,6 +178,7 @@ const state = {
   valueQuery: "",
   tagDraft: "",
   tagHi: 0,
+  valueHi: 0,
   status: { connected: false, syncing: false, capturing: false, lastSync: "", error: "", syncStep: "", email: "", activityCount: 0 },
   busy: "",
   notice: "",
@@ -676,7 +679,8 @@ function popValuesHtml(active) {
   const shown = q ? opts.filter((v) => String(v).toUpperCase().indexOf(q) >= 0) : opts;
   if (!opts.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">Nothing to choose from yet.</div>';
   if (!shown.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">No match.</div>';
-  return shown.map((v) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + esc(v) + "</button>").join("");
+  const hi = Math.min(state.valueHi || 0, shown.length - 1);
+  return shown.map((v, i) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + esc(v) + "</button>").join("");
 }
 function filterPopHtml() {
   const f = state.filters;
@@ -1463,7 +1467,7 @@ function act(name, arg, ev) {
     case "clearPos": state.posSel = null; render(); break;
     case "sort": { const s = state.sort[arg.table]; if (s.key === arg.key) s.dir = s.dir === "desc" ? "asc" : "desc"; else { s.key = arg.key; s.dir = "desc"; } try { localStorage.setItem("bh2.sort", JSON.stringify(state.sort)); } catch (e) {} render(); break; }
     case "openFields": state.picker = state.picker === "fields" ? null : "fields"; state.menuOpen = false; render(); if (state.picker) { const si = document.getElementById("searchInput"); if (si && f.search) si.focus(); } break;
-    case "pickField": state.picker = arg.key; state.valueQuery = ""; render(); { const vq = document.getElementById("valueQuery"); if (vq) vq.focus(); } break;
+    case "pickField": state.picker = arg.key; state.valueQuery = ""; state.valueHi = 0; render(); { const vq = document.getElementById("valueQuery"); if (vq) vq.focus(); } break;
     case "closeFilter": state.picker = null; render(); break;
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
@@ -1547,7 +1551,7 @@ function bind() {
     // ⌘K (Ctrl+K elsewhere): the filter popover on Symbol, search box focused
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
       e.preventDefault();
-      state.picker = "symbol"; state.valueQuery = ""; state.menuOpen = false; render();
+      state.picker = "symbol"; state.valueQuery = ""; state.valueHi = 0; state.menuOpen = false; render();
       const vq = document.getElementById("valueQuery"); if (vq) { vq.focus(); vq.select(); }
       return;
     }
@@ -1566,14 +1570,26 @@ function bind() {
     if (e.target && (e.target.id === "rangeInput" || e.target.id === "searchInput") && e.key === "Enter") { e.target.blur(); }
     if (e.key === "Enter" && e.target && /^tf-/.test(e.target.id || "") && e.target.tagName !== "SELECT") { e.preventDefault(); saveTrade(); return; }
     if (e.key === "Enter" && e.target && e.target.id === "folderPath") { e.preventDefault(); watchFolder(false); return; }
-    if (e.target && e.target.id === "valueQuery" && e.key === "Enter") { const first = document.querySelector("#popValues [data-act=toggleList]"); if (first) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(first.dataset.arg); } catch (err) {} act("toggleList", arg); } }
+    if (e.target && e.target.id === "valueQuery") {
+      // the value list is driven from the search box: arrows move the highlight, Enter toggles it
+      const rows = [...document.querySelectorAll("#popValues [data-act=toggleList]")];
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (!rows.length) return;
+        e.preventDefault();
+        state.valueHi = (Math.min(state.valueHi || 0, rows.length - 1) + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
+        rows.forEach((r, i) => r.classList.toggle("hi", i === state.valueHi));
+        rows[state.valueHi].scrollIntoView({ block: "nearest" });
+        return;
+      }
+      if (e.key === "Enter") { const row = rows[Math.min(state.valueHi || 0, rows.length - 1)]; if (row) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {} act("toggleList", arg); } }
+    }
   });
   document.addEventListener("input", (e) => {
     const t = e.target;
     if (t.id === "tagInput") { state.tagDraft = t.value; state.tagHi = 0; document.getElementById("tagMenu").innerHTML = tagMenuHtml(); return; }
     if (t.id === "thesis" || t.id === "posThesis") { clearTimeout(_thesisTimer); const id = t.dataset.id, v = t.value; _thesisTimer = setTimeout(() => { const o = tradeById(id) || positionById(id); if (o && o.thesis !== v) saveJournal(id, { thesis: v }, true); }, 600); return; }
     if (t.id === "rangeInput") { clearTimeout(_rangeTimer); const key = t.dataset.key, v = t.value.trim(); _rangeTimer = setTimeout(() => { state.filters.ranges[key].v = v === "" ? null : Number(v.replace(/[$,]/g, "")); if (v !== "" && isNaN(state.filters.ranges[key].v)) state.filters.ranges[key].v = null; loadModel(); }, 500); return; }
-    if (t.id === "valueQuery") { state.valueQuery = t.value; const active = FIELDS.find((x) => x.key === state.picker); const box = document.getElementById("popValues"); if (active && box) box.innerHTML = popValuesHtml(active); return; }
+    if (t.id === "valueQuery") { state.valueQuery = t.value; state.valueHi = 0; const active = FIELDS.find((x) => x.key === state.picker); const box = document.getElementById("popValues"); if (active && box) box.innerHTML = popValuesHtml(active); return; }
     if (t.id === "searchInput") { clearTimeout(_rangeTimer); const v = t.value; _rangeTimer = setTimeout(() => { state.filters.search = v.trim(); state.sel = null; loadModel(); }, 400); return; }
   });
   document.addEventListener("change", (e) => {
