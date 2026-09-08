@@ -35,7 +35,7 @@ struct RootView: View {
         .sheet(isPresented: $showMenu) { MenuSheet(book: book, onConnect: { showMenu = false; showConnect = true }).environment(\.theme, t) }
         .fullScreenCover(isPresented: $showConnect) { ConnectLoginView(book: book, isPresented: $showConnect).environment(\.theme, t) }
         .onAppear { book.handleAppear() }
-        .onChange(of: scenePhase) { _, p in if p == .active { book.handleAppear() } }
+        .onChange(of: scenePhase) { _, p in if p == .active { book.handleAppear() } else if p == .background { book.handleBackground() } }
     }
 
     private var chrome: Chrome {
@@ -556,7 +556,8 @@ struct TradeDetailScreen: View {
     @Environment(\.theme) private var t
     @ObservedObject var book: Book
     let tradeId: String
-    @State private var chart: (bars: [BHBar], reason: String)? = nil
+    @State private var chart: (bars: [BHBar], reason: String, timeframe: String)? = nil
+    @State private var timeframe: String? = nil
     @State private var grade = ""
     @State private var thesis = ""
     @State private var tags = ""
@@ -577,8 +578,19 @@ struct TradeDetailScreen: View {
                             Text(tr.currency).font(.system(size: 13)).foregroundStyle(t.ink55)
                         }
                         Card {
+                            HStack(spacing: 6) {
+                                ForEach(["1d", "1w", "1M"], id: \.self) { tf in
+                                    let on = (chart?.timeframe ?? timeframe) == tf
+                                    Button(tf.uppercased()) { timeframe = tf }
+                                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? t.chipFg : t.ink55)
+                                        .padding(.horizontal, 9).padding(.vertical, 5)
+                                        .background(RoundedRectangle(cornerRadius: 6).fill(on ? t.chipBg : t.well))
+                                        .buttonStyle(.plain)
+                                }
+                                Spacer()
+                            }
                             if let c = chart, !c.bars.isEmpty {
-                                CandleChart(bars: c.bars, fills: tr.fills)
+                                CandleChart(bars: c.bars, fills: tr.fills, atClose: tr.kind == "Options")
                             } else {
                                 Text(chart?.reason ?? "Fetching bars…").font(.system(size: 14)).foregroundStyle(t.ink55).frame(maxWidth: .infinity, minHeight: 120)
                             }
@@ -609,9 +621,9 @@ struct TradeDetailScreen: View {
                     .padding(16)
                     .padding(.bottom, 90)
                 }
-                .task(id: tradeId) {
+                .task(id: tradeId + "|" + (timeframe ?? "")) {
                     if !loaded { grade = tr.grade; thesis = tr.thesis; tags = tr.tags.joined(separator: ", "); loaded = true }
-                    chart = await MarketData.bars(for: tr)
+                    chart = await MarketData.bars(for: tr, timeframe: timeframe)
                 }
             } else {
                 Text("This trade is no longer in the book.").foregroundStyle(t.ink55)

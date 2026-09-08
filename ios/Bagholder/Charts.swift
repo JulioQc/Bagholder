@@ -270,11 +270,15 @@ struct CandleChart: View {
     @Environment(\.theme) private var t
     let bars: [BHBar]
     let fills: [BHFillRow]
+    /// An option contract's fills sit on its underlying's bars: marked on their day
+    /// at the bar's close, since the premium is not a price of the underlying.
+    var atClose: Bool = false
     var height: CGFloat = 220
 
     var body: some View {
-        let lo = min(bars.map { $0.low }.min() ?? 0, fills.filter { $0.price > 0 }.map { $0.price }.min() ?? Double.greatestFiniteMagnitude)
-        let hi = max(bars.map { $0.high }.max() ?? 1, fills.filter { $0.price > 0 }.map { $0.price }.max() ?? 0)
+        let priced = atClose ? [] : fills.filter { $0.price > 0 }.map { $0.price }
+        let lo = min(bars.map { $0.low }.min() ?? 0, priced.min() ?? Double.greatestFiniteMagnitude)
+        let hi = max(bars.map { $0.high }.max() ?? 1, priced.max() ?? 0)
         let pad = (hi - lo) * 0.08
         let top = hi + pad, bottom = max(0, lo - pad)
         let span = top - bottom == 0 ? 1 : top - bottom
@@ -308,10 +312,10 @@ struct CandleChart: View {
                         ctx.fill(Path(body), with: .color(color))
                     }
                     let index = Dictionary(bars.enumerated().map { (String($0.element.time.prefix(10)), $0.offset) }, uniquingKeysWith: { a, _ in a })
-                    for f in fills where f.price > 0 {
-                        guard let i = index[String(f.date.prefix(10))] else { continue }
+                    for f in fills where atClose || f.price > 0 {
+                        guard let i = index[String(f.date.prefix(10))] ?? Self.barIndex(bars, on: String(f.date.prefix(10))) else { continue }
                         let cx = CGFloat(i) * pitch + pitch / 2
-                        let py = y(f.price)
+                        let py = y(atClose ? bars[i].close : f.price)
                         var tri = Path()
                         if f.side == "BUY" {
                             tri.move(to: CGPoint(x: cx, y: py + 4)); tri.addLine(to: CGPoint(x: cx - 5, y: py + 12)); tri.addLine(to: CGPoint(x: cx + 5, y: py + 12))
@@ -331,6 +335,13 @@ struct CandleChart: View {
                 }
             }
         }
+    }
+
+    /// The bar a day falls in, for weekly and monthly bars.
+    static func barIndex(_ bars: [BHBar], on day: String) -> Int? {
+        var hit: Int?
+        for (i, b) in bars.enumerated() where String(b.time.prefix(10)) <= day { hit = i }
+        return hit
     }
 
     static func labels(_ bars: [BHBar]) -> [String] {

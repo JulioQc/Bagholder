@@ -133,12 +133,13 @@ final class Book: ObservableObject {
     @Published var lastSync: Date?
     @Published private(set) var view: BHView?
     @Published private(set) var filters = BHFilters.load()
-    @Published private(set) var quotes: [String: BHQuote] = [:]
+    @Published private(set) var quotes: [String: BHQuote] = MarketData.loadQuotes()
 
     private(set) var base: BHBase?
     private(set) var result: WSPullResult?
     private(set) var journal = JournalStore.load()
     private var task: Task<Void, Never>?
+    private var marketTask: Task<Void, Never>?
     private var generation = 0
     private var noNewShownAt: Date?
     private static let lastSyncKey = "bagholder.lastSync"
@@ -178,8 +179,41 @@ final class Book: ObservableObject {
 
     /// On appear: a saved pull is shown at once; the session pulls when a sync is due.
     func handleAppear() {
+        startMarketLoop()
         guard connected, phase != .pulling else { return }
         if result == nil || Self.activityPullDue(lastSync: lastSync) { pull() }
+    }
+
+    func handleBackground() {
+        marketTask?.cancel()
+        marketTask = nil
+    }
+
+    // MARK: market data, every minute while the app is up
+
+    /// The held instruments a quote is wanted for, and the dividend payers whose declared record is.
+    private func instruments() -> (held: [BHInstrument], payers: [BHInstrument]) {
+        guard let b = base else { return ([], []) }
+        let held = b.positions.map { BHInstrument(symbol: $0.symbol, exchange: $0.exchange, currency: $0.currency, kind: $0.kind) }
+        let paying = Set(b.cashflow.filter { $0.kind == "Dividend" }.map { $0.symbol })
+        let payers = held.filter { paying.contains($0.symbol) && $0.kind == "Shares" }
+        return (held, payers)
+    }
+
+    private func startMarketLoop() {
+        if marketTask != nil { return }
+        marketTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let (held, payers) = self.instruments()
+                await MarketData.refreshIndexes()
+                await MarketData.refreshDistributions(payers)
+                let quotes = await MarketData.refreshQuotes(held)
+                if Task.isCancelled { return }
+                self.setQuotes(quotes)
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+            }
+        }
     }
 
     /// store.py activity_pull_due: America/Edmonton, Mon-Fri, at or after 14:00.
