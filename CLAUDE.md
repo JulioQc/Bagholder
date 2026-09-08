@@ -39,7 +39,13 @@ Versions are GitHub releases tagged `vMAJOR.MINOR.PATCH` (semantic versioning); 
 - MINOR (1.1.0 → 1.2.0): anything new a user can see or do (a column, a card, a toggle, a data source), with existing data and behaviour intact.
 - MAJOR (1.1.0 → 2.0.0): a change that breaks existing installs (a database that must be migrated by hand, a removed page, a changed protocol with the page that requires more than a restart).
 
-To release: bump `APP_VERSION` in `bagholder.py` in the last PR going into the release, merge, then `gh release create vX.Y.Z --target master --title vX.Y.Z --notes "..."` with notes listing the merged PRs. Master may carry unreleased features between releases; a release collects everything merged since the last tag, so the bump is decided by the biggest change in that set, not by the last PR alone. Running copies check the latest release once a day and show an "Update available" link when it is newer.
+To release: bump `APP_VERSION` in `bagholder.py` in the last PR going into the release, merge, then build the archive the in-app updater installs and publish it with the release:
+  ```
+  git archive --format=zip -o bagholder-vX.Y.Z.zip vX.Y.Z   # after tagging, or use origin/master and tag on create
+  shasum -a 256 bagholder-vX.Y.Z.zip > bagholder-vX.Y.Z.zip.sha256
+  gh release create vX.Y.Z bagholder-vX.Y.Z.zip bagholder-vX.Y.Z.zip.sha256 --target master --title vX.Y.Z --notes "..."
+  ```
+  with notes listing the merged PRs. The archive must be named exactly `bagholder-vX.Y.Z.zip` with the `.sha256` beside it, or running copies fall back to an "Update available" link. Master may carry unreleased features between releases; a release collects everything merged since the last tag, so the bump is decided by the biggest change in that set, not by the last PR alone. Running copies check the latest release once a day and show an "Update available" link when it is newer.
 
 ## Do not
 
