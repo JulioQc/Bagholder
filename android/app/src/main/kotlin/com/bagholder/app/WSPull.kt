@@ -828,6 +828,9 @@ object WSPull {
         val (typ, sub, blob) = typeBlob(item)
         if (isCorpShareMove(item)) {
             if (status.contains("REJECT") || status.contains("CANCEL") || status.contains("FAIL") || status.contains("VOID")) return true
+        } else if ((typ == "DIVIDEND" || typ == "INTEREST_CHARGE") && status.isEmpty()) {
+            // bagholder.py skip_activity: cash dividends and margin interest charges often
+            // arrive with no status at all; both have already hit the cash balance
         } else if (status.isEmpty() || !KEEP_STATUS.contains(status)) {
             return true
         }
