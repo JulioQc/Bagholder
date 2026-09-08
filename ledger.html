@@ -1281,11 +1281,20 @@ function cfLeave() { ["cfX", "cfTip"].forEach((id) => { const el = document.getE
 // ---------------------------------------------------------------------------
 // shell
 // ---------------------------------------------------------------------------
+// The page with nothing to show yet, in three states: not connected (connect),
+// connected and syncing (the first pull is under way), connected with nothing
+// back (sync again).
 function emptyHtml() {
   const s = state.status;
-  return '<div class="empty" style="min-height:60vh"><img src="favicon.png" alt="" style="width:48px;height:48px;border-radius:10px;opacity:.9"><div style="font-size:16px;font-weight:500">No activity yet</div>' +
-    '<div class="dim" style="font-size:12.5px;max-width:420px">Connect your Wealthsimple account and Bagholder will pull your full history, then keep it up to date every weekday after the close. Nothing leaves this machine.</div>' +
-    (s.connected ? '<button class="btn btn-primary" data-act="sync" ' + (s.syncing ? "disabled" : "") + ">" + (s.syncing ? "Syncing…" : "Sync now") + "</button>" : '<button class="btn btn-primary" data-act="connect">Connect Wealthsimple</button>') +
+  const head = !s.connected ? "No activity yet" : s.syncing ? "Pulling your history" : "No activity yet";
+  const body = !s.connected
+    ? "Connect your Wealthsimple account and Bagholder will pull your full history, then keep it up to date every weekday after the close. Nothing leaves this machine."
+    : s.syncing ? "Your full Wealthsimple history is on its way. The first sync can take a minute."
+    : "Connected to Wealthsimple, but no activity has come back yet.";
+  const action = !s.connected ? '<button class="btn btn-primary" data-act="connect">Connect Wealthsimple</button>'
+    : s.syncing ? "" : '<button class="btn btn-primary" data-act="sync">Sync now</button>';
+  return '<div class="empty" style="min-height:60vh"><img src="favicon.png" alt="" style="width:48px;height:48px;border-radius:10px;opacity:.9"><div style="font-size:16px;font-weight:500">' + head + "</div>" +
+    '<div class="dim" style="font-size:12.5px;max-width:420px">' + body + "</div>" + action +
     (s.error ? '<div class="status-err" style="font-size:12px">' + esc(s.error) + "</div>" : "") + "</div>";
 }
 function pageHtml() {
