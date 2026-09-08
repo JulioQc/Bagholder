@@ -31,6 +31,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -146,22 +148,33 @@ fun EquityCurveChart(series: List<EquityPoint>, pick: Int?, onPick: (Int?) -> Un
             if (series.size < 2) return@Canvas
             val n = (series.size - 1).toFloat()
             fun pt(i: Int) = Offset(i / n * size.width, size.height - (((vals[i] - lo) / (hi - lo)) * size.height).toFloat())
+            // pressed: the series up to the picked day keeps its colour, the rest is dimmed
+            val upTo = pick?.takeIf { it in series.indices } ?: (series.size - 1)
             val fill = Path().apply {
                 moveTo(0f, size.height)
-                for (i in series.indices) lineTo(pt(i).x, pt(i).y)
-                lineTo(size.width, size.height)
+                for (i in 0..upTo) lineTo(pt(i).x, pt(i).y)
+                lineTo(pt(upTo).x, size.height)
                 close()
             }
             drawPath(fill, Brush.verticalGradient(listOf(t.pos.copy(alpha = 0.22f), t.pos.copy(alpha = 0.02f))))
+            val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
             val line = Path().apply {
                 moveTo(pt(0).x, pt(0).y)
-                for (i in 1 until series.size) lineTo(pt(i).x, pt(i).y)
+                for (i in 1..upTo) lineTo(pt(i).x, pt(i).y)
             }
-            drawPath(line, t.pos, style = Stroke(width = 1.6.dp.toPx()))
+            drawPath(line, t.pos, style = stroke)
+            if (upTo < series.size - 1) {
+                val rest = Path().apply {
+                    moveTo(pt(upTo).x, pt(upTo).y)
+                    for (i in upTo + 1 until series.size) lineTo(pt(i).x, pt(i).y)
+                }
+                drawPath(rest, t.pos.copy(alpha = 0.3f), style = stroke)
+            }
             pick?.let { i ->
                 val p = pt(i)
-                drawLine(t.hair, Offset(p.x, 0f), Offset(p.x, size.height), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
-                drawCircle(t.pos, 4.dp.toPx(), p)
+                drawLine(t.ink55, Offset(p.x, 0f), Offset(p.x, size.height), 1f)
+                drawCircle(t.surface, 5.dp.toPx(), p)
+                drawCircle(t.pos, 5.dp.toPx(), p, style = Stroke(width = 2.dp.toPx()))
             }
         }
         Spacer(Modifier.height(6.dp))

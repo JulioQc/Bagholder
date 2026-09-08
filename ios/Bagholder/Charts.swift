@@ -66,21 +66,32 @@ struct EquityCurveChart: View {
                 func pt(_ i: Int) -> CGPoint {
                     CGPoint(x: CGFloat(i) / n * size.width, y: size.height - CGFloat((vals[i] - lo) / (hi - lo)) * size.height)
                 }
+                // pressed: the series up to the picked day keeps its colour, the rest is dimmed
+                let upTo = (pick.flatMap { series.indices.contains($0) ? $0 : nil }) ?? series.count - 1
                 var fill = Path()
                 fill.move(to: CGPoint(x: 0, y: size.height))
-                for i in series.indices { fill.addLine(to: pt(i)) }
-                fill.addLine(to: CGPoint(x: size.width, y: size.height))
+                for i in 0...upTo { fill.addLine(to: pt(i)) }
+                fill.addLine(to: CGPoint(x: pt(upTo).x, y: size.height))
                 fill.closeSubpath()
                 ctx.fill(fill, with: .linearGradient(Gradient(colors: [t.pos.opacity(0.22), t.pos.opacity(0.02)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+                let style = StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
                 var line = Path()
                 line.move(to: pt(0))
-                for i in 1..<series.count { line.addLine(to: pt(i)) }
-                ctx.stroke(line, with: .color(t.pos), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                for i in 1...max(upTo, 1) where i <= upTo { line.addLine(to: pt(i)) }
+                ctx.stroke(line, with: .color(t.pos), style: style)
+                if upTo < series.count - 1 {
+                    var rest = Path()
+                    rest.move(to: pt(upTo))
+                    for i in (upTo + 1)..<series.count { rest.addLine(to: pt(i)) }
+                    ctx.stroke(rest, with: .color(t.pos.opacity(0.3)), style: style)
+                }
                 if let i = pick, series.indices.contains(i) {
                     let p = pt(i)
                     var hair = Path(); hair.move(to: CGPoint(x: p.x, y: 0)); hair.addLine(to: CGPoint(x: p.x, y: size.height))
-                    ctx.stroke(hair, with: .color(t.hair), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    ctx.fill(Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)), with: .color(t.pos))
+                    ctx.stroke(hair, with: .color(t.ink55), lineWidth: 1)
+                    let ring = Path(ellipseIn: CGRect(x: p.x - 5, y: p.y - 5, width: 10, height: 10))
+                    ctx.fill(ring, with: .color(t.surface))
+                    ctx.stroke(ring, with: .color(t.pos), lineWidth: 2)
                 }
             }
             .frame(height: height)
