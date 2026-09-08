@@ -1,0 +1,100 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 31.0,
+      "avgLoss": 0.0,
+      "avgWin": 570.0,
+      "count": 1,
+      "expectancy": 570.0,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 570.0,
+      "winRate": 1.0,
+      "wins": 1
+    },
+    "positions": [],
+    "trades": [
+      {
+        "currency": "USD",
+        "entry": 3.0,
+        "entryDate": "2026-01-01",
+        "exit": 1.0,
+        "exitDate": "2026-02-01",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "holdDays": 31,
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 400.0,
+        "pnlCad": 570.0,
+        "pnlPct": 0.666667,
+        "qty": 2.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "ZZZ 21AUG26 10.00 CALL"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {
+      "2026-01-01": 1.4,
+      "2026-02-01": 1.35
+    }
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "sto",
+        "name": "LUNR",
+        "netCashAmount": 600,
+        "occurredAt": "2026-01-01T15:00:00+00:00",
+        "quantity": -2,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "transactionDate": "2026-01-01",
+        "unitPrice": 3
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOCLOSE",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "btc",
+        "name": "LUNR",
+        "netCashAmount": -200,
+        "occurredAt": "2026-02-01T15:00:00+00:00",
+        "quantity": 2,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "transactionDate": "2026-02-01",
+        "unitPrice": 1
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-03-01"
+}
