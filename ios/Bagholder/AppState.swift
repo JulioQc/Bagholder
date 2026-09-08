@@ -496,7 +496,37 @@ final class LoginWeb {
     func warm() {
         guard webView.url == nil || webView.url?.absoluteString == "about:blank" else { return }
         if webView.isLoading { return }
+        park()
         webView.load(URLRequest(url: Self.loginURL))
+        Self.prewarmKeyboard()
+    }
+
+    private static var keyWindow: UIWindow? {
+        UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+    }
+
+    /// A web view outside any window is suspended by WebKit on the device and never finishes
+    /// loading; while warming it sits behind the app's opaque root, in the window, unseen.
+    private func park() {
+        guard webView.superview == nil, let window = Self.keyWindow else { return }
+        webView.frame = window.bounds
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        webView.accessibilityElementsHidden = true
+        window.insertSubview(webView, at: 0)
+    }
+
+    /// The first keyboard of a process takes a few hundred milliseconds to load; take that
+    /// at launch, off the user's first tap on the login field.
+    private static var keyboardWarmed = false
+    private static func prewarmKeyboard() {
+        guard !keyboardWarmed, let window = keyWindow else { return }
+        keyboardWarmed = true
+        let field = UITextField(frame: CGRect(x: -100, y: -100, width: 1, height: 1))
+        field.alpha = 0
+        window.addSubview(field)
+        field.becomeFirstResponder()
+        field.resignFirstResponder()
+        field.removeFromSuperview()
     }
 
     /// While the sheet is open: watch for the session cookie and hand it back once.
@@ -554,15 +584,26 @@ struct ConnectLoginView: View {
     @Environment(\.theme) private var t
     @ObservedObject var book: Book
     @Binding var isPresented: Bool
+    @State private var attached = false
 
     var body: some View {
         NavigationStack {
-            WealthsimpleLoginWebView { oauth, wssdi in
-                book.connect(cookie: oauth, wssdi: wssdi)
-                LoginWeb.shared.reset()
-                isPresented = false
+            Group {
+                // the sheet comes up on its own first; the web view is attached a beat later, so the
+                // tap's response never waits on WebKit
+                if attached {
+                    WealthsimpleLoginWebView { oauth, wssdi in
+                        book.connect(cookie: oauth, wssdi: wssdi)
+                        LoginWeb.shared.reset()
+                        isPresented = false
+                    }
+                } else {
+                    Color.white
+                }
             }
+            .onAppear { DispatchQueue.main.async { attached = true } }
             .ignoresSafeArea(edges: .bottom)
+            .ignoresSafeArea(.keyboard)   // the web view scrolls its own focused field; no relayout for the keyboard
             .onAppear { book.loginShown() }
             .onDisappear { book.loginHidden() }
             .navigationTitle("Connect Wealthsimple")
@@ -577,6 +618,7 @@ struct WealthsimpleLoginWebView: UIViewRepresentable {
     var onSession: (String, String?) -> Void
 
     func makeUIView(context: Context) -> WKWebView {
+        LoginWeb.shared.webView.removeFromSuperview()   // out from behind the root, into the sheet
         LoginWeb.shared.beginCapture(onSession)
         return LoginWeb.shared.webView
     }

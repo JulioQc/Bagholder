@@ -19,10 +19,10 @@ struct RootView: View {
         ZStack(alignment: .bottom) {
             Group {
                 switch tab {
-                case 0: NavigationStack { DashboardScreen(book: book, tab: $tab, chrome: chrome) }
-                case 1: NavigationStack { TradesScreen(book: book, chrome: chrome) }
-                case 2: NavigationStack { PositionsScreen(book: book, chrome: chrome) }
-                default: NavigationStack { CashflowScreen(book: book, chrome: chrome) }
+                case 0: NavigationStack { DashboardScreen(book: book, tab: $tab, chrome: chrome).ignoresSafeArea(.keyboard) }
+                case 1: NavigationStack { TradesScreen(book: book, chrome: chrome).ignoresSafeArea(.keyboard) }
+                case 2: NavigationStack { PositionsScreen(book: book, chrome: chrome).ignoresSafeArea(.keyboard) }
+                default: NavigationStack { CashflowScreen(book: book, chrome: chrome).ignoresSafeArea(.keyboard) }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
