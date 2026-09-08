@@ -61,17 +61,37 @@ private fun AxisLabel(text: String, align: TextAlign = TextAlign.End, modifier: 
     Text(text, fontSize = 11.sp, color = t.ink55, textAlign = align, maxLines = 1, modifier = modifier)
 }
 
-/** The Monthly P&L value labels in dp from the top: top, midpoint, zero, bottom, dropping any within 16 dp of the one above. */
-fun monthlyValueLabels(hi: Double, lo: Double, height: Float): List<Pair<String, Float>> {
-    val span = if (hi - lo == 0.0) 1.0 else hi - lo
-    val candidates = mutableListOf(Fmt.compactMoney(hi) to hi)
-    if (hi > 0) candidates.add(Fmt.compactMoney(hi / 2) to hi / 2)
-    candidates.add("$0" to 0.0)
-    if (lo < 0) candidates.add(Fmt.compactMoney(lo) to lo)
+/**
+ * ledger.html monthlyCardHtml: the winning months take 35–93 % of the height by their share
+ * of the range, the losing months the rest, each side scaled to its own extreme.
+ */
+class MonthlyScale(val posMax: Double, val negMax: Double, val posH: Float)
+
+fun monthlyScale(months: List<MonthBucket>, height: Float): MonthlyScale {
+    val posMax = max(months.maxOfOrNull { max(0.0, it.value) } ?: 0.0, 0.0)
+    val negMax = max(months.maxOfOrNull { max(0.0, -it.value) } ?: 0.0, 0.0)
+    val total = if (posMax + negMax == 0.0) 1.0 else posMax + negMax
+    var base = if (negMax > 0) min(0.93, max(0.35, posMax / total)) else 0.93
+    if (!(posMax > 0) && negMax > 0) base = 0.07
+    return MonthlyScale(posMax, negMax, (base * height).toFloat())
+}
+
+fun monthlyBarHeight(v: Double, sc: MonthlyScale, height: Float): Float {
+    if (v >= 0) return if (sc.posMax > 0) max(1.5f, (v / sc.posMax).toFloat() * sc.posH) else 0f
+    return if (sc.negMax > 0) max(1.5f, (-v / sc.negMax).toFloat() * (height - sc.posH)) else 0f
+}
+
+fun axisMoney(v: Double): String = if (v == 0.0) "$0" else (if (v > 0) "+" else "") + Fmt.wholeMoney(v)
+
+/** The value labels in dp from the top: the peak, its midpoint, zero, the worst month; a label within 15 dp of the one above is dropped. */
+fun monthlyValueLabels(sc: MonthlyScale, height: Float): List<Pair<String, Float>> {
+    val candidates = mutableListOf<Pair<String, Float>>()
+    if (sc.posMax > 0) { candidates.add(axisMoney(sc.posMax) to 0f); candidates.add(axisMoney(sc.posMax / 2) to sc.posH / 2) }
+    candidates.add("$0" to sc.posH)
+    if (sc.negMax > 0) candidates.add(axisMoney(-sc.negMax) to height)
     val out = mutableListOf<Pair<String, Float>>()
-    for ((text, v) in candidates) {
-        val y = (((hi - v) / span) * height).toFloat().coerceIn(7f, height - 7f)
-        if (out.isNotEmpty() && y - out.last().second < 16f) continue
+    for ((text, y) in candidates) {
+        if (out.isNotEmpty() && y - out.last().second < 15f) continue
         out.add(text to y)
     }
     return out
@@ -173,17 +193,15 @@ fun equityDateLabels(series: List<EquityPoint>): List<String> {
 @Composable
 fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, countLabel: String = "trade", onPick: ((MonthBucket) -> Unit)? = null) {
     val t = LocalTheme.current
-    val hi = max(months.maxOfOrNull { it.value } ?: 0.0, 0.0)
-    val lo = min(months.minOfOrNull { it.value } ?: 0.0, 0.0)
-    val span = if (hi - lo == 0.0) 1.0 else hi - lo
+    val sc = monthlyScale(months, height.toFloat())
     var pick by remember { mutableStateOf<Int?>(null) }
     Column {
     Readout(pick?.let { i -> val m = months[i]; listOf(m.label to t.ink60, Fmt.money(m.value) to t.signed(m.value), ("${m.count} $countLabel" + if (m.count == 1) "" else "s") to t.ink55) })
     Row(Modifier.fillMaxWidth()) {
-        // the top, the midpoint, zero and the bottom, each at its own height; a label
-        // that would touch the one above it is not shown
+        // the page's axis: the peak, its midpoint, zero and the worst month, each centred on
+        // its own line in whole dollars; a label that would touch the one above it is not shown
         Box(Modifier.height(height.dp)) {
-            for ((text, y) in monthlyValueLabels(hi, lo, height.toFloat())) {
+            for ((text, y) in monthlyValueLabels(sc, height.toFloat())) {
                 AxisLabel(text, TextAlign.Start, Modifier.offset(y = (y - 7).dp))
             }
         }
@@ -199,10 +217,11 @@ fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, countLabel: S
                 val n = max(months.size, 1).toFloat()
                 val pitch = size.width / n
                 val barW = max(2f, min(14.dp.toPx(), pitch * 0.6f))
-                val zeroY = size.height - (((0 - lo) / span) * size.height).toFloat()
+                val zeroY = sc.posH.dp.toPx()
+                if (sc.posMax > 0) drawLine(t.grid, Offset(0f, zeroY / 2), Offset(size.width, zeroY / 2), 1f)
                 drawLine(t.hair, Offset(0f, zeroY), Offset(size.width, zeroY), 1f)
                 for ((i, m) in months.withIndex()) {
-                    val h = ((abs(m.value) / span) * size.height).toFloat()
+                    val h = monthlyBarHeight(m.value, sc, height.toFloat()).dp.toPx()
                     val x = i * pitch + (pitch - barW) / 2
                     val y = if (m.value >= 0) zeroY - h else zeroY
                     val dim = pick != null && pick != i

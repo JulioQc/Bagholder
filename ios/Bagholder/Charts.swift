@@ -150,9 +150,7 @@ struct MonthlyBarsChart: View {
     @State private var pick: Int? = nil
 
     var body: some View {
-        let hi = max(months.map { $0.value }.max() ?? 0, 0)
-        let lo = min(months.map { $0.value }.min() ?? 0, 0)
-        let span = (hi - lo) == 0 ? 1 : (hi - lo)
+        let sc = Self.scale(months, height: height)
         VStack(alignment: .leading, spacing: 6) {
         HStack(spacing: 8) {
             if let i = pick, months.indices.contains(i) {
@@ -164,10 +162,10 @@ struct MonthlyBarsChart: View {
             }
         }
         HStack(alignment: .top, spacing: 8) {
-            // the top, the midpoint, zero and the bottom, each at its own height; a label
-            // that would touch the one above it is not shown
+            // the page's axis: the peak, its midpoint, zero and the worst month, each centred on
+            // its own line in whole dollars; a label that would touch the one above it is not shown
             ZStack(alignment: .topLeading) {
-                ForEach(Array(Self.valueLabels(hi: hi, lo: lo, height: height).enumerated()), id: \.offset) { _, l in
+                ForEach(Array(Self.valueLabels(sc, height: height).enumerated()), id: \.offset) { _, l in
                     Text(l.text).font(.system(size: 11)).foregroundStyle(t.ink55).offset(y: l.y - 7)
                 }
             }
@@ -178,12 +176,16 @@ struct MonthlyBarsChart: View {
                     let n = CGFloat(max(months.count, 1))
                     let pitch = w / n
                     let barW = max(2, min(14, pitch * 0.6))
-                    let zeroY = height - CGFloat((0 - lo) / span) * height
+                    let zeroY = sc.posH
                     ZStack(alignment: .topLeading) {
+                        if sc.posMax > 0 {
+                            Path { p in p.move(to: CGPoint(x: 0, y: zeroY / 2)); p.addLine(to: CGPoint(x: w, y: zeroY / 2)) }
+                                .stroke(t.grid, lineWidth: 1)
+                        }
                         Path { p in p.move(to: CGPoint(x: 0, y: zeroY)); p.addLine(to: CGPoint(x: w, y: zeroY)) }
                             .stroke(t.hair, lineWidth: 1)
                         ForEach(Array(months.enumerated()), id: \.element.key) { i, m in
-                            let h = CGFloat(abs(m.value) / span) * height
+                            let h = Self.barHeight(m.value, sc, height: height)
                             let x = CGFloat(i) * pitch + (pitch - barW) / 2
                             let y = m.value >= 0 ? zeroY - h : zeroY
                             RoundedRectangle(cornerRadius: 2)
@@ -210,16 +212,36 @@ struct MonthlyBarsChart: View {
         }
     }
 
-    static func valueLabels(hi: Double, lo: Double, height: CGFloat) -> [(text: String, y: CGFloat)] {
-        let span = (hi - lo) == 0 ? 1 : (hi - lo)
-        var candidates: [(String, Double)] = [(BHFmt.compactMoney(hi), hi)]
-        if hi > 0 { candidates.append((BHFmt.compactMoney(hi / 2), hi / 2)) }
-        candidates.append(("$0", 0))
-        if lo < 0 { candidates.append((BHFmt.compactMoney(lo), lo)) }
+    /// ledger.html monthlyCardHtml: the winning months take 35–93 % of the height by their share
+    /// of the range, the losing months the rest, each side scaled to its own extreme.
+    struct Scale { let posMax: Double; let negMax: Double; let posH: CGFloat }
+
+    static func scale(_ months: [BHMonthBucket], height: CGFloat) -> Scale {
+        let posMax = max(months.map { max(0, $0.value) }.max() ?? 0, 0)
+        let negMax = max(months.map { max(0, -$0.value) }.max() ?? 0, 0)
+        let total = posMax + negMax == 0 ? 1 : posMax + negMax
+        var base = negMax > 0 ? min(0.93, max(0.35, posMax / total)) : 0.93
+        if !(posMax > 0) && negMax > 0 { base = 0.07 }
+        return Scale(posMax: posMax, negMax: negMax, posH: CGFloat(base) * height)
+    }
+
+    static func barHeight(_ v: Double, _ sc: Scale, height: CGFloat) -> CGFloat {
+        if v >= 0 { return sc.posMax > 0 ? max(1.5, CGFloat(v / sc.posMax) * sc.posH) : 0 }
+        return sc.negMax > 0 ? max(1.5, CGFloat(-v / sc.negMax) * (height - sc.posH)) : 0
+    }
+
+    static func axisMoney(_ v: Double) -> String {
+        v == 0 ? "$0" : (v > 0 ? "+" : "") + BHFmt.wholeMoney(v)
+    }
+
+    static func valueLabels(_ sc: Scale, height: CGFloat) -> [(text: String, y: CGFloat)] {
+        var candidates: [(String, CGFloat)] = []
+        if sc.posMax > 0 { candidates += [(axisMoney(sc.posMax), 0), (axisMoney(sc.posMax / 2), sc.posH / 2)] }
+        candidates.append(("$0", sc.posH))
+        if sc.negMax > 0 { candidates.append((axisMoney(-sc.negMax), height)) }
         var out: [(text: String, y: CGFloat)] = []
-        for (text, v) in candidates {
-            let y = min(max(CGFloat((hi - v) / span) * height, 7), height - 7)
-            if let last = out.last, y - last.y < 16 { continue }
+        for (text, y) in candidates {
+            if let last = out.last, y - last.y < 15 { continue }
             out.append((text, y))
         }
         return out
