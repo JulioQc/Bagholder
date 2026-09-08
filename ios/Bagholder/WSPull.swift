@@ -2323,7 +2323,7 @@ query FetchAccountHistoricalFinancials(
         return true
     }
 
-    private static func matchFifo(_ activities: [WSActivity]) -> (closed: [WSClosedTrade], open: [WSOpenLot]) {
+    static func matchFifo(_ activities: [WSActivity]) -> (closed: [WSClosedTrade], open: [WSOpenLot]) {
         struct Fill { var activity: WSActivity; var side: String; var qty: Double }
         func fillRank(_ f: Fill) -> Int {
             let t = compactType(f.activity.activityType)
@@ -2817,7 +2817,7 @@ query FetchAccountHistoricalFinancials(
         return String(format: "%.2f", pf)
     }
 
-    private static func computeMetrics(_ trades: [WSClosedTrade]) -> WSMetrics {
+    static func computeMetrics(_ trades: [WSClosedTrade]) -> WSMetrics {
         let wins = trades.filter { $0.pnlCad > 0 }
         let losses = trades.filter { $0.pnlCad < 0 }
         let grossProfit = wins.reduce(0.0) { $0 + $1.pnlCad }

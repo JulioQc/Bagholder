@@ -16,6 +16,7 @@
 		A10000000000000000000055 /* favicon.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000047 /* favicon.png */; };
 		A1000000000000000000005A /* SPYSeed.txt in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004C /* SPYSeed.txt */; };
 		A10000000000000000000056 /* SpikeLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000048 /* SpikeLoopbackTests.swift */; };
+		B10000000000000000000002 /* ModelCasesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* ModelCasesTests.swift */; };
 		A10000000000000000000057 /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000049 /* Network.framework */; };
 		A10000000000000000000058 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004A /* WebKit.framework */; };
 /* End PBXBuildFile section */
@@ -44,6 +45,7 @@
 		A10000000000000000000046 /* ledger.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = ledger.html; path = ../ledger.html; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000047 /* favicon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = favicon.png; path = ../favicon.png; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000048 /* SpikeLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpikeLoopbackTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000001 /* ModelCasesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCasesTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000049 /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
 		A1000000000000000000004A /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -107,6 +109,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000048 /* SpikeLoopbackTests.swift */,
+				B10000000000000000000001 /* ModelCasesTests.swift */,
 			);
 			path = BagholderTests;
 			sourceTree = "<group>";
@@ -235,6 +238,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000056 /* SpikeLoopbackTests.swift in Sources */,
+				B10000000000000000000002 /* ModelCasesTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
