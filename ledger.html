@@ -1641,6 +1641,14 @@ function bind() {
     }
     if (e.target && e.target.id === "rangeInput" && e.key === "Enter") { e.target.blur(); }
     if (e.target && e.target.classList && e.target.classList.contains("pop-row") && e.target.dataset.act === "toggleList") { popoverRowKeys(e); return; }
+    // the popover's footer: Tab runs box → Done → Clear all → box, and Shift+Tab runs it backwards
+    if (e.key === "Tab" && e.target && e.target.closest && e.target.closest('[data-pop="filter"]') && (e.target.dataset.act === "closeFilter" || e.target.dataset.act === "clearAll")) {
+      const box = document.getElementById("valueQuery") || document.getElementById("searchInput");
+      const done = document.querySelector('[data-pop="filter"] [data-act="closeFilter"]'), clear = document.querySelector('[data-pop="filter"] [data-act="clearAll"]');
+      const to = e.target.dataset.act === "closeFilter" ? (e.shiftKey ? box : clear) : (e.shiftKey ? done : box);
+      if (to) { e.preventDefault(); to.focus(); }
+      return;
+    }
     if (e.target && e.target.id === "searchInput") {
       const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList]")];
       if (popoverBoxKeys(e, rows)) return;
