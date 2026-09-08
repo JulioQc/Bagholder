@@ -45,7 +45,7 @@ To release: bump `APP_VERSION` in `bagholder.py` in the last PR going into the r
   shasum -a 256 bagholder-vX.Y.Z.zip > bagholder-vX.Y.Z.zip.sha256
   gh release create vX.Y.Z bagholder-vX.Y.Z.zip bagholder-vX.Y.Z.zip.sha256 --target master --title vX.Y.Z --notes "..."
   ```
-  with notes listing the merged PRs. The archive must be named exactly `bagholder-vX.Y.Z.zip` with the `.sha256` beside it, or running copies fall back to an "Update available" link. Master may carry unreleased features between releases; a release collects everything merged since the last tag, so the bump is decided by the biggest change in that set, not by the last PR alone. Running copies check the latest release once a day and show an "Update available" link when it is newer.
+  with notes listing the merged PRs. The archive must be named exactly `bagholder-vX.Y.Z.zip` with the `.sha256` beside it, or running copies fall back to an "Update available" link. Master may carry unreleased features between releases; a release collects everything merged since the last tag, so the bump is decided by the biggest change in that set, not by the last PR alone. Running copies check the latest release at start and hourly, and show an "Update to vX.Y.Z" button when it is newer.
 
 ## Do not
 
