@@ -91,7 +91,7 @@ textarea.input{resize:none;line-height:1.5}
 .pop{position:absolute;top:42px;right:0;z-index:7;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
 .pop-row{cursor:pointer;border:0;display:flex;align-items:center;gap:8px;text-align:left;font:400 12.5px Inter,system-ui,sans-serif;padding:6px 7px;border-radius:5px;background:transparent;color:rgba(var(--ink-rgb),.85);width:100%}
 .pop-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
-.pop-row.on{background:var(--accent-900);color:var(--accent-300)}
+.pop-row.on{background:var(--accent-900);color:var(--accent-300);box-shadow:inset 3px 0 0 var(--chip-fg)}
 .pop-row.on:hover{background:rgba(var(--accent-rgb),.28)}
 .pop-row.hi{background:rgba(var(--ink-rgb),var(--hover))}
 .pop-row.on.hi{background:rgba(var(--accent-rgb),.28)}
@@ -1508,7 +1508,14 @@ function act(name, arg, ev) {
     case "pieBy": setPieBy(arg.by); render(); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
-    case "toggleList": { const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value); setFilters({}); const vq = document.getElementById("valueQuery") || document.getElementById("searchInput"); if (vq) { vq.focus(); vq.select(); } break; }
+    case "toggleList": {
+      const on = f.lists[arg.key]; const i = on.indexOf(arg.value); if (i >= 0) on.splice(i, 1); else on.push(arg.value);
+      // a value picked from the search's matches stays in the list, checked, so several can be picked in a row
+      if (document.getElementById("popMatches") && f.search) f.search = "";
+      setFilters({});
+      const vq = document.getElementById("valueQuery") || document.getElementById("searchInput"); if (vq) { vq.focus(); vq.select(); }
+      break;
+    }
     case "toggleYear": { const i = f.years.indexOf(arg.year); if (i >= 0) f.years.splice(i, 1); else f.years.push(arg.year); setFilters({ from: "", to: "", preset: "all" }); break; }
     case "preset": setFilters({ preset: f.preset === arg.preset ? "all" : arg.preset, years: [], from: "", to: "" }); break;
     case "rangeOp": f.ranges[arg.key].op = arg.op; if (f.ranges[arg.key].v != null) setFilters({}); else render(); break;
@@ -1615,8 +1622,6 @@ function bind() {
           // a value: toggled in its field, the box cleared for the next one
           let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {}
           clearTimeout(_rangeTimer);
-          state.fieldQuery = ""; state.valueHi = 0; e.target.value = "";
-          if (state.filters.search) state.filters.search = "";
           act("toggleList", arg);
         } else {
           // no value matches: the text is the free-text search, applied now
