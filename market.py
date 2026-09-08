@@ -53,6 +53,13 @@ COINBASE_EXCHANGE_PRODUCT_URL = "https://api.exchange.coinbase.com/products/%s"
 COINBASE_CANDLES_URL = "https://api.exchange.coinbase.com/products/%s/candles?granularity=%d&start=%s&end=%s"
 COINBASE_CANDLE_LIMIT = 300
 COINBASE_EXCHANGE_START = "2015-01-01"
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/%s?period1=%d&period2=%d&interval=%s"
+YAHOO_SUFFIX = {"TSX": ".TO", "TSX-V": ".V", "TSXV": ".V", "CSE": ".CN", "CBOE CANADA": ".NE", "NEO": ".NE"}
+YAHOO_FORMS = {"CAD": (".TO", ".V", ".CN", ".NE"), "USD": ("",)}
+YAHOO_INTRADAY_DAYS = 729
+YAHOO_MIN_INTERVAL_SEC = 2.0    # Yahoo rate-limits bursts: one request at a time, well spaced
+YAHOO_BACKOFF_SEC = 600         # after a 429, leave Yahoo alone for this long
+SOURCE_INTRADAY_DAYS = {"tmx": 365, "yahoo": YAHOO_INTRADAY_DAYS}   # coinbase: full history
 TMX_CHART_QUERY = (
     "query getCompanyChart($symbol: String!, $from: String!, $to: String!) "
     "{ intraday: getChartDataBySymbol(symbol: $symbol, fromDate: $from, toDate: $to) { dateTime open high low close volume } }"
@@ -319,8 +326,14 @@ def tmx_form(exchange, currency):
         return ":AQL"
     if ex == "CSE":
         return ":CNX"
-    if ex in ("TSX", "TSX-V", "TSXV") or (not ex and ccy == "CAD"):
+    if ex in ("TSX", "TSX-V", "TSXV"):
         return ""
+    # a venue TMX does not name (an ATS such as Alpha, or none at all): start from
+    # the currency's usual form and let tmx_lookup settle it
+    if ccy == "CAD":
+        return ""
+    if ccy == "USD":
+        return ":US"
     return None
 
 
@@ -772,38 +785,29 @@ def parse_coinbase_candles(text):
     return [out[k] for k in sorted(out)]
 
 
-def coinbase_products(pair, ssl_context=None, now=None):
-    """Coinbase Exchange markets for a 'SYM-CCY' pair, in order of preference:
-    the pair itself when it trades there, then the asset's USD market. Remembered;
-    a pair with no market is remembered as such for a day. A fetch tries them in
-    order and the first with bars for the span wins."""
+def coinbase_market(pair, ssl_context=None, now=None):
+    """The Coinbase Exchange market for a 'SYM-CCY' pair, or '' when it does not
+    trade there; remembered, a miss for a day. The USD market is a separate
+    candidate in the history chain, not a fallback taken here."""
     pair = str(pair or "").strip().upper()
     if "-" not in pair:
-        return []
+        return ""
     meta_key = "coinbase_product:" + pair
     v = store.get_meta(meta_key)
     if v.startswith("@"):
-        return [x for x in v[1:].split(",") if x]
+        return v[1:]
     today = (now or datetime.now(timezone.utc)).date()
     if v.startswith("none@") and v[5:] > (today - timedelta(days=TMX_RESOLVE_RETRY_DAYS)).isoformat():
-        return []
-    sym, ccy = pair.split("-", 1)
-    found = []
-    for cand in [pair] + ([sym + "-USD"] if ccy != "USD" else []):
-        try:
-            d = json.loads(_get_text(COINBASE_EXCHANGE_PRODUCT_URL % cand, ssl_context) or "{}") or {}
-        except Exception:
-            continue
-        if str(d.get("id") or "").upper() == cand:
-            found.append(cand)
-    store.set_meta(meta_key, "@" + ",".join(found) if found else "none@" + today.isoformat())
-    return found
-
-
-def coinbase_product(pair, ssl_context=None, now=None):
-    """The preferred Coinbase Exchange market for a pair, or ''."""
-    products = coinbase_products(pair, ssl_context, now)
-    return products[0] if products else ""
+        return ""
+    try:
+        d = json.loads(_get_text(COINBASE_EXCHANGE_PRODUCT_URL % pair, ssl_context) or "{}") or {}
+    except Exception:
+        d = {}
+    if str(d.get("id") or "").upper() == pair:
+        store.set_meta(meta_key, "@" + pair)
+        return pair
+    store.set_meta(meta_key, "none@" + today.isoformat())
+    return ""
 
 
 def fetch_coinbase_candles(product, granularity, start_ts, end_ts, ssl_context=None):
@@ -838,12 +842,12 @@ def _rate_on_or_before(fx, day, days=7):
     return None
 
 
-def in_position_currency(bars, product, currency):
-    """Bars of a Coinbase market in the position's currency: unchanged when the
-    market is quoted in it; a USD market into CAD at the Bank of Canada rate of
-    the bar's day. A bar whose day has no published rate within a week is
-    dropped, never guessed. Anything else cannot be converted and yields nothing."""
-    quote = product.split("-", 1)[1] if "-" in product else ""
+def in_position_currency(bars, bar_currency, currency):
+    """Bars in the position's currency: unchanged when quoted in it; USD bars into
+    CAD at the Bank of Canada rate of the bar's day. A bar whose day has no
+    published rate within a week is dropped, never guessed. Anything else cannot
+    be converted and yields nothing."""
+    quote = str(bar_currency or "").upper()
     ccy = str(currency or "CAD").upper()
     if quote == ccy:
         return list(bars)
@@ -871,47 +875,233 @@ def chart_instrument(rec):
     return dict(rec)
 
 
+def yahoo_root(symbol):
+    return tmx_symbol(symbol).replace(".", "-")
+
+
+def yahoo_forms(rec):
+    """Yahoo symbols for a share listing, the venue's own suffix first, then the
+    other venues of the listing's currency (a wrong or missing venue still finds it)."""
+    root = yahoo_root(rec.get("symbol"))
+    ccy = str(rec.get("currency") or "CAD").strip().upper()
+    if not root or " " in root or ccy not in YAHOO_FORMS:
+        return []
+    first = YAHOO_SUFFIX.get(str(rec.get("exchange") or "").strip().upper())
+    forms = list(YAHOO_FORMS[ccy])
+    if first is not None and first in forms:
+        forms = [first] + [f for f in forms if f != first]
+    return [root + f for f in forms]
+
+
+def history_candidates(rec):
+    """Where an instrument's bars can come from, in order of preference: the
+    first source with bars for the span wins, and the winner is remembered for
+    the symbol (fetch_history). Shares and ETFs: TMX Money under the venue's
+    form, then Yahoo Finance under each venue suffix of the currency. Crypto: the
+    Coinbase Exchange market and the Yahoo pair in the position's currency, then
+    the USD market and pair converted at the Bank of Canada rate. Nothing for an
+    option contract itself (chart_instrument maps it to its underlying)."""
+    kind = str(rec.get("kind") or "Shares")
+    sym = tmx_symbol(rec.get("symbol"))
+    ccy = str(rec.get("currency") or "CAD").strip().upper()
+    if not sym:
+        return []
+    if kind == "Crypto":
+        out = [("coinbase", "%s-%s" % (sym, ccy)), ("yahoo", "%s-%s" % (sym, ccy))]
+        if ccy != "USD":
+            out += [("coinbase", sym + "-USD"), ("yahoo", sym + "-USD")]
+        return out
+    if kind != "Shares":
+        return []
+    out = []
+    tmx_key = tmx_quote_symbol(rec.get("symbol"), rec.get("exchange"), ccy)
+    if tmx_key:
+        out.append(("tmx", tmx_key))
+    out += [("yahoo", f) for f in yahoo_forms(rec)]
+    return out
+
+
 def history_source(rec):
-    """(source, key) for daily bars, or None when nothing public covers the instrument."""
-    src = quote_source(rec)
-    if not src:
-        return None
-    source, key = src
+    """The preferred (source, key) for an instrument's bars, or None when no source covers it."""
+    c = history_candidates(rec)
+    return c[0] if c else None
+
+
+def _bars_meta_key(rec):
+    return "bars_source:" + tmx_symbol(rec.get("symbol"))
+
+
+def ordered_candidates(rec):
+    """history_candidates with the remembered winner first."""
+    cands = history_candidates(rec)
+    v = store.get_meta(_bars_meta_key(rec)) if cands else ""
+    if "|" in v:
+        win = tuple(v.split("|", 1))
+        if win in cands:
+            return [win] + [c for c in cands if c != win]
+    return cands
+
+
+def _remember_winner(rec, source, key):
+    store.set_meta(_bars_meta_key(rec), "%s|%s" % (source, key))
+
+
+def bar_currency(source, key, rec):
+    """The currency a candidate's bars are quoted in: a crypto pair's quote
+    currency, otherwise the listing's own."""
+    if str(rec.get("kind") or "") == "Crypto" and "-" in key:
+        return key.split("-", 1)[1]
+    return str(rec.get("currency") or "CAD").upper()
+
+
+def parse_yahoo_chart(text):
+    """Bars from Yahoo's chart endpoint: [{time, day, minute, offset, open, high,
+    low, close, volume}] in the exchange's local day and minute, oldest first;
+    rows with no close are dropped."""
+    d = json.loads(text or "{}") or {}
+    results = ((d.get("chart") or {}).get("result") or [])
+    if not results:
+        return []
+    r = results[0]
+    ts = r.get("timestamp") or []
+    q = ((r.get("indicators") or {}).get("quote") or [{}])[0] or {}
+    meta = r.get("meta") or {}
+    # Yahoo's gmtoffset is the offset today, not the bar's; the exchange's named
+    # zone gives each bar its own (standard or daylight) local time
+    tz = None
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(str(meta.get("exchangeTimezoneName") or ""))
+    except Exception:
+        tz = None
+    fixed = int(meta.get("gmtoffset") or 0)
+    out = []
+    for i, t in enumerate(ts):
+        try:
+            close = float((q.get("close") or [None])[i])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if not close or close <= 0:
+            continue
+        pick = lambda k: (lambda v: float(v) if v is not None else None)((q.get(k) or [None] * len(ts))[i])
+        if tz is not None:
+            local = datetime.fromtimestamp(int(t), tz=tz)
+            off = int((local.utcoffset() or timedelta(0)).total_seconds())
+        else:
+            off = fixed
+            local = datetime.fromtimestamp(int(t) + off, tz=timezone.utc)
+        out.append({"time": int(t), "day": local.date().isoformat(), "minute": local.hour * 60 + local.minute, "offset": off,
+                    "open": pick("open"), "high": pick("high"), "low": pick("low"), "close": close, "volume": pick("volume")})
+    out.sort(key=lambda b: b["time"])
+    return out
+
+
+_yahoo_lock = threading.Lock()
+_yahoo_next_at = 0.0
+_yahoo_backoff_until = 0.0
+
+
+def _yahoo_get(url, ssl_context=None, now=None):
+    """One Yahoo request at a time, spaced YAHOO_MIN_INTERVAL_SEC apart; after a
+    429 nothing is asked for YAHOO_BACKOFF_SEC. Raises on any failure."""
+    global _yahoo_next_at, _yahoo_backoff_until
+    import time as _time
+    with _yahoo_lock:
+        t = _time.monotonic()
+        if t < _yahoo_backoff_until:
+            raise RuntimeError("yahoo: backing off after 429")
+        wait = _yahoo_next_at - t
+        if wait > 0:
+            _time.sleep(wait)
+        _yahoo_next_at = _time.monotonic() + YAHOO_MIN_INTERVAL_SEC
+        try:
+            return _get_text(url, ssl_context)
+        except Exception as e:
+            if getattr(e, "code", None) == 429:
+                _yahoo_backoff_until = _time.monotonic() + YAHOO_BACKOFF_SEC
+            raise
+
+
+def fetch_yahoo(symbol, start_ts, end_ts, interval, ssl_context=None, now=None):
+    """Yahoo bars for a symbol; a symbol Yahoo says it does not carry (404) is
+    remembered for the day and not asked again."""
+    today = (now or datetime.now(timezone.utc)).date().isoformat()
+    miss_key = "yahoo_miss:" + str(symbol)
+    if store.get_meta(miss_key) == today:
+        return []
+    try:
+        return parse_yahoo_chart(_yahoo_get(YAHOO_CHART_URL % (symbol, int(start_ts), int(end_ts), interval), ssl_context))
+    except Exception as e:
+        if getattr(e, "code", None) == 404:
+            store.set_meta(miss_key, today)
+        return []
+
+
+def _whole_bars(bars):
+    """Only bars with an open, high and low: the chart draws candlesticks or nothing."""
+    return [b for b in bars if b.get("open") is not None and b.get("high") is not None and b.get("low") is not None]
+
+
+def fetch_daily_from(source, key, rec, start, end, ssl_context=None):
+    """Daily bars of one candidate over [start, end], oldest first; [] when it has none."""
+    start_ts = int(datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+    end_ts = int(datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()) + 86400
     if source == "tmx":
-        return ("tmx", key)
-    if source == "cboe_ca":
-        return ("cboe_ca", key)
+        def daily(form):
+            data = _post_json(TMX_URL, {"operationName": "getTimeSeriesData", "variables": {"symbol": form, "freq": "day", "interval": 1, "start": start, "end": end}, "query": TMX_HISTORY_QUERY}, ssl_context, _TMX_HEADERS)
+            return parse_tmx_history(data)
+        return _whole_bars(tmx_lookup(key, daily, ssl_context)[0])
     if source == "coinbase":
-        return ("coinbase", key)
-    return None
+        if not coinbase_market(key, ssl_context):
+            return []
+        days = [dict(b, date=datetime.fromtimestamp(b["time"], tz=timezone.utc).date().isoformat()) for b in fetch_coinbase_candles(key, 86400, start_ts, end_ts, ssl_context)]
+        return in_position_currency(days, bar_currency(source, key, rec), rec.get("currency"))
+    if source == "yahoo":
+        days = [{"date": b["day"], "open": b["open"], "high": b["high"], "low": b["low"], "close": b["close"], "volume": b["volume"]} for b in fetch_yahoo(key, start_ts, end_ts, "1d", ssl_context)]
+        return in_position_currency(_whole_bars(days), bar_currency(source, key, rec), rec.get("currency"))
+    return []
+
+
+COVERAGE_SLACK_DAYS = 7   # a source covers a span when its first bar is within this of the span's start
+
+
+def _pick_covering(rec, answers, span_start, first_of):
+    """(bars, source) from the candidates' answers: the first whose bars reach
+    back to the span's start (within COVERAGE_SLACK_DAYS), else the one reaching
+    furthest back. A source with a late start never beats one that has the
+    earlier days. The winner is remembered."""
+    slack = timedelta(days=COVERAGE_SLACK_DAYS)
+    best = None
+    for source, key, bars in answers:
+        if not bars:
+            continue
+        first = first_of(bars[0])
+        if first <= span_start + slack:
+            _remember_winner(rec, source, key)
+            return bars, source
+        if best is None or first < best[0]:
+            best = (first, source, key, bars)
+    if best:
+        _remember_winner(rec, best[1], best[2])
+        return best[3], best[1]
+    return [], ""
 
 
 def fetch_history(rec, start, end, ssl_context=None):
-    """Daily bars for one instrument between two dates, oldest first."""
-    src = history_source(rec)
-    if not src:
-        return [], ""
-    source, key = src
-    try:
-        if source == "tmx":
-            def daily(form):
-                data = _post_json(TMX_URL, {"operationName": "getTimeSeriesData", "variables": {"symbol": form, "freq": "day", "interval": 1, "start": start, "end": end}, "query": TMX_HISTORY_QUERY}, ssl_context, _TMX_HEADERS)
-                return parse_tmx_history(data)
-            return tmx_lookup(key, daily, ssl_context)[0], source
-        if source == "cboe_ca":
-            return parse_cboe_ca_history(_get_text(CBOE_CA_HISTORY_URL % key, ssl_context)), source
-        if source == "coinbase":
-            start_ts = int(datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
-            end_ts = int(datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()) + 86400
-            for product in coinbase_products(key, ssl_context):
-                days = [dict(b, date=datetime.fromtimestamp(b["time"], tz=timezone.utc).date().isoformat()) for b in fetch_coinbase_candles(product, 86400, start_ts, end_ts, ssl_context)]
-                bars = in_position_currency(days, product, key.split("-", 1)[1])
-                if bars:
-                    return bars, source
-            return [], ""
-    except Exception:
-        return [], ""
-    return [], ""
+    """Daily bars for one instrument between two dates, oldest first, from the
+    chain: the first candidate whose bars cover the span, else the one covering
+    most of it (see _pick_covering); the winner is remembered."""
+    span_start = datetime.strptime(start, "%Y-%m-%d")
+    answers = []
+    for source, key in ordered_candidates(rec):
+        try:
+            bars = fetch_daily_from(source, key, rec, start, end, ssl_context)
+        except Exception:
+            bars = []
+        answers.append((source, key, bars))
+        if bars and datetime.strptime(bars[0]["date"], "%Y-%m-%d") <= span_start + timedelta(days=COVERAGE_SLACK_DAYS):
+            break   # covered: no need to ask the rest
+    return _pick_covering(rec, answers, span_start, lambda b: datetime.strptime(b["date"], "%Y-%m-%d"))
 
 
 def ensure_history(rec, start, end, ssl_context=None, now=None):
@@ -937,7 +1127,11 @@ def ensure_history(rec, start, end, ssl_context=None, now=None):
         bars, source = fetch_history(rec, fetch_from, today, ssl_context)
         if bars:
             store.upsert_price_history(sym, bars, source)
-            store.mark_history_fetched(sym, fetch_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            # the stamp says what is covered: when the bars begin well after the
+            # day asked for, only from their first day, so an earlier span asks again
+            got_from = bars[0]["date"]
+            covered_from = fetch_from if datetime.strptime(got_from, "%Y-%m-%d") <= datetime.strptime(fetch_from, "%Y-%m-%d") + timedelta(days=COVERAGE_SLACK_DAYS) else got_from
+            store.mark_history_fetched(sym, covered_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
     return store.price_history(sym, start, end)
 
 
@@ -1107,20 +1301,25 @@ def aggregate_hourly(bars, seconds):
     return [out[k] for k in sorted(out)]
 
 
-def intraday_reach(rec, now=None):
-    """Earliest date intraday bars exist for, or '' when the source has none."""
-    src = history_source(rec)
+def source_intraday_reach(source, now=None):
+    """Earliest date a source has intraday bars for."""
     now = now or datetime.now(timezone.utc)
-    if src and src[0] == "coinbase":
+    if source == "coinbase":
         return COINBASE_EXCHANGE_START
-    if src and src[0] == "tmx":
-        return (now.date() - timedelta(days=TMX_INTRADAY_DAYS)).isoformat()
-    return ""
+    days = SOURCE_INTRADAY_DAYS.get(source)
+    return (now.date() - timedelta(days=days)).isoformat() if days else ""
+
+
+def intraday_reach(rec, now=None):
+    """Earliest date intraday bars exist for across the instrument's sources, or ''."""
+    reaches = [source_intraday_reach(src, now) for src, _ in history_candidates(rec)]
+    reaches = [r for r in reaches if r]
+    return min(reaches) if reaches else ""
 
 
 def available_timeframes(rec, start, now=None):
     """Timeframes the chart can show for a trade starting on `start`."""
-    if not history_source(rec):
+    if not history_candidates(rec):
         return []
     out = []
     reach = intraday_reach(rec, now)
@@ -1129,29 +1328,55 @@ def available_timeframes(rec, start, now=None):
     return out + ["1d", "1w", "1M"]
 
 
+def fetch_intraday_from(source, key, rec, start_ts, end_ts, ssl_context=None):
+    """{tf: bars} of one candidate over [start_ts, end_ts]. TMX: one-minute bars
+    aggregated to session-aligned 1h and 4h. Yahoo: hourly bars, session-aligned
+    for listings and on the clock for crypto, 4h from them. Coinbase Exchange:
+    hourly candles, 4h on a four-hour grid."""
+    crypto = str(rec.get("kind") or "") == "Crypto"
+    if source == "tmx":
+        start = datetime.fromtimestamp(start_ts, tz=timezone.utc).date().isoformat()
+        end = datetime.fromtimestamp(end_ts, tz=timezone.utc).date().isoformat()
+        minutes = tmx_lookup(key, lambda form: fetch_tmx_minutes(form, start, end, ssl_context), ssl_context)[0]
+        return {"1h": aggregate_session(minutes, 60), "4h": aggregate_session(minutes, 240)} if minutes else {}
+    if source == "coinbase":
+        if not coinbase_market(key, ssl_context):
+            return {}
+        hourly = in_position_currency(fetch_coinbase_candles(key, 3600, start_ts, end_ts, ssl_context), bar_currency(source, key, rec), rec.get("currency"))
+        return {"1h": hourly, "4h": aggregate_hourly(hourly, 14400)} if hourly else {}
+    if source == "yahoo":
+        hourly = in_position_currency(_whole_bars(fetch_yahoo(key, start_ts, end_ts, "60m", ssl_context)), bar_currency(source, key, rec), rec.get("currency"))
+        if not hourly:
+            return {}
+        if crypto:
+            return {"1h": [{k: b[k] for k in ("time", "open", "high", "low", "close", "volume")} for b in hourly], "4h": aggregate_hourly(hourly, 14400)}
+        return {"1h": aggregate_session(hourly, 60), "4h": aggregate_session(hourly, 240)}
+    return {}
+
+
 def fetch_intraday(rec, start_ts, end_ts, ssl_context=None):
-    """{tf: bars} for the intraday timeframes a source provides over [start_ts, end_ts].
-    TMX: one-minute bars aggregated to session-aligned 1h and 4h. Coinbase Exchange:
-    hourly candles in the position's currency, 4h from them on a four-hour grid."""
-    src = history_source(rec)
-    if not src:
+    """{tf: bars} over [start_ts, end_ts] from the first candidate whose reach
+    covers the span and that has bars for it; the remembered winner is tried
+    first. A source whose reach stops short of the span is skipped rather than
+    asked for a partial answer."""
+    start_day = datetime.fromtimestamp(start_ts, tz=timezone.utc).date().isoformat()
+    span_start = datetime.fromtimestamp(start_ts, tz=timezone.utc).replace(tzinfo=None)
+    answers = []
+    for source, key in ordered_candidates(rec):
+        reach = source_intraday_reach(source)
+        if not reach or start_day < reach:
+            continue
+        try:
+            by_tf = fetch_intraday_from(source, key, rec, start_ts, end_ts, ssl_context)
+        except Exception:
+            by_tf = {}
+        answers.append((source, key, by_tf.get("1h") or [], by_tf))
+        if by_tf.get("1h") and datetime.fromtimestamp(by_tf["1h"][0]["time"], tz=timezone.utc).replace(tzinfo=None) <= span_start + timedelta(days=COVERAGE_SLACK_DAYS):
+            break
+    bars, source = _pick_covering(rec, [(a[0], a[1], a[2]) for a in answers], span_start, lambda b: datetime.fromtimestamp(b["time"], tz=timezone.utc).replace(tzinfo=None))
+    if not bars:
         return {}, ""
-    source, key = src
-    try:
-        if source == "tmx":
-            start = datetime.fromtimestamp(start_ts, tz=timezone.utc).date().isoformat()
-            end = datetime.fromtimestamp(end_ts, tz=timezone.utc).date().isoformat()
-            minutes = tmx_lookup(key, lambda form: fetch_tmx_minutes(form, start, end, ssl_context), ssl_context)[0]
-            return {"1h": aggregate_session(minutes, 60), "4h": aggregate_session(minutes, 240)}, source
-        if source == "coinbase":
-            for product in coinbase_products(key, ssl_context):
-                hourly = in_position_currency(fetch_coinbase_candles(product, 3600, start_ts, end_ts, ssl_context), product, key.split("-", 1)[1])
-                if hourly:
-                    return {"1h": hourly, "4h": aggregate_hourly(hourly, 14400)}, source
-            return {}, ""
-    except Exception:
-        return {}, ""
-    return {}, ""
+    return next(a[3] for a in answers if a[0] == source and a[2] is bars), source
 
 
 def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None, max_age_hours=1):
@@ -1188,7 +1413,8 @@ def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None, max_age_hou
         for k, bars in by_tf.items():
             if bars:
                 store.upsert_price_bars(sym, k, bars, source)
-                store.mark_bars_fetched(sym, k, min(fetch_from, last["startTs"]) if last else fetch_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+                covered_from = fetch_from if bars[0]["time"] <= fetch_from + COVERAGE_SLACK_DAYS * 86400 else bars[0]["time"]
+                store.mark_bars_fetched(sym, k, min(covered_from, last["startTs"]) if last else covered_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
     return store.price_bars(sym, tf, start_ts, end_ts)
 
 
@@ -1225,12 +1451,13 @@ def archive_intraday(recs, ssl_context=None, now=None, limit=ARCHIVE_BATCH):
     return done
 
 
-SHORT_DAILY_SOURCES = ("cboe_ca",)
+SHORT_DAILY_SOURCES = ()
 
 
 def archive_daily(recs, ssl_context=None, now=None, limit=ARCHIVE_BATCH):
-    """Keep daily bars for instruments whose source forgets them (Cboe Canada after
-    about three months). TMX and Coinbase keep full history themselves."""
+    """Keep daily bars for instruments whose source forgets them. None of the
+    current sources does (TMX and Coinbase keep full history), so this is idle
+    until a source that forgets is added to SHORT_DAILY_SOURCES."""
     now = now or datetime.now(timezone.utc)
     todo = []
     for rec in recs or []:

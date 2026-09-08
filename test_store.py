@@ -1004,8 +1004,8 @@ def _app_js(client_id):
     return 'var cfg={production:{env:"prod",clientId:"%s"}};' % client_id
 
 
-class CloseOnlyHistoryPurgeTest(unittest.TestCase):
-    def test_close_only_rows_are_dropped_once_so_candles_are_refetched(self):
+class HistorySourceMigrationTest(unittest.TestCase):
+    def test_replaced_sources_are_refetched_once(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["BAGHOLDER_HOME"] = tmp
             store.set_home(tmp)
@@ -1013,20 +1013,28 @@ class CloseOnlyHistoryPurgeTest(unittest.TestCase):
             try:
                 store.upsert_price_history("DOT", [{"date": "2026-02-02", "open": None, "high": None, "low": None, "close": 9.5, "volume": None}], "coingecko")
                 store.mark_history_fetched("DOT", "2026-02-02", "2026-09-07T00:00:00Z")
+                store.upsert_price_history("MAXQ", [{"date": "2026-06-09", "open": 0.4, "high": 0.4, "low": 0.4, "close": 0.4, "volume": 1}], "cboe_ca")
+                store.mark_history_fetched("MAXQ", "2025-10-14", "2026-09-07T00:00:00Z")
                 store.upsert_price_history("RDDY", [{"date": "2026-02-02", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}], "tmx")
                 store.mark_history_fetched("RDDY", "2026-02-02", "2026-09-07T00:00:00Z")
+                store.upsert_price_history("USDC", [{"date": "2026-02-25", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}], "coinbase")
+                store.mark_history_fetched("USDC", "2026-01-10", "2026-09-07T00:00:00Z")   # claimed January, has late February
                 conn = store._connect()
                 try:
-                    conn.execute("DELETE FROM meta WHERE key = 'close_only_history_dropped'")
+                    conn.execute("DELETE FROM meta WHERE key = 'history_sources_migrated'")
                     conn.commit()
                     store._init_schema(conn)
                 finally:
                     conn.close()
                 self.assertEqual(store.price_history("DOT"), [], "close-only bars are gone")
                 self.assertIsNone(store.history_fetch("DOT"), "and their fetch stamp, so the chart refetches")
-                self.assertEqual(len(store.price_history("RDDY")), 1, "real candles stay")
+                self.assertEqual(len(store.price_history("MAXQ")), 1, "Cboe's real bars stay")
+                self.assertIsNone(store.history_fetch("MAXQ"), "but the span is refetched from TMX, which reaches further back")
+                self.assertEqual(len(store.price_history("RDDY")), 1, "TMX candles stay")
                 self.assertIsNotNone(store.history_fetch("RDDY"))
-                # Runs once: rows added afterwards under the old source name are left alone.
+                self.assertEqual(len(store.price_history("USDC")), 1, "real bars stay")
+                self.assertIsNone(store.history_fetch("USDC"), "a stamp claiming days its bars do not reach is dropped")
+                # Runs once: rows added afterwards under an old source name are left alone.
                 store.upsert_price_history("DOT", [{"date": "2026-02-03", "open": None, "high": None, "low": None, "close": 9.6, "volume": None}], "coingecko")
                 conn = store._connect()
                 try:
