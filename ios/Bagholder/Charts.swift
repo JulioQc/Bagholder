@@ -164,19 +164,14 @@ struct MonthlyBarsChart: View {
             }
         }
         HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .trailing, spacing: 0) {
-                Text(BHFmt.compactMoney(hi)).font(.system(size: 11)).foregroundStyle(t.ink55)
-                Spacer(minLength: 0)
-                if lo < 0 {
-                    Text("$0").font(.system(size: 11)).foregroundStyle(t.ink55)
-                        .offset(y: CGFloat(-(lo / span)) * height - height / 2 + 6)
-                    Spacer(minLength: 0)
-                    Text(BHFmt.compactMoney(lo)).font(.system(size: 11)).foregroundStyle(t.ink55)
-                } else {
-                    Text("$0").font(.system(size: 11)).foregroundStyle(t.ink55)
+            // the top, the midpoint, zero and the bottom, each at its own height; a label
+            // that would touch the one above it is not shown
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(Self.valueLabels(hi: hi, lo: lo, height: height).enumerated()), id: \.offset) { _, l in
+                    Text(l.text).font(.system(size: 11)).foregroundStyle(t.ink55).offset(y: l.y - 7)
                 }
             }
-            .frame(width: 52, height: height)
+            .frame(height: height, alignment: .topLeading)
             VStack(spacing: 6) {
                 GeometryReader { geo in
                     let w = geo.size.width
@@ -213,6 +208,21 @@ struct MonthlyBarsChart: View {
             }
         }
         }
+    }
+
+    static func valueLabels(hi: Double, lo: Double, height: CGFloat) -> [(text: String, y: CGFloat)] {
+        let span = (hi - lo) == 0 ? 1 : (hi - lo)
+        var candidates: [(String, Double)] = [(BHFmt.compactMoney(hi), hi)]
+        if hi > 0 { candidates.append((BHFmt.compactMoney(hi / 2), hi / 2)) }
+        candidates.append(("$0", 0))
+        if lo < 0 { candidates.append((BHFmt.compactMoney(lo), lo)) }
+        var out: [(text: String, y: CGFloat)] = []
+        for (text, v) in candidates {
+            let y = min(max(CGFloat((hi - v) / span) * height, 7), height - 7)
+            if let last = out.last, y - last.y < 16 { continue }
+            out.append((text, y))
+        }
+        return out
     }
 
     static func labels(_ months: [BHMonthBucket]) -> [String] {
@@ -261,14 +271,16 @@ struct GradeBarsChart: View {
             ForEach(grades.buckets, id: \.grade) { b in
                 VStack(spacing: 4) {
                     GeometryReader { geo in
-                        let h = geo.size.height
-                        let zeroY = h - CGFloat((0 - lo) / span) * h
-                        let bh = CGFloat(abs(b.pnl) / span) * h
+                        // the bars leave 18 pt above for a positive label and, when there is a loss, 18 pt below for a negative one
+                        let top: CGFloat = 18, bottom: CGFloat = lo < 0 ? 18 : 0
+                        let ph = geo.size.height - top - bottom
+                        let zeroY = top + ph - CGFloat((0 - lo) / span) * ph
+                        let bh = CGFloat(abs(b.pnl) / span) * ph
                         ZStack(alignment: .topLeading) {
                             Text(BHFmt.compactMoney(b.pnl))
                                 .font(.system(size: 12, weight: .medium)).foregroundStyle(t.signed(b.pnl))
                                 .frame(width: geo.size.width)
-                                .offset(y: (b.pnl >= 0 ? zeroY - bh : zeroY + bh) - (b.pnl >= 0 ? 18 : 0))
+                                .offset(y: b.pnl >= 0 ? zeroY - bh - 18 : zeroY + bh + 2)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(b.pnl >= 0 ? t.pos : t.neg)
                                 .frame(width: geo.size.width, height: max(bh, 2))

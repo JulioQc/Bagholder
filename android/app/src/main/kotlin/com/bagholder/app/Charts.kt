@@ -56,9 +56,25 @@ import kotlin.math.pow
 data class Bar(val time: String, val open: Double, val high: Double, val low: Double, val close: Double)
 
 @Composable
-private fun AxisLabel(text: String, align: TextAlign = TextAlign.End) {
+private fun AxisLabel(text: String, align: TextAlign = TextAlign.End, modifier: Modifier = Modifier) {
     val t = LocalTheme.current
-    Text(text, fontSize = 11.sp, color = t.ink55, textAlign = align, maxLines = 1)
+    Text(text, fontSize = 11.sp, color = t.ink55, textAlign = align, maxLines = 1, modifier = modifier)
+}
+
+/** The Monthly P&L value labels in dp from the top: top, midpoint, zero, bottom, dropping any within 16 dp of the one above. */
+fun monthlyValueLabels(hi: Double, lo: Double, height: Float): List<Pair<String, Float>> {
+    val span = if (hi - lo == 0.0) 1.0 else hi - lo
+    val candidates = mutableListOf(Fmt.compactMoney(hi) to hi)
+    if (hi > 0) candidates.add(Fmt.compactMoney(hi / 2) to hi / 2)
+    candidates.add("$0" to 0.0)
+    if (lo < 0) candidates.add(Fmt.compactMoney(lo) to lo)
+    val out = mutableListOf<Pair<String, Float>>()
+    for ((text, v) in candidates) {
+        val y = (((hi - v) / span) * height).toFloat().coerceIn(7f, height - 7f)
+        if (out.isNotEmpty() && y - out.last().second < 16f) continue
+        out.add(text to y)
+    }
+    return out
 }
 
 /** Four round `$` ticks from zero to just above the peak. */
@@ -164,9 +180,12 @@ fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, countLabel: S
     Column {
     Readout(pick?.let { i -> val m = months[i]; listOf(m.label to t.ink60, Fmt.money(m.value) to t.signed(m.value), ("${m.count} $countLabel" + if (m.count == 1) "" else "s") to t.ink55) })
     Row(Modifier.fillMaxWidth()) {
-        Column(Modifier.width(52.dp).height(height.dp), verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.End) {
-            AxisLabel(Fmt.compactMoney(hi))
-            if (lo < 0) { AxisLabel("$0"); AxisLabel(Fmt.compactMoney(lo)) } else AxisLabel("$0")
+        // the top, the midpoint, zero and the bottom, each at its own height; a label
+        // that would touch the one above it is not shown
+        Box(Modifier.height(height.dp)) {
+            for ((text, y) in monthlyValueLabels(hi, lo, height.toFloat())) {
+                AxisLabel(text, TextAlign.Start, Modifier.offset(y = (y - 7).dp))
+            }
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
@@ -231,17 +250,22 @@ fun GradeBarsChart(grades: Grades, height: Int = 150) {
         for (b in grades.buckets) {
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.fillMaxWidth().height(height.dp)) {
+                    // the bars leave 18 dp above for a positive label and, when there is a loss, 18 dp below for a negative one
+                    val top = 18.0
+                    val bottom = if (lo < 0) 18.0 else 0.0
+                    val ph = height - top - bottom
                     val zeroFrac = (0 - lo) / span
                     val hFrac = abs(b.pnl) / span
+                    val zeroY = top + ph - zeroFrac * ph
+                    val bh = hFrac * ph
                     Canvas(Modifier.fillMaxWidth().height(height.dp)) {
-                        val zeroY = size.height - (zeroFrac * size.height).toFloat()
-                        val bh = (hFrac * size.height).toFloat()
-                        drawRoundRect(if (b.pnl >= 0) t.pos else t.neg, Offset(0f, if (b.pnl >= 0) zeroY - bh else zeroY), Size(size.width, max(bh, 2f)),
+                        val y = (if (b.pnl >= 0) zeroY - bh else zeroY).dp.toPx()
+                        drawRoundRect(if (b.pnl >= 0) t.pos else t.neg, Offset(0f, y), Size(size.width, max(bh.dp.toPx(), 2f)),
                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()))
                     }
-                    val labelTop = if (b.pnl >= 0) (1 - zeroFrac - hFrac) * height - 18 else (1 - zeroFrac + hFrac) * height
+                    val labelTop = if (b.pnl >= 0) zeroY - bh - 18 else zeroY + bh + 2
                     Text(Fmt.compactMoney(b.pnl), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = t.signed(b.pnl),
-                        modifier = Modifier.fillMaxWidth().offset(y = labelTop.coerceIn(0.0, height - 14.0).dp), textAlign = TextAlign.Center)
+                        modifier = Modifier.fillMaxWidth().offset(y = labelTop.dp), textAlign = TextAlign.Center)
                 }
                 Spacer(Modifier.height(4.dp))
                 Text("${b.grade} · ${b.n}", fontSize = 12.sp, color = t.ink55)
