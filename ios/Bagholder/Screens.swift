@@ -13,7 +13,6 @@ struct RootView: View {
     @State private var showFilters = false
     @State private var showMenu = false
     @State private var showConnect = false
-    @State private var connectAfterMenu = false
 
     var body: some View {
         let t: BHTheme = scheme == .dark ? .nocturne : .light
@@ -35,9 +34,7 @@ struct RootView: View {
         .sheet(isPresented: $showFilters) { FiltersSheet(book: book).environment(\.theme, t) }
         // the login opens once the menu has gone, so the web view sits in the key window
         // (passkeys and AutoFill need that; presenting over a dismissing sheet leaves it behind)
-        .sheet(isPresented: $showMenu, onDismiss: { if connectAfterMenu { connectAfterMenu = false; showConnect = true } }) {
-            MenuSheet(book: book, onConnect: { connectAfterMenu = true; showMenu = false }).environment(\.theme, t)
-        }
+        .sheet(isPresented: $showMenu) { MenuSheet(book: book, onConnect: { showMenu = false; showConnect = true }).environment(\.theme, t) }
         .fullScreenCover(isPresented: $showConnect) { ConnectLoginView(book: book, isPresented: $showConnect).environment(\.theme, t) }
         .onAppear { book.handleAppear() }
         .onChange(of: scenePhase) { _, p in if p == .active { book.handleAppear() } else if p == .background { book.handleBackground() } }

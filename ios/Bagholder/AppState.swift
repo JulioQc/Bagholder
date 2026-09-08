@@ -504,14 +504,7 @@ struct WealthsimpleLoginWebView: UIViewRepresentable {
 
         func cookiesDidChange(in cookieStore: WKHTTPCookieStore) { inspectCookies() }
 
-        /// WebKit refuses a passkey request unless the document is focused ("NotAllowedError:
-        /// The document is not focused"), and a web view presented from SwiftUI is not the
-        /// first responder on its own; it becomes one when a page has loaded.
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            webView.window?.makeKey()
-            webView.becomeFirstResponder()
-            inspectCookies()
-        }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { inspectCookies() }
 
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
             if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
