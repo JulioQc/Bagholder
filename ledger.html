@@ -1455,13 +1455,14 @@ function connect() {
 // Keys shared by the popover's search boxes: Tab goes to Done (Shift+Tab to Clear all), since the rows
 // are driven by the arrows; Delete, or Backspace in an empty box, deselects the highlighted value.
 function popoverRowKeys(e) {
-  // the keyboard is on a row: arrows move between rows, Enter or Space toggles, Delete or
-  // Backspace deselects, Tab goes to Done, and typing a character returns to the box with it
+  // a row has the keyboard only after a mouse click on it: the same keys work from there,
+  // and the up arrow past the first row, or typing a character, returns to the box
   const row = e.target;
   const rows = [...row.parentElement.querySelectorAll("[data-act=toggleList]")];
   const i = rows.indexOf(row);
   const box = document.getElementById("valueQuery") || document.getElementById("searchInput");
   const go = (j) => { state.valueHi = j; rows.forEach((r, k) => r.classList.toggle("hi", k === j)); rows[j].focus(); rows[j].scrollIntoView({ block: "nearest" }); };
+  if (e.key === "ArrowUp" && i === 0 && box) { e.preventDefault(); box.focus(); return; }
   if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); go((i + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length); return; }
   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {} act("toggleList", arg); return; }
   if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); if (row.classList.contains("on")) { let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {} act("toggleList", arg); } return; }
@@ -1644,11 +1645,10 @@ function bind() {
       const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList]")];
       if (popoverBoxKeys(e, rows)) return;
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && rows.length) {
-        // the keyboard moves onto the highlighted row; the rows take it from here
         e.preventDefault();
-        state.valueHi = Math.min(state.valueHi || 0, rows.length - 1);
+        state.valueHi = (Math.min(state.valueHi || 0, rows.length - 1) + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
         rows.forEach((r, i) => r.classList.toggle("hi", i === state.valueHi));
-        rows[state.valueHi].focus(); rows[state.valueHi].scrollIntoView({ block: "nearest" });
+        rows[state.valueHi].scrollIntoView({ block: "nearest" });
         return;
       }
       if (e.key === "Enter") {
@@ -1674,9 +1674,9 @@ function bind() {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         if (!rows.length) return;
         e.preventDefault();
-        state.valueHi = Math.min(state.valueHi || 0, rows.length - 1);
+        state.valueHi = (Math.min(state.valueHi || 0, rows.length - 1) + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
         rows.forEach((r, i) => r.classList.toggle("hi", i === state.valueHi));
-        rows[state.valueHi].focus(); rows[state.valueHi].scrollIntoView({ block: "nearest" });
+        rows[state.valueHi].scrollIntoView({ block: "nearest" });
         return;
       }
       if (e.key === "Enter") { const row = rows[Math.min(state.valueHi || 0, rows.length - 1)]; if (row) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {} act("toggleList", arg); } }
