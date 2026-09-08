@@ -34,7 +34,7 @@ struct RootView: View {
         .sheet(isPresented: $showFilters) { FiltersSheet(book: book).environment(\.theme, t) }
         // the login opens once the menu has gone, so the web view sits in the key window
         // (passkeys and AutoFill need that; presenting over a dismissing sheet leaves it behind)
-        .sheet(isPresented: $showMenu) { MenuSheet(book: book, onConnect: { showMenu = false; showConnect = true }).environment(\.theme, t) }
+        .sheet(isPresented: $showMenu) { MenuSheet(book: book).environment(\.theme, t) }
         .fullScreenCover(isPresented: $showConnect) { ConnectLoginView(book: book, isPresented: $showConnect).environment(\.theme, t) }
         .onAppear { book.handleAppear(); if !book.connected { book.warmLogin() } }
         .onChange(of: scenePhase) { _, p in if p == .active { book.handleAppear() } else if p == .background { book.handleBackground() } }
@@ -1364,7 +1364,7 @@ struct MenuSheet: View {
     @Environment(\.theme) private var t
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var book: Book
-    var onConnect: () -> Void
+    @State private var showConnect = false
 
     var body: some View {
         NavigationStack {
@@ -1374,7 +1374,8 @@ struct MenuSheet: View {
                         Button("Sync now") { book.syncNow(); dismiss() }.disabled(book.phase == .pulling)
                         Button("Disconnect", role: .destructive) { book.disconnect(); dismiss() }
                     } else {
-                        Button("Connect Wealthsimple") { onConnect() }
+                        // the login opens over the menu at once; waiting for the menu to dismiss first left the tap dead
+                        Button("Connect Wealthsimple") { showConnect = true }
                     }
                 }
                 .listRowBackground(t.surface)
@@ -1384,6 +1385,8 @@ struct MenuSheet: View {
                 }
                 .listRowBackground(t.surface)
             }
+            .fullScreenCover(isPresented: $showConnect) { ConnectLoginView(book: book, isPresented: $showConnect).environment(\.theme, t) }
+            .onChange(of: book.connected) { _, on in if on { dismiss() } }
             .scrollContentBackground(.hidden)
             .background(t.bg)
             .navigationTitle("Bagholder")
