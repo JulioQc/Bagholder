@@ -247,6 +247,7 @@ def _init_schema(conn):
     _ensure_activity_security_id(conn)
     _migrate_spy_meta(conn)
     _ensure_quote_columns(conn)
+    _migrate_history_sources(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES (?, ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -1537,6 +1538,30 @@ def mark_history_fetched(symbol, start, when):
             conn.commit()
         finally:
             conn.close()
+
+
+def _migrate_history_sources(conn):
+    """Runs once when the chart's history sources change. Bars from a source that
+    gave closes only (CoinGecko) are dropped; bars from a source no longer used
+    for history (Cboe Canada's feed, real but three months deep) are kept; the
+    fetch stamps of every symbol either source served are dropped, so the chart
+    refetches the whole span from the source that replaced it."""
+    done = conn.execute("SELECT value FROM meta WHERE key = 'history_sources_migrated'").fetchone()
+    if done:
+        return
+    conn.execute("DELETE FROM price_history WHERE source = 'coingecko'")
+    conn.execute("DELETE FROM history_fetches WHERE symbol NOT IN (SELECT DISTINCT symbol FROM price_history WHERE source NOT IN ('coingecko', 'cboe_ca'))")
+    conn.execute("DELETE FROM price_bars WHERE source = 'coingecko'")
+    conn.execute("DELETE FROM bar_fetches WHERE symbol NOT IN (SELECT DISTINCT symbol FROM price_bars)")
+    # a stamp claiming a span its bars begin well after is dropped, so the chain
+    # is asked again for the earlier days
+    conn.execute(
+        "DELETE FROM history_fetches WHERE symbol IN (SELECT h.symbol FROM history_fetches h JOIN "
+        "(SELECT symbol, MIN(date) AS first FROM price_history GROUP BY symbol) p ON p.symbol = h.symbol "
+        "WHERE julianday(p.first) - julianday(h.start) > 7)"
+    )
+    conn.execute("INSERT INTO meta(key, value) VALUES ('history_sources_migrated', '1')")
+    conn.commit()
 
 
 def _ensure_bar_columns(conn):

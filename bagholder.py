@@ -530,7 +530,7 @@ UPDATE_CHECK_HOURS = 24
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-08.1"
+PROTOCOL = "2026-09-08.2"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 QUERIES = {
@@ -3201,7 +3201,7 @@ def history_payload(query):
         return {"ok": False, "error": "symbol, from, to and a known tf are required"}
     inst = market.chart_instrument(rec)
     src = market.history_source(inst)
-    available = market.available_timeframes(inst, start)
+    available = market.offered_timeframes(inst, start)
     # an option contract's own premium, recorded by the app while it was held
     recorded = [x for x in market.TIMEFRAMES if x in store.recorded_timeframes(rec["symbol"])] if rec["kind"] == "Options" else []
     basis = "contract" if (one("basis") == "contract" and recorded) else "underlying"

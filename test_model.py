@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 
 import bagholder
 import market
+market.YAHOO_MIN_INTERVAL_SEC = 0   # tests never wait between mocked Yahoo calls
 import model
 import store
 
@@ -1004,7 +1005,10 @@ class QuoteTest(unittest.TestCase):
         self.assertEqual(market.tmx_quote_symbol("CH", "TSX-V", "CAD"), "CH")
         self.assertEqual(market.tmx_quote_symbol("LUNR", "NASDAQ", "USD"), "LUNR:US")
         self.assertEqual(market.tmx_quote_symbol("ASTS", "", "USD"), "ASTS:US")
-        self.assertIsNone(market.tmx_quote_symbol("HBIX", "Cboe Canada", "CAD"))
+        self.assertEqual(market.tmx_quote_symbol("HBIX", "Cboe Canada", "CAD"), "HBIX:AQL")
+        self.assertEqual(market.tmx_quote_symbol("QIMC", "CSE", "CAD"), "QIMC:CNX", "TMX names CSE listings with :CNX")
+        self.assertIsNone(market.tmx_quote_symbol("VOD", "LSE", "GBP"), "a currency TMX does not carry")
+        self.assertEqual(market.tmx_quote_symbol("ONE", "ALPHA EXCHANGE", "CAD"), "ONE", "an ATS venue: the currency's usual form, settled by tmx_lookup")
         self.assertIsNone(market.tmx_quote_symbol("QNC 20NOV26 3.00 CALL", "", "USD"))
 
     def test_positions_use_the_quote_when_present(self):
@@ -1410,16 +1414,17 @@ class MarketParseTest(unittest.TestCase):
         cboe = json.dumps({"data": [{"date": "2026-09-04", "open": "6.59", "close": "6.70", "high": 6.7, "low": 6.58, "volume": 53193.0}, {"date": "2026-09-03", "open": "6.56", "close": "6.76", "high": 6.76, "low": 6.54, "volume": 35377.0}]})
         bars = market.parse_cboe_ca_history(cboe)
         self.assertEqual([(b["date"], b["close"]) for b in bars], [("2026-09-03", "6.76"), ("2026-09-04", "6.70")])
-        gecko = json.dumps({"prices": [[1787000400000, 89278.71], [1787086800000, 88900.0], [1787090400000, 88950.0]]})
-        bars = market.parse_coingecko_range(gecko)
-        self.assertEqual([b["date"] for b in bars], ["2026-08-17", "2026-08-18"])
-        self.assertEqual(bars[1]["close"], 88950.0, "the last point of a day wins")
-        self.assertIsNone(bars[0]["open"])
+        # Coinbase Exchange rows are [time, low, high, open, close, volume]
+        candles = json.dumps([[1787097600, 63000.5, 65341.83, 64848.68, 63911.88, 6197.03], [1787011200, 62000, 64000, 63000, 63500, 100], ["bad"]])
+        bars = market.parse_coinbase_candles(candles)
+        self.assertEqual([(b["time"], b["open"], b["high"], b["low"], b["close"], b["volume"]) for b in bars], [(1787011200, 63000, 64000, 62000, 63500, 100), (1787097600, 64848.68, 65341.83, 63000.5, 63911.88, 6197.03)])
         src = market.history_source
         self.assertEqual(src({"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}), ("tmx", "RDDY"))
         self.assertEqual(src({"symbol": "LUNR", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}), ("tmx", "LUNR:US"))
-        self.assertEqual(src({"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD", "kind": "Shares"}), ("cboe_ca", "HBIX"))
-        self.assertEqual(src({"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}), ("coingecko", "BTC-CAD"))
+        self.assertEqual(src({"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD", "kind": "Shares"}), ("tmx", "HBIX:AQL"), "history from TMX even where the quote comes from Cboe")
+        self.assertEqual(src({"symbol": "ONE", "exchange": "Alpha Exchange", "currency": "CAD", "kind": "Shares"}), ("tmx", "ONE"), "an unknown venue starts from the currency's usual form")
+        self.assertEqual(src({"symbol": "ASTS", "exchange": "", "currency": "USD", "kind": "Shares"}), ("tmx", "ASTS:US"))
+        self.assertEqual(src({"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}), ("coinbase", "BTC-CAD"))
         self.assertIsNone(src({"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}))
 
     def test_timeframes_aggregate_and_report_availability(self):
@@ -1434,18 +1439,16 @@ class MarketParseTest(unittest.TestCase):
         self.assertEqual([(w["date"], w["open"], w["high"], w["low"], w["close"], w["volume"]) for w in weeks], [("2026-08-31", 1, 4, 0.5, 2.5, 30), ("2026-09-07", 2.5, 5, 2, 4.5, 10)])
         months = market.aggregate_daily(daily, "1M")
         self.assertEqual([(m["date"], m["open"], m["close"]) for m in months], [("2026-08-01", 1, 2), ("2026-09-01", 2, 4.5)])
-        hourly = [{"time": 3600 * h, "close": h} for h in range(1, 10)]
+        hourly = [{"time": 3600 * h, "open": h, "high": h + 0.5, "low": h - 0.5, "close": h, "volume": 1} for h in range(1, 10)]
         four = market.aggregate_hourly(hourly, 14400)
-        self.assertEqual([(b["time"], b["close"]) for b in four], [(0, 3), (14400, 7), (28800, 9)])
-        pts = json.dumps({"prices": [[1788800400123, 100.0], [1788801000000, 101.0], [1788804000000, 102.0]]})
-        self.assertEqual(market.parse_coingecko_hourly(pts), [{"time": 1788800400, "close": 101.0}, {"time": 1788804000, "close": 102.0}])
+        self.assertEqual([(b["time"], b["open"], b["high"], b["low"], b["close"], b["volume"]) for b in four], [(0, 1, 3.5, 0.5, 3, 3), (14400, 4, 7.5, 3.5, 7, 4), (28800, 8, 9.5, 7.5, 9, 2)])
         now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
         share = {"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}
         coin = {"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}
         opt = {"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}
-        self.assertEqual(market.available_timeframes(share, "2025-01-01", now), ["1d", "1w", "1M"])
+        self.assertEqual(market.available_timeframes(share, "2024-01-01", now), ["1d", "1w", "1M"])
         self.assertEqual(market.available_timeframes(coin, "2026-08-01", now), ["1h", "4h", "1d", "1w", "1M"])
-        self.assertEqual(market.available_timeframes(coin, "2026-01-01", now), ["1d", "1w", "1M"], "hourly reaches back 89 days only")
+        self.assertEqual(market.available_timeframes(coin, "2019-01-01", now), ["1h", "4h", "1d", "1w", "1M"], "Coinbase keeps hourly candles for good")
         self.assertEqual(market.available_timeframes(opt, "2026-08-01", now), [])
 
     def test_tmx_minutes_become_session_aligned_hourly_and_four_hour_bars(self):
@@ -1520,9 +1523,11 @@ class MarketParseTest(unittest.TestCase):
         now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
         tsla = {"symbol": "TSLA", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}
         self.assertEqual(market.available_timeframes(tsla, "2025-11-01", now), ["1h", "4h", "1d", "1w", "1M"])
-        self.assertEqual(market.available_timeframes(tsla, "2025-08-01", now), ["1d", "1w", "1M"])
+        self.assertEqual(market.available_timeframes(tsla, "2024-08-01", now), ["1d", "1w", "1M"], "beyond every source's intraday reach")
+        self.assertEqual(market.available_timeframes(tsla, "2025-08-01", now), ["1h", "4h", "1d", "1w", "1M"], "past TMX's year, within Yahoo's two")
+        self.assertEqual(market.intraday_reach(tsla, now), "2024-09-08")
         hbix = {"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD", "kind": "Shares"}
-        self.assertEqual(market.available_timeframes(hbix, "2026-08-01", now), ["1d", "1w", "1M"], "Cboe Canada has no intraday feed")
+        self.assertEqual(market.available_timeframes(hbix, "2026-08-01", now), ["1h", "4h", "1d", "1w", "1M"], "Cboe Canada listings have TMX's minute bars under :AQL")
 
     def test_intraday_bars_are_cached_per_timeframe(self):
         from datetime import datetime, timedelta, timezone
@@ -1537,11 +1542,11 @@ class MarketParseTest(unittest.TestCase):
                          "4h": [{"time": t0, "open": 1, "high": 2, "low": 0.5, "close": 1.8, "volume": 7}]}
                 now = datetime(2025, 12, 1, 12, 0, tzinfo=timezone.utc)
                 with mock.patch.object(market, "fetch_intraday", return_value=(by_tf, "tmx")) as f:
-                    h = market.ensure_intraday(rec, "1h", "2025-11-01", "2025-11-20", now=now)
+                    h = market.ensure_intraday(rec, "1h", "2025-11-05", "2025-11-20", now=now)
                 self.assertEqual([b["close"] for b in h], [1.5, 1.8])
                 self.assertEqual(h[0]["open"], 1)
                 with mock.patch.object(market, "fetch_intraday", return_value=(by_tf, "tmx")) as f:
-                    four = market.ensure_intraday(rec, "4h", "2025-11-01", "2025-11-20", now=now)
+                    four = market.ensure_intraday(rec, "4h", "2025-11-05", "2025-11-20", now=now)
                 self.assertEqual(f.call_count, 0, "one minute fetch fills both timeframes")
                 self.assertEqual([b["close"] for b in four], [1.8])
             finally:
@@ -1577,8 +1582,8 @@ class MarketParseTest(unittest.TestCase):
             store.ensure()
             try:
                 now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
-                recs = [{"symbol": s, "exchange": "TSX", "currency": "CAD", "kind": "Shares", "start": "2026-06-01"} for s in ("AAA", "BBB", "CCC")]
-                recs.append({"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options", "start": "2026-06-01"})
+                recs = [{"symbol": s, "exchange": "TSX", "currency": "CAD", "kind": "Shares", "start": "2026-08-01"} for s in ("AAA", "BBB", "CCC")]
+                recs.append({"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options", "start": "2026-08-01"})
                 t0 = int(datetime(2026, 8, 3, 13, 30, tzinfo=timezone.utc).timestamp())
                 bars = {"1h": [{"time": t0, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}], "4h": [{"time": t0, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]}
                 with mock.patch.object(market, "fetch_intraday", return_value=(bars, "tmx")) as f:
@@ -1590,7 +1595,7 @@ class MarketParseTest(unittest.TestCase):
                 with mock.patch.object(market, "fetch_intraday", return_value=(bars, "tmx")) as f:
                     self.assertEqual(market.archive_intraday(recs, now=now + timedelta(hours=25), limit=8), ["AAA", "BBB", "CCC"])
                     self.assertEqual(f.call_args.args[1], t0 - 2 * 86400)
-                self.assertEqual(store.bar_fetch("AAA", "1h")["startTs"], int(datetime(2026, 6, 1, tzinfo=timezone.utc).timestamp()), "the archived span still starts where it began")
+                self.assertEqual(store.bar_fetch("AAA", "1h")["startTs"], int(datetime(2026, 8, 1, tzinfo=timezone.utc).timestamp()), "the archived span still starts where it began")
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
@@ -1608,11 +1613,256 @@ class MarketParseTest(unittest.TestCase):
                     {"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares", "start": "2026-06-01"},
                 ]
                 bars = [{"date": "2026-06-02", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
-                with mock.patch.object(market, "fetch_history", return_value=(bars, "cboe_ca")) as f:
-                    self.assertEqual(market.archive_daily(recs, now=now), ["BTC", "HBIX"], "TMX keeps its own history")
-                    self.assertEqual(f.call_count, 2)
-                    self.assertEqual(market.archive_daily(recs, now=now), [])
-                self.assertEqual(store.price_history("HBIX")[0]["date"], "2026-06-02")
+                with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")) as f:
+                    self.assertEqual(market.archive_daily(recs, now=now), [], "every history source keeps full history itself; nothing to archive daily")
+                    self.assertEqual(f.call_count, 0)
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_tmx_symbol_form_is_resolved_by_venue_and_remembered(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                venues = {"QIMC:CNX": "Canadian Securities Exchange", "HBIX:AQL": "NEO-L (Cboe Canada Listed)", "HG:US": "New York Stock Exchange"}
+                asked = []
+                def post(url, body, *a, **k):
+                    sym = body["variables"]["symbol"]
+                    asked.append((body["operationName"], sym))
+                    if body["operationName"] == "getQuoteBySymbol":
+                        return {"data": {"getQuoteBySymbol": {"symbol": sym, "exchangeName": venues[sym], "price": 1.0} if sym in venues else None}}
+                    return {"data": {"getTimeSeriesData": [{"dateTime": "2026-02-02T16:00:00-05:00", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}] if sym in venues else []}}
+                rec = {"symbol": "QIMC", "exchange": "", "currency": "CAD", "kind": "Shares"}
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    # A record with no venue asks for the bare form, gets nothing, and
+                    # resolves the form whose quote names a venue: remembered from then on.
+                    bars, _ = market.fetch_history(rec, "2026-02-01", "2026-02-03")
+                self.assertEqual(len(bars), 1)
+                self.assertEqual([s for op, s in asked if op == "getTimeSeriesData"], ["QIMC", "QIMC:CNX"])
+                self.assertEqual([s for op, s in asked if op == "getQuoteBySymbol"], ["QIMC", "QIMC:CNX"], "the bare form is probed first, the CSE form answers")
+                self.assertEqual(market.tmx_remembered("QIMC"), "QIMC:CNX")
+                asked.clear()
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    market.fetch_history(rec, "2026-02-01", "2026-02-03")
+                self.assertEqual(asked, [("getTimeSeriesData", "QIMC:CNX")], "remembered: no probing, straight to the right form")
+                # A Canadian record never resolves to a US form, and a miss is remembered for a day.
+                asked.clear()
+                hg = {"symbol": "HG", "exchange": "CSE", "currency": "CAD", "kind": "Shares"}
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    self.assertEqual(market.fetch_history(hg, "2026-02-01", "2026-02-03")[0], [])
+                    self.assertEqual(market.fetch_history(hg, "2026-02-01", "2026-02-03")[0], [])
+                probes = [s for op, s in asked if op == "getQuoteBySymbol"]
+                self.assertEqual(probes, ["HG:CNX", "HG", "HG:AQL"], "only the forms for the record's currency, once")
+                self.assertEqual(market.tmx_remembered("HG"), "HG")
+                # The quote path and the record path resolve the same way.
+                asked.clear()
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    self.assertEqual(market.fetch_tmx_quote("QIMC")["exchange"], "Canadian Securities Exchange")
+                self.assertEqual(asked, [("getQuoteBySymbol", "QIMC:CNX")])
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_crypto_candles_come_from_coinbase_in_the_position_currency(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                store.upsert_fx_rates({"2026-02-05": 1.40, "2026-02-06": 1.50})   # Thursday, Friday
+                fetched = []
+                def get(url, *a, **k):
+                    fetched.append(url)
+                    if "finance.yahoo.com" in url:
+                        raise OSError("404")   # Yahoo has no CAD pair for these
+                    if "/products/PEPE-CAD" in url or "/products/NOPE-" in url:
+                        raise OSError("404")
+                    if url.endswith("/products/PEPE-USD"):
+                        return json.dumps({"id": "PEPE-USD", "status": "online"})
+                    if url.endswith("/products/USDC-CAD"):
+                        return json.dumps({"id": "USDC-CAD", "status": "online"})
+                    if "/candles?" in url:
+                        # Friday 2026-02-06 and Sunday 2026-02-08 (Friday's rate), then a day with no rate at all
+                        return json.dumps([[1770336000, 1.0, 3.0, 2.0, 2.5, 10], [1770508800, 1.0, 3.0, 2.0, 2.5, 10], [1769040000, 1.0, 3.0, 2.0, 2.5, 10]])
+                    raise OSError("unexpected " + url)
+                pepe = {"symbol": "PEPE", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}
+                self.assertEqual(market.history_candidates(pepe), [("coinbase", "PEPE-CAD"), ("yahoo", "PEPE-CAD"), ("coinbase", "PEPE-USD"), ("yahoo", "PEPE-USD")])
+                with mock.patch.object(market, "_get_text", side_effect=get):
+                    self.assertEqual(market.coinbase_market("PEPE-CAD"), "")
+                    self.assertEqual(market.coinbase_market("USDC-CAD"), "USDC-CAD")
+                    n = len(fetched)
+                    self.assertEqual(market.coinbase_market("PEPE-CAD"), "")
+                    self.assertEqual(market.coinbase_market("USDC-CAD"), "USDC-CAD")
+                    self.assertEqual(len(fetched), n, "markets are remembered, misses for a day")
+                    bars, source = market.fetch_history(pepe, "2026-01-20", "2026-02-09")
+                self.assertEqual(source, "coinbase")
+                self.assertEqual(store.get_meta("bars_source:PEPE"), "coinbase|PEPE-USD", "the candidate that answered is remembered")
+                self.assertEqual([(b["date"], b["open"], b["high"], b["low"], b["close"], b["volume"]) for b in bars],
+                                 [("2026-02-06", 3.0, 4.5, 1.5, 3.75, 10), ("2026-02-08", 3.0, 4.5, 1.5, 3.75, 10)],
+                                 "USD candles at the Bank of Canada rate of the day (Sunday takes Friday's); the day with no rate within a week is dropped")
+                self.assertEqual(market.in_position_currency([{"time": 1770336000, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 0}], "CAD", "CAD")[0]["close"], 1, "a CAD market is used as is")
+                self.assertEqual(market.in_position_currency([{"time": 1770336000, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 0}], "EUR", "CAD"), [], "nothing else is converted")
+                self.assertEqual(market.intraday_reach(pepe), market.COINBASE_EXCHANGE_START)
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_yahoo_is_asked_gently(self):
+        from urllib.error import HTTPError
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                market._yahoo_backoff_until = 0.0
+                market._yahoo_next_at = 0.0
+                calls = []
+                def get(url, *a, **k):
+                    calls.append(url)
+                    if "/GONE.CN?" in url:
+                        raise HTTPError(url, 404, "Not Found", {}, None)
+                    raise HTTPError(url, 429, "Too Many Requests", {}, None)
+                with mock.patch.object(market, "_get_text", side_effect=get), mock.patch.object(market, "YAHOO_MIN_INTERVAL_SEC", 0):
+                    self.assertEqual(market.fetch_yahoo("GONE.CN", 0, 1, "1d"), [])
+                    self.assertEqual(market.fetch_yahoo("GONE.CN", 0, 1, "1d"), [])
+                    self.assertEqual(len(calls), 1, "a symbol Yahoo does not carry is not asked again today")
+                    self.assertEqual(market.fetch_yahoo("BUSY.TO", 0, 1, "1d"), [])
+                    self.assertEqual(market.fetch_yahoo("BUSY.TO", 0, 1, "1d"), [])
+                    self.assertEqual(market.fetch_yahoo("OTHER.TO", 0, 1, "60m"), [])
+                    self.assertEqual(len(calls), 2, "after a 429 nothing is asked for a while")
+                market._yahoo_backoff_until = 0.0
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_background_sweep_never_asks_yahoo(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+                old = {"symbol": "TSLA", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares", "start": "2025-01-15"}   # past TMX's year, within Yahoo's two
+                calls = []
+                with mock.patch.object(market, "_get_text", side_effect=lambda url, *a, **k: calls.append(url) or (_ for _ in ()).throw(OSError("no"))), mock.patch.object(market, "_post_json", side_effect=OSError("no")):
+                    self.assertEqual(market.archive_intraday([old], now=now), ["TSLA"])
+                self.assertEqual([u for u in calls if "yahoo" in u], [], "the sweep leaves the rate-limited source alone")
+                with mock.patch.object(market, "_get_text", side_effect=lambda url, *a, **k: calls.append(url) or (_ for _ in ()).throw(OSError("no"))), mock.patch.object(market, "_post_json", side_effect=OSError("no")):
+                    market.ensure_intraday(old, "1h", "2025-01-15", "2025-02-01", now=now)
+                self.assertEqual(len([u for u in calls if "yahoo" in u]), 1, "a chart someone opens does ask it")
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_a_timeframe_a_fetch_could_not_supply_is_not_asked_for_again_for_a_while(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+                rec = {"symbol": "TSLA", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}
+                self.assertFalse(market.intraday_ready(rec, "1h", "2025-01-15", now))
+                with mock.patch.object(market, "fetch_intraday", return_value=({}, "")) as f:
+                    self.assertEqual(market.ensure_intraday(rec, "1h", "2025-01-15", "2025-02-01", now=now), [])
+                    self.assertEqual(f.call_count, 1)
+                self.assertTrue(market.intraday_ready(rec, "1h", "2025-01-15", now), "nothing to wait for after a miss")
+                self.assertEqual(market.offered_timeframes(rec, "2025-01-15", now), ["1d", "1w", "1M"], "the chart falls back to daily instead of an empty hourly view")
+                later = now + timedelta(minutes=market.INTRADAY_RETRY_MINUTES + 1)
+                self.assertFalse(market.intraday_ready(rec, "1h", "2025-01-15", later), "tried again after the retry window")
+                self.assertEqual(market.offered_timeframes(rec, "2025-01-15", later), ["1h", "4h", "1d", "1w", "1M"])
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_history_chain_falls_through_to_yahoo_and_remembers_the_winner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                yahoo = {"chart": {"result": [{"meta": {"exchangeTimezoneName": "America/Toronto", "gmtoffset": -14400}, "timestamp": [1770042600, 1770129000],
+                         "indicators": {"quote": [{"open": [1.0, 1.1], "high": [1.2, 1.3], "low": [0.9, 1.0], "close": [1.1, 1.2], "volume": [10, 20]}]}}]}}
+                asked = []
+                def get(url, *a, **k):
+                    asked.append(url)
+                    if "/QMET.CN?" in url:
+                        return json.dumps(yahoo)
+                    raise OSError("404")
+                posts = []
+                def post(url, body, *a, **k):
+                    posts.append(body["variables"]["symbol"])
+                    return {"data": {"getTimeSeriesData": [], "getQuoteBySymbol": None}}
+                rec = {"symbol": "QMET", "exchange": "CSE", "currency": "CAD", "kind": "Shares"}
+                self.assertEqual(market.history_candidates(rec), [("tmx", "QMET:CNX"), ("yahoo", "QMET.CN"), ("yahoo", "QMET.TO"), ("yahoo", "QMET.V"), ("yahoo", "QMET.NE")], "TMX first, then Yahoo with the venue's suffix first")
+                with mock.patch.object(market, "_get_text", side_effect=get), mock.patch.object(market, "_post_json", side_effect=post):
+                    bars, source = market.fetch_history(rec, "2026-02-01", "2026-02-05")
+                self.assertEqual(source, "yahoo")
+                self.assertEqual([(b["date"], b["open"], b["close"]) for b in bars], [("2026-02-02", 1.0, 1.1), ("2026-02-03", 1.1, 1.2)], "Yahoo's daily stamps fall on the exchange's local day (February: standard time, not the offset Yahoo reports today)")
+                self.assertTrue(posts, "TMX was asked first")
+                self.assertEqual(store.get_meta("bars_source:QMET"), "yahoo|QMET.CN")
+                posts.clear(); asked.clear()
+                with mock.patch.object(market, "_get_text", side_effect=get), mock.patch.object(market, "_post_json", side_effect=post):
+                    market.fetch_history(rec, "2026-02-01", "2026-02-05")
+                self.assertEqual(posts, [], "the remembered winner is tried first; TMX is not asked again")
+                self.assertEqual(len(asked), 1)
+                # A crypto pair Coinbase has no candles for falls through to Yahoo's own CAD pair.
+                usdc = {"symbol": "USDC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}
+                def get2(url, *a, **k):
+                    if url.endswith("/products/USDC-CAD"):
+                        return json.dumps({"id": "USDC-CAD"})
+                    if "/candles?" in url:
+                        return "[]"
+                    if "/USDC-CAD?" in url:
+                        return json.dumps(yahoo)
+                    raise OSError("404")
+                with mock.patch.object(market, "_get_text", side_effect=get2):
+                    bars, source = market.fetch_history(usdc, "2026-02-01", "2026-02-05")
+                self.assertEqual((source, len(bars)), ("yahoo", 2))
+                self.assertEqual(store.get_meta("bars_source:USDC"), "yahoo|USDC-CAD")
+                # A source whose bars start well after the span does not win with a partial
+                # answer when the next source has the earlier days; when no source reaches
+                # the start, the one reaching furthest back wins.
+                store.set_meta("bars_source:USDC", "")
+                late = [[1770508800, 1.0, 1.0, 1.0, 1.4, 1]]   # Coinbase: one candle on 2026-02-08 only
+                def get3(url, *a, **k):
+                    if url.endswith("/products/USDC-CAD"):
+                        return json.dumps({"id": "USDC-CAD"})
+                    if "/candles?" in url:
+                        return json.dumps(late)
+                    if "/USDC-CAD?" in url:
+                        return json.dumps(yahoo)   # 2026-02-02 and 2026-02-03
+                    raise OSError("404")
+                with mock.patch.object(market, "_get_text", side_effect=get3):
+                    bars, source = market.fetch_history(usdc, "2026-01-20", "2026-02-09")
+                self.assertEqual((source, bars[0]["date"]), ("yahoo", "2026-02-02"), "Yahoo reaches further back than Coinbase for this span")
+                with mock.patch.object(market, "_get_text", side_effect=get3):
+                    bars, source = market.fetch_history(usdc, "2026-02-01", "2026-02-09")
+                self.assertEqual(source, "yahoo", "remembered, and it covers the span")
+                store.set_meta("bars_source:USDC", "")
+                with mock.patch.object(market, "_get_text", side_effect=get3):
+                    bars, source = market.fetch_history(usdc, "2026-02-06", "2026-02-09")
+                self.assertEqual(source, "coinbase", "a span Coinbase covers (within the slack) is answered by the first link")
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_partial_history_does_not_claim_the_earlier_days(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                rec = {"symbol": "USDC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}
+                now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+                late = [{"date": "2026-02-25", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
+                with mock.patch.object(market, "fetch_history", return_value=(late, "coinbase")) as f:
+                    market.ensure_history(rec, "2026-01-10", "2026-01-30", now=now)
+                    self.assertEqual(store.history_fetch("USDC")["start"], "2026-02-25", "covered from the first bar, not from the day asked")
+                    market.ensure_history(rec, "2026-01-10", "2026-01-30", now=now)
+                    self.assertEqual(f.call_count, 2, "the earlier span is asked for again")
+                    market.ensure_history(rec, "2026-03-01", "2026-03-10", now=now)
+                    self.assertEqual(f.call_count, 2, "a span the bars do cover is served from the store")
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
@@ -1627,12 +1877,12 @@ class MarketParseTest(unittest.TestCase):
                 bars = [{"date": "2026-09-03", "open": 4.83, "high": 4.95, "low": 4.73, "close": 4.75, "volume": 1}, {"date": "2026-09-04", "open": 4.8, "high": 4.8, "low": 4.68, "close": 4.75, "volume": 1}]
                 now = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
                 with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")) as f:
-                    out = market.ensure_history(rec, "2026-08-25", "2026-09-05", now=now)
+                    out = market.ensure_history(rec, "2026-08-28", "2026-09-05", now=now)
                 self.assertEqual([b["date"] for b in out], ["2026-09-03", "2026-09-04"])
-                self.assertEqual(f.call_args.args[1:3], ("2026-08-25", "2026-09-05"))
+                self.assertEqual(f.call_args.args[1:3], ("2026-08-28", "2026-09-05"))
                 # Same span, minutes later: served from the store, no fetch.
                 with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")) as f:
-                    market.ensure_history(rec, "2026-08-25", "2026-09-05", now=now + timedelta(minutes=5))
+                    market.ensure_history(rec, "2026-08-28", "2026-09-05", now=now + timedelta(minutes=5))
                 self.assertEqual(f.call_count, 0)
                 # An older span was never fetched: fetched from that start.
                 with mock.patch.object(market, "fetch_history", return_value=(bars, "tmx")) as f:
