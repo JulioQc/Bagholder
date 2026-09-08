@@ -1423,16 +1423,22 @@ def collapse_trade(gid, slices, locked, status, acts_by_id, securities, journal)
             if s.get(k) and s[k] not in ids:
                 ids.append(s[k])
     fills = [_fill_row(acts_by_id[i]) for i in ids if i in acts_by_id]
-    # label each fill by what it did in this trade, not by the broker's order type
+    # label each fill by what it did in this trade, not by the broker's order
+    # type: the open/close order types are option language, shares and crypto
+    # fills are simply bought or sold
     opened_ids = {s.get("buyActivityId") for s in slices}
     closed_ids = {s.get("sellActivityId") for s in slices}
     for f in fills:
-        if f["id"] in closed_ids and f["id"] not in opened_ids:
-            f["sub"] = "BUY TO CLOSE" if f["side"] == "BUY" else "SELL TO CLOSE"
-        elif f["id"] in opened_ids and f["id"] not in closed_ids:
-            f["sub"] = "BUY TO OPEN" if f["side"] == "BUY" else "SELL TO OPEN"
-        elif f["id"] in opened_ids and f["id"] in closed_ids:
-            f["sub"] = ("BUY" if f["side"] == "BUY" else "SELL") + " (close + open)"
+        opened, closed = f["id"] in opened_ids, f["id"] in closed_ids
+        side = "BUY" if f["side"] == "BUY" else "SELL"
+        if t0["kind"] != "Options":
+            f["sub"] = side + (" (close + open)" if opened and closed else "")
+        elif closed and not opened:
+            f["sub"] = side + " TO CLOSE"
+        elif opened and not closed:
+            f["sub"] = side + " TO OPEN"
+        elif opened and closed:
+            f["sub"] = side + " (close + open)"
     fills.sort(key=lambda f: f["when"], reverse=True)
     open_side = "BUY" if t0["openDirection"] == "LONG" else "SELL"
     opens = [f for f in fills if f["side"] == open_side]
