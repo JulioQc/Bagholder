@@ -140,6 +140,7 @@ final class Book: ObservableObject {
     private(set) var journal = JournalStore.load()
     private var task: Task<Void, Never>?
     private var marketTask: Task<Void, Never>?
+    private var loginActive = false
     private var generation = 0
     private var buildGeneration = 0
     private var noNewShownAt: Date?
@@ -180,6 +181,8 @@ final class Book: ObservableObject {
 
     /// On appear: a saved pull is shown at once; the session pulls when a sync is due.
     func handleAppear() {
+        // the password manager's sheet takes the scene inactive and back; nothing restarts behind the login
+        if loginActive { return }
         startMarketLoop()
         guard connected, phase != .pulling else { return }
         if result == nil || Self.activityPullDue(lastSync: lastSync) { pull() }
@@ -241,6 +244,10 @@ final class Book: ObservableObject {
 
     /// Get the login page loading before the user taps Connect, so it appears at once.
     func warmLogin() { LoginWeb.shared.warm() }
+
+    /// While the login sheet is up nothing behind it needs quotes; the loop resumes when it closes.
+    func loginShown() { loginActive = true; marketTask?.cancel(); marketTask = nil }
+    func loginHidden() { loginActive = false; startMarketLoop() }
 
     func disconnect() {
         task?.cancel()
@@ -403,8 +410,8 @@ final class Book: ObservableObject {
             await MainActor.run { [weak self] in
                 guard let self, gen == self.buildGeneration else { return }
                 self.base = b
-                self.view = BHModel.buildView(b, self.filters)
-                _ = v
+                // the view was built off the main thread; only redo it here if the filters moved meanwhile
+                self.view = self.filters == filters ? v : BHModel.buildView(b, self.filters)
             }
         }
     }
@@ -556,6 +563,8 @@ struct ConnectLoginView: View {
                 isPresented = false
             }
             .ignoresSafeArea(edges: .bottom)
+            .onAppear { book.loginShown() }
+            .onDisappear { book.loginHidden() }
             .navigationTitle("Connect Wealthsimple")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { LoginWeb.shared.endCapture(); isPresented = false } } }

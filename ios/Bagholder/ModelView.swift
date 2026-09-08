@@ -9,13 +9,13 @@ struct BHEquityPoint {
     var dep: Double?
 }
 
-struct BHRange {
+struct BHRange: Equatable {
     var op = ">"
     var v: Double?
 }
 
 /// One filter set, the shape clean_filters produces.
-struct BHFilters {
+struct BHFilters: Equatable {
     static let listKeys = ["account", "symbol", "grade", "tag", "kind", "exchange", "side", "result"]
     static let rangeKeys = ["price", "hold", "pnl", "qty"]
     var lists: [String: [String]] = Dictionary(uniqueKeysWithValues: listKeys.map { ($0, []) })
