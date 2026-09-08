@@ -66,6 +66,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.path
@@ -135,26 +137,20 @@ fun App() {
         ConnectScreen(onSession = { c, w -> showConnect = false; Book.connect(c, w) }, onCancel = { showConnect = false })
         return
     }
-    trade?.let { id ->
-        BackHandler { trade = null }
-        TradeDetailScreen(id, onBack = { trade = null })
-        return
-    }
-    position?.let { id ->
-        BackHandler { position = null }
-        PositionDetailScreen(id, onBack = { position = null })
-        return
-    }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
-            when (tab) {
-                0 -> DashboardScreen(chrome, onTrade = { trade = it }, onTrades = { tab = 1 })
-                1 -> TradesScreen(chrome, onTrade = { trade = it })
-                2 -> PositionsScreen(chrome, onPosition = { position = it })
+            // a detail sits over its tab with the tab bar still below it, as on the phone
+            val t0 = trade; val p0 = position
+            when {
+                t0 != null -> { BackHandler { trade = null }; TradeDetailScreen(t0, onBack = { trade = null }) }
+                p0 != null -> { BackHandler { position = null }; PositionDetailScreen(p0, onBack = { position = null }) }
+                tab == 0 -> DashboardScreen(chrome, onTrade = { trade = it }, onTrades = { tab = 1 })
+                tab == 1 -> TradesScreen(chrome, onTrade = { trade = it })
+                tab == 2 -> PositionsScreen(chrome, onPosition = { position = it })
                 else -> CashflowScreen(chrome)
             }
         }
-        TabBar(tab) { tab = it }
+        TabBar(tab) { trade = null; position = null; tab = it }
     }
     if (showFilters) {
         ModalBottomSheet(onDismissRequest = { showFilters = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = t.bg) {
@@ -168,8 +164,19 @@ fun App() {
     }
 }
 
-/** The iOS tab bar's symbols (gauge, list, briefcase, dollar circle), drawn as 24-pt outline vectors. */
+/** The iOS symbols the header and tab bar use (bag, filter, menu, gauge, list, briefcase, dollar circle), drawn as 24-pt outline vectors. */
 object TabIcons {
+    val bag: ImageVector by lazy { outline("bag") {
+        moveTo(5f, 9f); lineTo(19f, 9f); lineTo(18f, 20f); lineTo(6f, 20f); close()
+        moveTo(8.5f, 9f); lineTo(8.5f, 7.5f); arcTo(3.5f, 3.5f, 0f, false, true, 15.5f, 7.5f); lineTo(15.5f, 9f)
+    } }
+    val filter: ImageVector by lazy { outline("filter") {
+        moveTo(4f, 7f); lineTo(20f, 7f); moveTo(7f, 12f); lineTo(17f, 12f); moveTo(10f, 17f); lineTo(14f, 17f)
+    } }
+    val menu: ImageVector by lazy { outline("menu") {
+        moveTo(4f, 7f); lineTo(20f, 7f); moveTo(4f, 12f); lineTo(20f, 12f); moveTo(4f, 17f); lineTo(20f, 17f)
+    } }
+    val back: ImageVector by lazy { outline("back") { moveTo(14.5f, 6f); lineTo(8.5f, 12f); lineTo(14.5f, 18f) } }
     private fun outline(name: String, draw: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
             path(fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) { draw() }
@@ -224,7 +231,7 @@ fun Header(chrome: Chrome) {
     val t = LocalTheme.current
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(t.accent900), contentAlignment = Alignment.Center) {
-            Text("B", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = t.accent300)
+            Icon(TabIcons.bag, contentDescription = null, tint = t.accent300, modifier = Modifier.size(16.dp))
         }
         Spacer(Modifier.width(10.dp))
         Text("Bagholder", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = t.ink)
@@ -234,12 +241,12 @@ fun Header(chrome: Chrome) {
         Text(Book.headerStatus, fontSize = 13.sp, color = if (Book.statusIsError) t.neg else t.ink60, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
         Spacer(Modifier.width(8.dp))
         Box(Modifier.size(38.dp).clip(RoundedCornerShape(9.dp)).background(t.surface).clickable { chrome.onFilters() }, contentAlignment = Alignment.Center) {
-            Text("≡", fontSize = 18.sp, color = t.ink75)
+            Icon(TabIcons.filter, contentDescription = null, tint = t.ink75, modifier = Modifier.size(18.dp))
             if (Book.filters.isActive) Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(8.dp).clip(RoundedCornerShape(4.dp)).background(t.accent))
         }
         Spacer(Modifier.width(8.dp))
         Box(Modifier.size(38.dp).clip(RoundedCornerShape(9.dp)).background(t.surface).clickable { chrome.onMenu() }, contentAlignment = Alignment.Center) {
-            Text("⋯", fontSize = 18.sp, color = t.ink75)
+            Icon(TabIcons.menu, contentDescription = null, tint = t.ink75, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -667,12 +674,11 @@ fun TradeCard(tr: Trade, onClick: () -> Unit) {
 @Composable
 fun DetailBar(title: String, onBack: () -> Unit) {
     val t = LocalTheme.current
-    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("‹ Back", fontSize = 16.sp, color = t.accent, modifier = Modifier.clickable(onClick = onBack).padding(8.dp))
-        Spacer(Modifier.weight(1f))
-        Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
-        Spacer(Modifier.weight(1f))
-        Spacer(Modifier.width(64.dp))
+    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(19.dp)).background(t.surface).clickable(onClick = onBack).align(Alignment.CenterStart), contentAlignment = Alignment.Center) {
+            Icon(TabIcons.back, contentDescription = null, tint = t.ink, modifier = Modifier.size(18.dp))
+        }
+        Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = t.ink, modifier = Modifier.align(Alignment.Center))
     }
 }
 
@@ -1069,10 +1075,13 @@ fun FiltersSheet(onDone: () -> Unit) {
             }.padding(8.dp))
         }
         Spacer(Modifier.height(8.dp))
+        // the search takes focus as the sheet opens, as on the phone
+        val searchFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { searchFocus.requestFocus() }
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(t.well).padding(10.dp)) {
             if (query.isEmpty()) Text("Search symbols, accounts, tags…", fontSize = 16.sp, color = t.ink55)
             BasicTextField(query, { query = it }, textStyle = TextStyle(color = t.ink, fontSize = 16.sp), cursorBrush = SolidColor(t.accent), singleLine = true,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters))
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters), modifier = Modifier.focusRequester(searchFocus))
         }
         Spacer(Modifier.height(12.dp))
         key(tick) {

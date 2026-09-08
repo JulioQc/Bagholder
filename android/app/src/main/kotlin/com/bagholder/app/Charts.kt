@@ -452,8 +452,9 @@ fun CandleChart(bars: List<Bar>, fills: List<FillRow>, atClose: Boolean = false,
                     val cx = i * pitch + pitch / 2
                     val py = y(if (atClose) bars[i].close else f.price)
                     val tri = Path()
-                    if (f.side == "BUY") { tri.moveTo(cx, py + 4); tri.lineTo(cx - 5, py + 12); tri.lineTo(cx + 5, py + 12) }
-                    else { tri.moveTo(cx, py - 4); tri.lineTo(cx - 5, py - 12); tri.lineTo(cx + 5, py - 12) }
+                    val d4 = 4.dp.toPx(); val d5 = 5.dp.toPx(); val d12 = 12.dp.toPx()   // the phone's sizes, in dp not px
+                    if (f.side == "BUY") { tri.moveTo(cx, py + d4); tri.lineTo(cx - d5, py + d12); tri.lineTo(cx + d5, py + d12) }
+                    else { tri.moveTo(cx, py - d4); tri.lineTo(cx - d5, py - d12); tri.lineTo(cx + d5, py - d12) }
                     tri.close()
                     drawPath(tri, if (f.side == "BUY") t.accent else t.accent300)
                 }
