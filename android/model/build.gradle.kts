@@ -1,8 +1,21 @@
 // The Bagholder model for Android: a plain Kotlin library the app depends on,
 // a port of model.py. Its test runs fixtures/cases, the same files the Python
 // and Swift tests run.
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    kotlin("jvm") version "2.0.21"
+    kotlin("jvm")
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 dependencies {

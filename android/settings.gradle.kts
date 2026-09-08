@@ -13,3 +13,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Bagholder"
 include(":model")
+include(":app")
