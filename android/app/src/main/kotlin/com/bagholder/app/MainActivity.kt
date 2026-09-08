@@ -337,6 +337,7 @@ fun EmptyPage(chrome: Chrome) {
 fun DashboardScreen(chrome: Chrome, onTrade: (String) -> Unit, onTrades: () -> Unit) {
     val t = LocalTheme.current
     val v = Book.view
+    var equityPick by remember { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxSize()) {
         Header(chrome)
         FilterChips()
@@ -344,8 +345,11 @@ fun DashboardScreen(chrome: Chrome, onTrade: (String) -> Unit, onTrades: () -> U
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Tiles(v) }
             item {
-                Card("Equity curve") {
-                    if (v.equity.series.size > 1) EquityCurveChart(v.equity.series) else Muted("No equity history for this span.")
+                // the pressed day's equity at the card's top right; nothing when the chart is not pressed
+                Card("Equity", trailing = {
+                    equityPick?.let { i -> if (i in v.equity.series.indices) Text(Fmt.money(v.equity.series[i].v), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink) }
+                }) {
+                    if (v.equity.series.size > 1) EquityCurveChart(v.equity.series, equityPick, { equityPick = it }) else Muted("No equity history for this span.")
                 }
             }
             item { AnnualizedCard(v) }

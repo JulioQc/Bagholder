@@ -47,88 +47,70 @@ struct ChartPress: UIViewRepresentable {
     }
 }
 
-/// The equity series with a `$` axis and date labels; a long press reads the value and day.
+/// The equity series, edge to edge and scaled from its low to its high, with four
+/// date labels. A long press picks a day: the card shows the amount at its top right
+/// and the day sits under the finger at the bottom.
 struct EquityCurveChart: View {
     @Environment(\.theme) private var t
     let series: [BHEquityPoint]
-    var height: CGFloat = 220
-    @State private var pick: Int? = nil
+    @Binding var pick: Int?
+    var height: CGFloat = 160
 
     var body: some View {
         let vals = series.map { $0.v }
-        let hi = vals.max() ?? 1
-        let lo = 0.0
-        let ticks = Self.axisTicks(hi)
-        VStack(alignment: .leading, spacing: 6) {
-        HStack(spacing: 8) {
-            if let i = pick, series.indices.contains(i) {
-                Text(BHFmt.dayLabel(series[i].d)).font(.system(size: 13)).foregroundStyle(t.ink60)
-                Text(BHFmt.money(series[i].v)).font(.system(size: 13, weight: .semibold)).monospacedDigit().foregroundStyle(t.ink)
-            } else {
-                Text(" ").font(.system(size: 13))
-            }
-        }
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .trailing, spacing: 0) {
-                ForEach(Array(ticks.reversed().enumerated()), id: \.offset) { i, v in
-                    Text(BHFmt.wholeMoney(v)).font(.system(size: 11)).foregroundStyle(t.ink55)
-                    if i < ticks.count - 1 { Spacer(minLength: 0) }
+        let (lo, hi) = Self.range(vals)
+        VStack(spacing: 6) {
+            Canvas { ctx, size in
+                guard series.count > 1 else { return }
+                let n = CGFloat(series.count - 1)
+                func pt(_ i: Int) -> CGPoint {
+                    CGPoint(x: CGFloat(i) / n * size.width, y: size.height - CGFloat((vals[i] - lo) / (hi - lo)) * size.height)
+                }
+                var fill = Path()
+                fill.move(to: CGPoint(x: 0, y: size.height))
+                for i in series.indices { fill.addLine(to: pt(i)) }
+                fill.addLine(to: CGPoint(x: size.width, y: size.height))
+                fill.closeSubpath()
+                ctx.fill(fill, with: .linearGradient(Gradient(colors: [t.pos.opacity(0.22), t.pos.opacity(0.02)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+                var line = Path()
+                line.move(to: pt(0))
+                for i in 1..<series.count { line.addLine(to: pt(i)) }
+                ctx.stroke(line, with: .color(t.pos), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                if let i = pick, series.indices.contains(i) {
+                    let p = pt(i)
+                    var hair = Path(); hair.move(to: CGPoint(x: p.x, y: 0)); hair.addLine(to: CGPoint(x: p.x, y: size.height))
+                    ctx.stroke(hair, with: .color(t.hair), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    ctx.fill(Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)), with: .color(t.pos))
                 }
             }
             .frame(height: height)
-            VStack(spacing: 6) {
-                Canvas { ctx, size in
-                    guard series.count > 1, hi > lo else { return }
-                    let n = CGFloat(series.count - 1)
-                    let top = ticks.last ?? hi
-                    func pt(_ i: Int) -> CGPoint {
-                        CGPoint(x: CGFloat(i) / n * size.width, y: size.height - CGFloat((vals[i] - lo) / (top - lo)) * size.height)
-                    }
-                    for v in ticks {
-                        let y = size.height - CGFloat((v - lo) / (top - lo)) * size.height
-                        var g = Path(); g.move(to: CGPoint(x: 0, y: y)); g.addLine(to: CGPoint(x: size.width, y: y))
-                        ctx.stroke(g, with: .color(t.grid), lineWidth: 1)
-                    }
-                    var fill = Path()
-                    fill.move(to: CGPoint(x: 0, y: size.height))
-                    for i in series.indices { fill.addLine(to: pt(i)) }
-                    fill.addLine(to: CGPoint(x: size.width, y: size.height))
-                    fill.closeSubpath()
-                    ctx.fill(fill, with: .linearGradient(Gradient(colors: [t.pos.opacity(0.22), t.pos.opacity(0.02)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-                    var line = Path()
-                    line.move(to: pt(0))
-                    for i in 1..<series.count { line.addLine(to: pt(i)) }
-                    ctx.stroke(line, with: .color(t.pos), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-                    if let i = pick, series.indices.contains(i) {
-                        let p = pt(i)
-                        var hair = Path(); hair.move(to: CGPoint(x: p.x, y: 0)); hair.addLine(to: CGPoint(x: p.x, y: size.height))
-                        ctx.stroke(hair, with: .color(t.hair), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        ctx.fill(Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)), with: .color(t.pos))
-                    }
-                }
-                .frame(height: height)
-                .overlay(ChartPress { x, width in
-                    guard let x, width > 0, series.count > 1 else { pick = nil; return }
-                    pick = max(0, min(series.count - 1, Int((x / width * CGFloat(series.count - 1)).rounded())))
-                })
-                HStack {
-                    ForEach(Array(Self.dateLabels(series).enumerated()), id: \.offset) { i, l in
-                        if i > 0 { Spacer(minLength: 0) }
-                        Text(l).font(.system(size: 11)).foregroundStyle(t.ink55)
+            .overlay(ChartPress { x, width in
+                guard let x, width > 0, series.count > 1 else { pick = nil; return }
+                pick = max(0, min(series.count - 1, Int((x / width * CGFloat(series.count - 1)).rounded())))
+            })
+            GeometryReader { geo in
+                if let i = pick, series.indices.contains(i) {
+                    let x = CGFloat(i) / CGFloat(max(series.count - 1, 1)) * geo.size.width
+                    Text(BHFmt.dayLabel(series[i].d)).font(.system(size: 11, weight: .medium)).foregroundStyle(t.ink)
+                        .fixedSize().position(x: min(max(x, 36), geo.size.width - 36), y: 7)
+                } else {
+                    HStack {
+                        ForEach(Array(Self.dateLabels(series).enumerated()), id: \.offset) { i, l in
+                            if i > 0 { Spacer(minLength: 0) }
+                            Text(l).font(.system(size: 11)).foregroundStyle(t.ink55)
+                        }
                     }
                 }
             }
-        }
+            .frame(height: 14)
         }
     }
 
-    /// Four round `$` ticks from zero to just above the peak.
-    static func axisTicks(_ hi: Double) -> [Double] {
-        guard hi > 0 else { return [0, 1] }
-        let raw = hi / 3
-        let mag = pow(10, floor(log10(raw)))
-        let step = [1.0, 2.0, 2.5, 5.0, 10.0].map { $0 * mag }.first { $0 >= raw } ?? raw
-        return (0...3).map { Double($0) * step }
+    /// The series' low to its high, each padded by 4 % of the span so the line clears the edges.
+    static func range(_ vals: [Double]) -> (Double, Double) {
+        let lo = vals.min() ?? 0, hi = vals.max() ?? 1
+        let span = hi - lo > 0 ? hi - lo : max(abs(hi), 1)
+        return (lo - span * 0.04, hi + span * 0.04)
     }
 
     static func dateLabels(_ series: [BHEquityPoint]) -> [String] {

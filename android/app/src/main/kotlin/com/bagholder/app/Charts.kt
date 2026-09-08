@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -123,63 +124,68 @@ private fun Modifier.pressReadout(count: Int, onPick: (Int?) -> Unit): Modifier 
         onDragEnd = { onPick(null) }, onDragCancel = { onPick(null) })
 }
 
-/** The equity series with a `$` axis and date labels; a long press reads the value and day. */
+/**
+ * The equity series, edge to edge and scaled from its low to its high, with four date
+ * labels. A long press picks a day: the card shows the amount at its top right and the
+ * day sits under the finger at the bottom.
+ */
 @Composable
-fun EquityCurveChart(series: List<EquityPoint>, height: Int = 220) {
+fun EquityCurveChart(series: List<EquityPoint>, pick: Int?, onPick: (Int?) -> Unit, height: Int = 160) {
     val t = LocalTheme.current
     val vals = series.map { it.v }
+    val (lo, hi) = equityRange(vals)
+    Column(Modifier.fillMaxWidth()) {
+        Canvas(Modifier.fillMaxWidth().height(height.dp).pointerInput(series) {
+            // the nearest point to the finger, from the first touch on
+            val n = series.size
+            detectDragGesturesAfterLongPress(
+                onDragStart = { pos -> if (n > 1) onPick((pos.x / size.width * (n - 1)).roundToInt().coerceIn(0, n - 1)) },
+                onDrag = { change, _ -> if (n > 1) onPick((change.position.x / size.width * (n - 1)).roundToInt().coerceIn(0, n - 1)) },
+                onDragEnd = { onPick(null) }, onDragCancel = { onPick(null) })
+        }) {
+            if (series.size < 2) return@Canvas
+            val n = (series.size - 1).toFloat()
+            fun pt(i: Int) = Offset(i / n * size.width, size.height - (((vals[i] - lo) / (hi - lo)) * size.height).toFloat())
+            val fill = Path().apply {
+                moveTo(0f, size.height)
+                for (i in series.indices) lineTo(pt(i).x, pt(i).y)
+                lineTo(size.width, size.height)
+                close()
+            }
+            drawPath(fill, Brush.verticalGradient(listOf(t.pos.copy(alpha = 0.22f), t.pos.copy(alpha = 0.02f))))
+            val line = Path().apply {
+                moveTo(pt(0).x, pt(0).y)
+                for (i in 1 until series.size) lineTo(pt(i).x, pt(i).y)
+            }
+            drawPath(line, t.pos, style = Stroke(width = 1.6.dp.toPx()))
+            pick?.let { i ->
+                val p = pt(i)
+                drawLine(t.hair, Offset(p.x, 0f), Offset(p.x, size.height), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
+                drawCircle(t.pos, 4.dp.toPx(), p)
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        BoxWithConstraints(Modifier.fillMaxWidth().height(14.dp)) {
+            val i = pick
+            if (i != null && i in series.indices) {
+                val x = i.toFloat() / max(series.size - 1, 1) * maxWidth.value
+                Text(Fmt.dayLabel(series[i].d), fontSize = 11.sp, fontWeight = FontWeight.Medium, color = t.ink, maxLines = 1,
+                    modifier = Modifier.offset(x = (x - 36f).coerceIn(0f, maxWidth.value - 72f).dp).width(72.dp), textAlign = TextAlign.Center)
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    for (l in equityDateLabels(series)) AxisLabel(l)
+                }
+            }
+        }
+    }
+}
+
+/** The series' low to its high, each padded by 4 % of the span so the line clears the edges. */
+fun equityRange(vals: List<Double>): Pair<Double, Double> {
+    val lo = vals.minOrNull() ?: 0.0
     val hi = vals.maxOrNull() ?: 1.0
-    val ticks = axisTicks(hi)
-    val top = ticks.last()
-    var pick by remember { mutableStateOf<Int?>(null) }
-    Column {
-    Readout(pick?.let { i -> listOf(Fmt.dayLabel(series[i].d) to t.ink60, Fmt.money(series[i].v) to t.ink) })
-    Row(Modifier.fillMaxWidth()) {
-        Column(Modifier.height(height.dp), verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.End) {
-            for (v in ticks.reversed()) AxisLabel(Fmt.wholeMoney(v))
-        }
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Canvas(Modifier.fillMaxWidth().height(height.dp).pointerInput(series) {
-                // the nearest point to the finger, from the first touch on
-                val n = series.size
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { pos -> if (n > 1) pick = (pos.x / size.width * (n - 1)).roundToInt().coerceIn(0, n - 1) },
-                    onDrag = { change, _ -> if (n > 1) pick = (change.position.x / size.width * (n - 1)).roundToInt().coerceIn(0, n - 1) },
-                    onDragEnd = { pick = null }, onDragCancel = { pick = null })
-            }) {
-                if (series.size < 2 || top <= 0) return@Canvas
-                val n = (series.size - 1).toFloat()
-                fun pt(i: Int) = Offset(i / n * size.width, size.height - ((vals[i] / top) * size.height).toFloat())
-                for (v in ticks) {
-                    val y = size.height - ((v / top) * size.height).toFloat()
-                    drawLine(t.grid, Offset(0f, y), Offset(size.width, y), 1f)
-                }
-                val fill = Path().apply {
-                    moveTo(0f, size.height)
-                    for (i in series.indices) lineTo(pt(i).x, pt(i).y)
-                    lineTo(size.width, size.height)
-                    close()
-                }
-                drawPath(fill, Brush.verticalGradient(listOf(t.pos.copy(alpha = 0.22f), t.pos.copy(alpha = 0.02f))))
-                val line = Path().apply {
-                    moveTo(pt(0).x, pt(0).y)
-                    for (i in 1 until series.size) lineTo(pt(i).x, pt(i).y)
-                }
-                drawPath(line, t.pos, style = Stroke(width = 1.6.dp.toPx()))
-                pick?.let { i ->
-                    val p = pt(i)
-                    drawLine(t.hair, Offset(p.x, 0f), Offset(p.x, size.height), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
-                    drawCircle(t.pos, 4.dp.toPx(), p)
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                for (l in equityDateLabels(series)) AxisLabel(l)
-            }
-        }
-    }
-    }
+    val span = if (hi - lo > 0) hi - lo else max(abs(hi), 1.0)
+    return (lo - span * 0.04) to (hi + span * 0.04)
 }
 
 fun equityDateLabels(series: List<EquityPoint>): List<String> {

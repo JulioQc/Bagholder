@@ -325,6 +325,7 @@ struct DashboardScreen: View {
     let chrome: Chrome
     @State private var symbolSort = "pnl"
     @State private var symbolDesc = true
+    @State private var equityPick: Int? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -334,8 +335,8 @@ struct DashboardScreen: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 12) {
                         tiles(v)
-                        Card(title: "Equity curve") {
-                            if v.equity.series.count > 1 { EquityCurveChart(series: v.equity.series) }
+                        Card(title: "Equity", trailing: AnyView(equityAmount(v))) {
+                            if v.equity.series.count > 1 { EquityCurveChart(series: v.equity.series, pick: $equityPick) }
                             else { Text("No equity history for this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
                         }
                         annualized(v)
@@ -424,6 +425,15 @@ struct DashboardScreen: View {
                     Divider().overlay(t.hair)
                     Text("Outperformed \(v.benchmarkLabel) in \(beat) of \(v.years.count) years.").font(.system(size: 13)).foregroundStyle(t.ink60)
                 }
+            }
+        }
+    }
+
+    /// The pressed day's equity, at the card's top right; nothing when the chart is not pressed.
+    private func equityAmount(_ v: BHView) -> some View {
+        Group {
+            if let i = equityPick, v.equity.series.indices.contains(i) {
+                Text(BHFmt.money(v.equity.series[i].v)).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(t.ink)
             }
         }
     }
