@@ -170,8 +170,8 @@ object TabIcons {
         moveTo(5f, 9f); lineTo(19f, 9f); lineTo(18f, 20f); lineTo(6f, 20f); close()
         moveTo(8.5f, 9f); lineTo(8.5f, 7.5f); arcTo(3.5f, 3.5f, 0f, false, true, 15.5f, 7.5f); lineTo(15.5f, 9f)
     } }
-    val filter: ImageVector by lazy { outline("filter") {
-        moveTo(4f, 7f); lineTo(20f, 7f); moveTo(7f, 12f); lineTo(17f, 12f); moveTo(10f, 17f); lineTo(14f, 17f)
+    val filter: ImageVector by lazy { outline("funnel") {
+        moveTo(4f, 5f); lineTo(20f, 5f); lineTo(14f, 12.5f); lineTo(14f, 19f); lineTo(10f, 21f); lineTo(10f, 12.5f); close()
     } }
     val menu: ImageVector by lazy { outline("menu") {
         moveTo(4f, 7f); lineTo(20f, 7f); moveTo(4f, 12f); lineTo(20f, 12f); moveTo(4f, 17f); lineTo(20f, 17f)

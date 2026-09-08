@@ -83,6 +83,17 @@ private struct TabBar: View {
 
 // MARK: - shared pieces
 
+/// The filter button's funnel: SF Symbols has none, so it is the same outline the Android app draws.
+struct FunnelIcon: Shape {
+    func path(in r: CGRect) -> Path {
+        let u = r.width / 24
+        var p = Path()
+        p.move(to: CGPoint(x: 4 * u, y: 5 * u)); p.addLine(to: CGPoint(x: 20 * u, y: 5 * u)); p.addLine(to: CGPoint(x: 14 * u, y: 12.5 * u))
+        p.addLine(to: CGPoint(x: 14 * u, y: 19 * u)); p.addLine(to: CGPoint(x: 10 * u, y: 21 * u)); p.addLine(to: CGPoint(x: 10 * u, y: 12.5 * u)); p.closeSubpath()
+        return p
+    }
+}
+
 /// Brand, sync status, filter and menu buttons.
 struct Header: View {
     @Environment(\.theme) private var t
@@ -104,7 +115,7 @@ struct Header: View {
                 .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.85)
             Button(action: chrome.onFilters) {
                 ZStack(alignment: .topTrailing) {
-                    Image(systemName: "line.3.horizontal.decrease").font(.system(size: 15, weight: .medium)).foregroundStyle(t.ink75)
+                    FunnelIcon().stroke(t.ink75, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)).frame(width: 18, height: 18)
                         .frame(width: 38, height: 38).background(RoundedRectangle(cornerRadius: 9).fill(t.surface))
                     if book.filters.isActive { Circle().fill(t.accent).frame(width: 8, height: 8).offset(x: 2, y: -2) }
                 }
