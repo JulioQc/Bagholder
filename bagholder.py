@@ -534,7 +534,7 @@ RESTART_CODE = 3
 APP_DIR = Path(__file__).resolve().parent
 UPDATE_HEALTHY_SEC = 20          # a restarted server alive this long is a good update
 UPDATE_MAX_BYTES = 50 * 1024 * 1024
-UPDATE_CHECK_HOURS = 24
+UPDATE_CHECK_HOURS = 1   # a release is a click away now, so the check is hourly and at every start
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
@@ -4061,7 +4061,7 @@ def main():
     t = threading.Thread(target=auto_sync_loop, name="bagholder-auto-sync", daemon=True)
     t.start()
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
-    threading.Thread(target=check_for_update_if_due, name="bagholder-update-check", daemon=True).start()
+    threading.Thread(target=check_for_update, name="bagholder-update-check", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()

@@ -59,7 +59,7 @@ Per-trade figures are in the trade's currency. Anything that adds trades togethe
 
 ## Versions
 
-Releases on GitHub are the versions, tagged `vMAJOR.MINOR.PATCH`. The header shows the version you are running, and once a day the app checks for a newer release and shows an **Update to vX.Y.Z** button in the header when there is one. Press it: the app downloads the release, installs it and restarts itself, and the page reloads on the new version. Nothing to type. A git checkout with local changes is asked to pull by hand instead.
+Releases on GitHub are the versions, tagged `vMAJOR.MINOR.PATCH`. The header shows the version you are running, and at start and every hour the app checks for a newer release and shows an **Update to vX.Y.Z** button in the header when there is one. Press it: the app downloads the release, installs it and restarts itself, and the page reloads on the new version. Nothing to type. A git checkout with local changes is asked to pull by hand instead.
 
 ## Data
 

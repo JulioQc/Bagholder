@@ -128,9 +128,9 @@ class StoreTest(unittest.TestCase):
         with mock.patch.object(bagholder, "_http_json", return_value={"tag_name": older, "html_url": "u"}):
             self.assertFalse(bagholder.check_for_update(now)["updateAvailable"], "an older release never flags")
         with mock.patch.object(bagholder, "_http_json", return_value={"tag_name": newer, "html_url": "https://github.com/ProfessorBagholder/Bagholder/releases/tag/" + newer}) as g:
-            rec = bagholder.check_for_update_if_due(now + timedelta(hours=1))
-            self.assertEqual(g.call_count, 0, "checked an hour ago: GitHub is not asked again")
-            rec = bagholder.check_for_update_if_due(now + timedelta(hours=25))
+            rec = bagholder.check_for_update_if_due(now + timedelta(minutes=30))
+            self.assertEqual(g.call_count, 0, "checked half an hour ago: GitHub is not asked again")
+            rec = bagholder.check_for_update_if_due(now + timedelta(hours=2))
         self.assertEqual((rec["updateAvailable"], rec["latest"]), (True, newer))
         st = bagholder.status_payload()
         self.assertEqual((st["version"], st["latestVersion"], st["updateAvailable"], st["updateUrl"]), (bagholder.APP_VERSION, newer, True, rec["url"]))
