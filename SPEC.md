@@ -133,7 +133,7 @@ Positive amounts use the theme's green, negative its red, both on the P&L figure
 
 ## 4. Pages
 
-All pages share the header (brand and version, sync status, filter, menu), the tab row and the current filter set. A short-lived notice from an action (session refreshed, trade added, folder scanned, or an error) takes the sync status's place for four seconds; it is red only when it reports an error.
+All pages share the header (brand and version, sync status, filter, menu), the tab row and the current filter set. A short-lived notice from an action (session refreshed, trade added, folder scanned, or an error) takes the sync status's place for four seconds; it is red only when it reports an error. A sync error appears once: on the "No activity yet" page it is shown in full beneath the page's button and the header keeps its plain status; everywhere else it takes the header's sync status.
 
 ### Dashboard
 
