@@ -422,13 +422,16 @@ function saveJournal(id, patch, soon) {
 // ---------------------------------------------------------------------------
 // header, tabs, chips
 // ---------------------------------------------------------------------------
+// The "No activity yet" page shows a sync error in full beneath its button, so
+// the header does not repeat it there.
+function showingEmpty() { return !!(state.model && !state.model.activityCount && !state.loadError); }
 function syncLine() {
   const s = state.status;
   if (s.protocol && s.protocol !== PROTOCOL) return '<span class="status-err">Restart Bagholder to finish the update</span>';
   if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login…';
   if (state.busy === "refresh") return '<span class="spin"></span>Refreshing session…';
   if (s.syncing) return '<span class="spin"></span>' + esc(s.syncStep || "Syncing…");
-  if (s.error) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
+  if (s.error && !showingEmpty()) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
   if (!s.connected) return "Not connected";
   return "Synced " + esc(relTime(s.lastSync) || "—");
 }
