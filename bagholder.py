@@ -2438,12 +2438,12 @@ def find_chrome():
     return ""
 
 
-def _cdp_list(port):
+def _cdp_list(port, timeout=1):
     for path in ("/json/list", "/json"):
         try:
             url = "http://127.0.0.1:%s%s" % (port, path)
             req = Request(url, headers={"Host": "127.0.0.1:%s" % port})
-            with urlopen(req, timeout=2) as resp:
+            with urlopen(req, timeout=timeout) as resp:
                 raw = resp.read()
             if not raw:
                 continue
@@ -2788,32 +2788,57 @@ def _cdp_pages(port):
     """The open windows and tabs of the app's login Chrome. A Chrome left running
     with no window still answers on the debug port with background targets; only
     page targets mean a window is up."""
-    return [t for t in _cdp_list(port) if isinstance(t, dict) and t.get("type") == "page" and t.get("id")]
+    return [t for t in _cdp_list(port, timeout=WINDOW_CHECK_SEC) if isinstance(t, dict) and t.get("type") == "page" and t.get("id")]
+
+
+def _attempt_is(attempt):
+    with _lock:
+        return attempt is None or _state.get("login_attempt") == attempt
+
+
+def _capture_loop(proc, debug_port, attempt):
+    """Try to capture the session every CAPTURE_EVERY_SEC while the attempt is
+    live. Runs beside the window watcher so a capture call stuck on a window
+    that just closed never delays noticing the close."""
+    while _attempt_is(attempt):
+        with _lock:
+            if not _state.get("capturing"):
+                return
+        body = None
+        try:
+            if _cdp_pages(debug_port):
+                body = _try_capture_from_cdp(debug_port)
+        except Exception:
+            body = None
+        if body and body.get("access_token") and _attempt_is(attempt):
+            with _lock:
+                if not _state.get("capturing"):
+                    return
+            capture_tokens(body)
+            sys.stderr.write("bagholder captured Wealthsimple session\n")
+            _close_login_browser(proc)
+            return
+        time.sleep(CAPTURE_EVERY_SEC)
 
 
 def _poll_chrome_session(proc, debug_port, attempt=None):
-    """Watch one login attempt: every 1.5 s, first whether the window is still
-    there, then whether a session can be captured. A watcher belongs to the
-    attempt it was started for; once a later Connect has started another, it
-    exits without touching anything."""
+    """Watch one login attempt's window: every WINDOW_CHECK_SEC, is it still
+    there? The capture runs in its own thread (_capture_loop). A watcher belongs
+    to the attempt it was started for; once a later Connect has started
+    another, it exits without touching anything."""
     deadline = time.time() + CAPTURE_WAIT_SEC
     start = time.time()
     seen_page = False
-    last_capture = 0.0
-
-    def mine():
-        with _lock:
-            return attempt is None or _state.get("login_attempt") == attempt
-
+    threading.Thread(target=_capture_loop, args=(proc, debug_port, attempt), name="bagholder-cdp-capture", daemon=True).start()
     while time.time() < deadline:
-        if not mine():
+        if not _attempt_is(attempt):
             return
         with _lock:
             still = bool(_state.get("capturing"))
         if not still:
             return
         try:
-            pages = _cdp_pages(debug_port)
+            pages = _cdp_pages(debug_port) if proc.poll() is None else []
         except Exception:
             pages = []
         seen_page = seen_page or bool(pages)
@@ -2821,7 +2846,7 @@ def _poll_chrome_session(proc, debug_port, attempt=None):
         if gone:
             # the window is gone (Chrome quit, or the window closed with Chrome
             # lingering without one): the attempt is over, nothing is relaunched
-            if not mine():
+            if not _attempt_is(attempt):
                 return
             with _lock:
                 if _state.get("capturing"):
@@ -2832,22 +2857,8 @@ def _poll_chrome_session(proc, debug_port, attempt=None):
             sys.stderr.write("bagholder login: window closed, waiting stopped\n")
             _close_login_browser(proc)
             return
-        body = None
-        if pages and time.time() - last_capture >= CAPTURE_EVERY_SEC:
-            last_capture = time.time()
-            try:
-                body = _try_capture_from_cdp(debug_port)
-            except Exception:
-                body = None
-        if body and body.get("access_token"):
-            if not mine():
-                return
-            capture_tokens(body)
-            sys.stderr.write("bagholder captured Wealthsimple session\n")
-            _close_login_browser(proc)
-            return
         time.sleep(WINDOW_CHECK_SEC)
-    if not mine():
+    if not _attempt_is(attempt):
         return
     with _lock:
         if _state.get("capturing"):

@@ -1085,8 +1085,10 @@ class LoginBrowserTest(unittest.TestCase):
         with mock.patch.object(bagholder, "_cdp_list", return_value=[{"type": "service_worker", "id": "SW", "webSocketDebuggerUrl": "ws://x"}]), \
              mock.patch.object(bagholder, "_try_capture_from_cdp", side_effect=lambda port: captured.append(1)), \
              mock.patch.object(bagholder, "_close_login_browser", side_effect=lambda only=None: closed.append(only)), \
+             mock.patch.object(bagholder.threading, "Thread") as thread, \
              mock.patch.object(bagholder.time, "time", side_effect=now), mock.patch.object(bagholder.time, "sleep", lambda s: None):
             bagholder._poll_chrome_session(proc, 18765, attempt=7)
+            self.assertEqual(thread.call_args.kwargs.get("target"), bagholder._capture_loop, "the capture runs beside the watcher, never delaying it")
         self.assertFalse(bagholder._state["capturing"], "waiting stopped")
         self.assertIn("closed before a session", bagholder._state["error"])
         self.assertEqual(closed, [proc], "and the app closes the instance it was watching; nothing is relaunched")
@@ -1097,6 +1099,7 @@ class LoginBrowserTest(unittest.TestCase):
         bagholder._state["login_attempt"] = 8
         closed.clear()
         with mock.patch.object(bagholder, "_cdp_list", return_value=[]), mock.patch.object(bagholder, "_close_login_browser", side_effect=lambda only=None: closed.append(only)), \
+             mock.patch.object(bagholder.threading, "Thread"), \
              mock.patch.object(bagholder.time, "time", side_effect=now), mock.patch.object(bagholder.time, "sleep", lambda s: None):
             bagholder._poll_chrome_session(proc, 18765, attempt=7)
         self.assertTrue(bagholder._state["capturing"], "the newer attempt is still waiting")
