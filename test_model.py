@@ -471,6 +471,9 @@ class RoundTripTest(unittest.TestCase):
         ])
         subs = {f["id"]: f["sub"] for f in trades[0]["fills"]}
         self.assertEqual(subs, {"sto": "SELL TO OPEN", "buy": "BUY TO CLOSE"})
+        # Shares are bought and sold; the open/close order types are option language.
+        trades = self._trades([buy("b1", "AAA", 100, 10, "2026-01-01"), sell("s1", "AAA", 100, 12, "2026-01-10")])
+        self.assertEqual({f["id"]: f["sub"] for f in trades[0]["fills"]}, {"b1": "BUY", "s1": "SELL"})
 
     def test_short_round_trip_is_cover(self):
         trades = self._trades([
