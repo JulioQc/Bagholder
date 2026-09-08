@@ -2777,6 +2777,13 @@ def _try_capture_from_cdp(port):
     return None
 
 
+def _cdp_pages(port):
+    """The open windows and tabs of the app's login Chrome. A Chrome left running
+    with no window still answers on the debug port with background targets; only
+    page targets mean a window is up."""
+    return [t for t in _cdp_list(port) if isinstance(t, dict) and t.get("type") == "page" and t.get("id")]
+
+
 def _poll_chrome_session(proc, debug_port):
     deadline = time.time() + CAPTURE_WAIT_SEC
     start = time.time()
@@ -2796,17 +2803,18 @@ def _poll_chrome_session(proc, debug_port):
             _close_login_browser()
             return
         if (
-            (proc.poll() is not None or not _cdp_list(debug_port))
+            (proc.poll() is not None or not _cdp_pages(debug_port))
             and (time.time() - start) > 4
         ):
-            # the window is gone (quit, or closed with Chrome lingering without
-            # windows): the attempt is over, nothing is relaunched
+            # the window is gone (Chrome quit, or the window closed with Chrome
+            # lingering without one): the attempt is over, nothing is relaunched
             with _lock:
                 if _state.get("capturing"):
                     _state["error"] = (
-                        "The Chrome window closed before a session showed up."
+                        "The Chrome window closed before a session showed up. Choose Connect Wealthsimple to try again."
                     )
                     _state["capturing"] = False
+            sys.stderr.write("bagholder login: window closed, waiting stopped\n")
             _close_login_browser()
             return
         time.sleep(1.5)
@@ -2860,9 +2868,15 @@ def _close_login_browser():
 
 
 def _login_browser_alive():
+    """True only while the app's login Chrome has a window up."""
     with _lock:
         proc = _state.get("chrome_proc")
-    return proc is not None and proc.poll() is None and bool(_login_browser_ws())
+    if proc is None or proc.poll() is not None or not _login_browser_ws():
+        return False
+    try:
+        return bool(_cdp_pages(DEBUG_PORTS[0]))
+    except Exception:
+        return False
 
 
 def cancel_login():
@@ -2871,22 +2885,22 @@ def cancel_login():
         was = bool(_state.get("capturing"))
         _state["capturing"] = False
         _state["error"] = ""
+    sys.stderr.write("bagholder login: cancelled\n")
     _close_login_browser()
     return {"ok": True, "cancelled": was}
 
 
 def start_login_browser():
-    # a login window the app opened is still up: bring it forward, never open a second
+    """Open the login window. Only a press of Connect reaches here, and this is
+    the only place the app opens a browser window: a window the app's Chrome
+    still has up is brought forward instead; anything else (no window, a
+    lingering windowless Chrome) is closed and one fresh window is launched."""
+    sys.stderr.write("bagholder login: connect requested\n")
     if _login_browser_alive():
-        ws_url = _login_browser_ws()
         try:
-            ws = _ws_connect(ws_url)
+            ws = _ws_connect(_login_browser_ws())
             try:
-                pages = [t for t in _cdp_list(DEBUG_PORTS[0]) if isinstance(t, dict) and t.get("type") == "page" and t.get("id")]
-                if pages:
-                    _cdp_call(ws, "Target.activateTarget", {"targetId": pages[0]["id"]})
-                else:
-                    _cdp_call(ws, "Target.createTarget", {"url": LOGIN_URL, "newWindow": True})
+                _cdp_call(ws, "Target.activateTarget", {"targetId": _cdp_pages(DEBUG_PORTS[0])[0]["id"]})
             finally:
                 ws.close()
         except Exception:
@@ -2898,7 +2912,9 @@ def start_login_browser():
             proc = _state.get("chrome_proc")
         if not already:
             threading.Thread(target=_poll_chrome_session, args=(proc, DEBUG_PORTS[0]), name="bagholder-cdp-capture", daemon=True).start()
+        sys.stderr.write("bagholder login: window already up, brought forward\n")
         return {"ok": True, "reused": True}
+    _close_login_browser()   # a windowless leftover of ours, if any
     chrome = find_chrome()
     if not chrome:
         return {
@@ -2929,6 +2945,7 @@ def start_login_browser():
         if os.name != "nt":
             kwargs["start_new_session"] = True
         proc = subprocess.Popen(args, **kwargs)
+        sys.stderr.write("bagholder login: chrome launched (pid %s)\n" % proc.pid)
         with _lock:
             _state["chrome_proc"] = proc
             _state["capturing"] = True
