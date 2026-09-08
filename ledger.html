@@ -1535,6 +1535,13 @@ function bind() {
     if (el) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(el.dataset.arg || "{}"); } catch (err) {} act(el.dataset.act, arg, e); }
   });
   document.addEventListener("keydown", (e) => {
+    // ⌘K (Ctrl+K elsewhere): the filter popover on Symbol, search box focused
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      state.picker = "symbol"; state.valueQuery = ""; state.menuOpen = false; render();
+      const vq = document.getElementById("valueQuery"); if (vq) { vq.focus(); vq.select(); }
+      return;
+    }
     if (e.key === "Escape") { if (state.dataOpen) { state.dataOpen = false; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); } return; }
     if (e.target && e.target.id === "tagInput") {
       const matches = tagMatches();
