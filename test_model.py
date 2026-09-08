@@ -1347,6 +1347,54 @@ class StoreTablesTest(unittest.TestCase):
         self.assertEqual(v2["grades"]["buckets"][1]["n"], 1)
 
 
+class SourceHealthTest(unittest.TestCase):
+    def test_every_request_records_its_outcome_and_an_empty_chart_says_why(self):
+        from unittest import mock
+        from urllib.error import HTTPError, URLError
+        market._health.clear()
+        market._chart_notes.clear()
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                rec = {"symbol": "CH", "exchange": "TSX-V", "currency": "CAD", "kind": "Shares"}
+                # TMX unreachable, Yahoo throttled: the chart's reason names both, the menu shows both
+                def post(url, *a, **k):
+                    raise URLError("no route")
+                def get(url, *a, **k):
+                    raise HTTPError(url, 429, "Too Many Requests", {}, None)
+                with mock.patch.object(market, "urlopen", side_effect=lambda req, **k: (_ for _ in ()).throw(URLError("no route") if b"graphql" in (req.data or b"") or "tmx" in req.full_url else HTTPError(req.full_url, 429, "Too Many Requests", {}, None))), \
+                     mock.patch.object(market, "YAHOO_MIN_INTERVAL_SEC", 0):
+                    market._yahoo_backoff_until = 0.0
+                    bars, src = market.fetch_history(rec, "2026-02-01", "2026-02-10")
+                self.assertEqual(bars, [])
+                reason = market.chart_reason(rec, "1d")
+                self.assertIn("TMX Money could not be reached", reason)
+                self.assertIn("Yahoo Finance refused the request (too many)", reason)
+                health = {h["key"]: h for h in market.source_health()}
+                self.assertFalse(health["tmx"]["ok"]); self.assertEqual(health["tmx"]["error"], "could not be reached")
+                self.assertFalse(health["yahoo"]["ok"]); self.assertTrue(health["yahoo"]["error"].startswith("refused the request"), health["yahoo"]["error"])
+                market._yahoo_backoff_until = 0.0
+                # every source answered, none had bars: the reason names the sources asked
+                with mock.patch.object(market, "_post_json", return_value={"data": {"getTimeSeriesData": [], "getQuoteBySymbol": None}}), \
+                     mock.patch.object(market, "_get_text", return_value=json.dumps({"chart": {"result": []}})), mock.patch.object(market, "YAHOO_MIN_INTERVAL_SEC", 0):
+                    bars, src = market.fetch_history(rec, "2026-02-01", "2026-02-10")
+                self.assertEqual(market.chart_reason(rec, "1d"), "No bars for this span from TMX Money or Yahoo Finance.")
+                # a 404 is the symbol, not the source
+                market._health.clear()
+                with mock.patch.object(market, "urlopen", side_effect=lambda req, **k: (_ for _ in ()).throw(HTTPError(req.full_url, 404, "Not Found", {}, None))):
+                    with self.assertRaises(HTTPError):
+                        market._get_text("https://query1.finance.yahoo.com/v8/finance/chart/GONE.CN")
+                self.assertEqual(market.source_health(), [], "a missing symbol leaves the source's health alone")
+                market.note_source("tmx", True)
+                self.assertEqual([(h["name"], h["ok"]) for h in market.source_health()], [("TMX Money", True)])
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+                market._health.clear()
+                market._chart_notes.clear()
+
+
 class MarketParseTest(unittest.TestCase):
     def test_parsers(self):
         boc = json.dumps({"observations": [{"d": "2026-08-28", "FXUSDCAD": {"v": "1.3888"}}, {"d": "x"}]})
@@ -1730,9 +1778,12 @@ class MarketParseTest(unittest.TestCase):
                     self.assertEqual(kw.get("headers"), market.YAHOO_HEADERS, "Yahoo is asked with its own headers, not the app's usual ones")
                     self.assertEqual(market.fetch_yahoo("GONE.CN", 0, 1, "1d"), [])
                     self.assertEqual(len(calls), 1, "a symbol Yahoo does not carry is not asked again today")
-                    self.assertEqual(market.fetch_yahoo("BUSY.TO", 0, 1, "1d"), [])
-                    self.assertEqual(market.fetch_yahoo("BUSY.TO", 0, 1, "1d"), [])
-                    self.assertEqual(market.fetch_yahoo("OTHER.TO", 0, 1, "60m"), [])
+                    with self.assertRaises(HTTPError):
+                        market.fetch_yahoo("BUSY.TO", 0, 1, "1d")   # a real failure reaches the chain, which records it
+                    with self.assertRaises(RuntimeError):
+                        market.fetch_yahoo("BUSY.TO", 0, 1, "1d")
+                    with self.assertRaises(RuntimeError):
+                        market.fetch_yahoo("OTHER.TO", 0, 1, "60m")
                     self.assertEqual(len(calls), 2, "after a 429 nothing is asked for a while")
                 market._yahoo_backoff_until = 0.0
             finally:

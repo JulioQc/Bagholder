@@ -19,6 +19,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 import store
@@ -124,11 +125,59 @@ def _today():
     return datetime.now(timezone.utc).date()
 
 
+# --------------------------------------------------------------------------
+# source health: every request's outcome, per source, so the page can say why
+# a chart is empty and the menu can show what each source last answered
+# --------------------------------------------------------------------------
+SOURCE_LABELS = {"tmx": "TMX Money", "yahoo": "Yahoo Finance", "coinbase": "Coinbase", "cboe": "Cboe", "boc": "Bank of Canada", "fred": "FRED", "stooq": "Stooq"}
+_health = {}
+_health_lock = threading.Lock()
+
+
+def source_of_url(url):
+    host = urlparse(str(url or "")).netloc.lower()
+    for key, needle in (("tmx", "tmx.com"), ("yahoo", "yahoo.com"), ("coinbase", "coinbase.com"), ("cboe", "cboe.com"), ("boc", "bankofcanada.ca"), ("fred", "stlouisfed.org"), ("stooq", "stooq.com")):
+        if needle in host:
+            return key
+    return host or "other"
+
+
+def describe_failure(e):
+    """A failure in words a user can act on."""
+    code = getattr(e, "code", None)
+    if code == 429:
+        return "refused the request (too many)"
+    if code:
+        return "answered with an error (%s)" % code
+    if isinstance(e, RuntimeError) and "backing off" in str(e):
+        return "refused the request; asked again in ten minutes"
+    return "could not be reached"
+
+
+def note_source(name, ok, error=None, now=None):
+    now = now or datetime.now(timezone.utc)
+    with _health_lock:
+        _health[name] = {"ok": bool(ok), "at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "error": "" if ok else describe_failure(error)}
+
+
+def source_health():
+    """[{key, name, ok, at, error}] for every source touched since start, in a fixed order."""
+    with _health_lock:
+        snap = dict(_health)
+    return [dict(snap[k], key=k, name=SOURCE_LABELS.get(k, k)) for k in SOURCE_LABELS if k in snap]
+
+
 def _get_text(url, ssl_context=None, headers=None):
     req = Request(url, headers=headers or {"User-Agent": UA, "Accept": "text/csv,application/json,*/*;q=0.8"})
     ctx = ssl_context or default_ssl_context()
-    with urlopen(req, timeout=TIMEOUT_SEC, context=ctx) as resp:
-        raw = resp.read()
+    try:
+        with urlopen(req, timeout=TIMEOUT_SEC, context=ctx) as resp:
+            raw = resp.read()
+    except Exception as e:
+        if getattr(e, "code", None) != 404:   # a symbol a source does not carry is not the source failing
+            note_source(source_of_url(url), False, e)
+        raise
+    note_source(source_of_url(url), True)
     if raw[:2] == b"\x1f\x8b":
         try:
             raw = gzip.decompress(raw)
@@ -263,8 +312,13 @@ def _post_json(url, payload, ssl_context=None, headers=None):
     hdrs.update(headers or {})
     req = Request(url, data=body, headers=hdrs, method="POST")
     ctx = ssl_context or default_ssl_context()
-    with urlopen(req, timeout=TIMEOUT_SEC, context=ctx) as resp:
-        raw = resp.read()
+    try:
+        with urlopen(req, timeout=TIMEOUT_SEC, context=ctx) as resp:
+            raw = resp.read()
+    except Exception as e:
+        note_source(source_of_url(url), False, e)
+        raise
+    note_source(source_of_url(url), True)
     if raw[:2] == b"\x1f\x8b":
         try:
             raw = gzip.decompress(raw)
@@ -1012,7 +1066,9 @@ def _yahoo_get(url, ssl_context=None, now=None):
     with _yahoo_lock:
         t = _time.monotonic()
         if t < _yahoo_backoff_until:
-            raise RuntimeError("yahoo: backing off after 429")
+            e = RuntimeError("yahoo: backing off after 429")
+            note_source("yahoo", False, e)
+            raise e
         wait = _yahoo_next_at - t
         if wait > 0:
             _time.sleep(wait)
@@ -1035,9 +1091,10 @@ def fetch_yahoo(symbol, start_ts, end_ts, interval, ssl_context=None, now=None):
     try:
         return parse_yahoo_chart(_yahoo_get(YAHOO_CHART_URL % (symbol, int(start_ts), int(end_ts), interval), ssl_context))
     except Exception as e:
-        if getattr(e, "code", None) == 404:
+        if getattr(e, "code", None) == 404:   # a symbol Yahoo does not carry: nothing, and not asked again today
             store.set_meta(miss_key, today)
-        return []
+            return []
+        raise   # a real failure: the chain records it and the page can say so
 
 
 def _whole_bars(bars):
@@ -1090,21 +1147,59 @@ def _pick_covering(rec, answers, span_start, first_of):
     return [], ""
 
 
+_chart_notes = {}   # (symbol, "daily"|"hourly") -> [(source, key, bars or failure)] of the last empty chain
+
+
+def _remember_notes(rec, which, notes):
+    with _health_lock:
+        _chart_notes[(tmx_symbol(rec.get("symbol")), which)] = list(notes)
+
+
+def chart_reason(rec, tf):
+    """Why a chart has no bars, in one sentence for the page: what failed, or
+    which sources were asked and had none."""
+    which = "hourly" if tf in INTRADAY_SECONDS else "daily"
+    with _health_lock:
+        notes = list(_chart_notes.get((tmx_symbol(rec.get("symbol")), which), []))
+    failed = []
+    for source, key, outcome in notes:
+        if isinstance(outcome, Exception):
+            line = "%s %s" % (SOURCE_LABELS.get(source, source), describe_failure(outcome))
+            if line not in failed:
+                failed.append(line)
+    if failed:
+        return "; ".join(failed) + "."
+    names = []
+    for source, _ in history_candidates(rec):
+        n = SOURCE_LABELS.get(source, source)
+        if n not in names:
+            names.append(n)
+    if not names:
+        return "No price source covers this instrument."
+    return "No bars for this span from " + (" or ".join(names) if len(names) <= 2 else ", ".join(names[:-1]) + " or " + names[-1]) + "."
+
+
 def fetch_history(rec, start, end, ssl_context=None):
     """Daily bars for one instrument between two dates, oldest first, from the
     chain: the first candidate whose bars cover the span, else the one covering
     most of it (see _pick_covering); the winner is remembered."""
     span_start = datetime.strptime(start, "%Y-%m-%d")
     answers = []
+    notes = []
     for source, key in ordered_candidates(rec):
         try:
             bars = fetch_daily_from(source, key, rec, start, end, ssl_context)
-        except Exception:
+            notes.append((source, key, len(bars)))
+        except Exception as e:
             bars = []
+            notes.append((source, key, e))
         answers.append((source, key, bars))
         if bars and datetime.strptime(bars[0]["date"], "%Y-%m-%d") <= span_start + timedelta(days=COVERAGE_SLACK_DAYS):
             break   # covered: no need to ask the rest
-    return _pick_covering(rec, answers, span_start, lambda b: datetime.strptime(b["date"], "%Y-%m-%d"))
+    out = _pick_covering(rec, answers, span_start, lambda b: datetime.strptime(b["date"], "%Y-%m-%d"))
+    if not out[0]:
+        _remember_notes(rec, "daily", notes)
+    return out
 
 
 def ensure_history(rec, start, end, ssl_context=None, now=None):
@@ -1403,19 +1498,23 @@ def fetch_intraday(rec, start_ts, end_ts, ssl_context=None, on_demand=True):
     start_day = datetime.fromtimestamp(start_ts, tz=timezone.utc).date().isoformat()
     span_start = datetime.fromtimestamp(start_ts, tz=timezone.utc).replace(tzinfo=None)
     answers = []
+    notes = []
     for source, key in ordered_candidates(rec):
         reach = source_intraday_reach(source)
         if not reach or start_day < reach or (not on_demand and source in ON_DEMAND_ONLY_SOURCES):
             continue
         try:
             by_tf = fetch_intraday_from(source, key, rec, start_ts, end_ts, ssl_context)
-        except Exception:
+            notes.append((source, key, len(by_tf.get("1h") or [])))
+        except Exception as e:
             by_tf = {}
+            notes.append((source, key, e))
         answers.append((source, key, by_tf.get("1h") or [], by_tf))
         if by_tf.get("1h") and datetime.fromtimestamp(by_tf["1h"][0]["time"], tz=timezone.utc).replace(tzinfo=None) <= span_start + timedelta(days=COVERAGE_SLACK_DAYS):
             break
     bars, source = _pick_covering(rec, [(a[0], a[1], a[2]) for a in answers], span_start, lambda b: datetime.fromtimestamp(b["time"], tz=timezone.utc).replace(tzinfo=None))
     if not bars:
+        _remember_notes(rec, "hourly", notes)
         return {}, ""
     return next(a[3] for a in answers if a[0] == source and a[2] is bars), source
 
