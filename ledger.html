@@ -1384,7 +1384,10 @@ function connect() {
     const t0 = Date.now();
     const tick = () => api("GET", "/api/status").then((st) => {
       if (state.busy !== "connecting") return;   // cancelled meanwhile
-      applyStatus(st); renderHeaderOnly();
+      const before = JSON.stringify([state.status.connected, state.status.capturing, state.status.error, state.status.syncing]);
+      applyStatus(st);
+      // redraw the header only on a change: a redraw restarts the spinner's animation
+      if (JSON.stringify([state.status.connected, state.status.capturing, state.status.error, state.status.syncing]) !== before) renderHeaderOnly();
       if (st && st.connected) { state.busy = ""; return syncNow(); }
       // the server stopped waiting: the window closed, or nothing showed up in time
       if (st && !st.capturing) { state.busy = ""; state.status.error = st.error || "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
