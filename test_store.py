@@ -6,8 +6,11 @@ from __future__ import annotations
 import gzip
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import tempfile
+from pathlib import Path
 import unittest
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -1163,6 +1166,141 @@ class LoginBrowserTest(unittest.TestCase):
                 self.assertNotIn("Target.createTarget", calls)
                 bagholder.cancel_login()
             os.environ.pop("BAGHOLDER_HOME", None)
+
+
+class InAppUpdateTest(unittest.TestCase):
+    """The supervisor restarts the server on request, rolls back a bad update,
+    and the update itself only swaps files that check out."""
+
+    class _Child:
+        def __init__(self, code, runs_for=0):
+            self.code, self.runs_for, self.returncode = code, runs_for, None
+        def wait(self, timeout=None):
+            if timeout is not None and self.runs_for > timeout:
+                self.runs_for -= timeout
+                raise subprocess.TimeoutExpired("child", timeout)
+            self.returncode = self.code
+            return self.code
+        def terminate(self):
+            self.returncode = -15
+
+    def test_supervisor_restarts_on_request_and_rolls_back_a_dead_update(self):
+        import bagholder
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as app:
+            bagholder.HOME = Path(home)
+            bagholder.APP_DIR = Path(app)
+            (Path(app) / "bagholder.py").write_text("new")
+            # plain restart request, then a clean exit
+            children = [self._Child(bagholder.RESTART_CODE), self._Child(0)]
+            spawned = []
+            def spawn():
+                c = children.pop(0); spawned.append(c); return c
+            self.assertEqual(bagholder.supervise(spawn=spawn, healthy_sec=5), 0)
+            self.assertEqual(len(spawned), 2, "restart code means start again; a clean exit ends it")
+            # an update is pending and the new server dies at once: previous files come back, the old version runs again
+            (Path(home) / "previous").mkdir()
+            (Path(home) / "previous" / "bagholder.py").write_text("old")
+            (Path(home) / "update-pending").write_text("v9.9.9")
+            children[:] = [self._Child(1), self._Child(0)]
+            spawned.clear()
+            self.assertEqual(bagholder.supervise(spawn=spawn, healthy_sec=5), 0)
+            self.assertEqual(len(spawned), 2)
+            self.assertEqual((Path(app) / "bagholder.py").read_text(), "old", "rolled back")
+            self.assertFalse((Path(home) / "update-pending").exists())
+            # an update is pending and the new server stays up: the marker and the backup go
+            (Path(home) / "previous").mkdir()
+            (Path(home) / "previous" / "bagholder.py").write_text("older")
+            (Path(home) / "update-pending").write_text("v9.9.9")
+            children[:] = [self._Child(0, runs_for=30)]
+            spawned.clear()
+            self.assertEqual(bagholder.supervise(spawn=spawn, healthy_sec=5), 0)
+            self.assertEqual((Path(app) / "bagholder.py").read_text(), "old", "the running files were kept")
+            self.assertFalse((Path(home) / "update-pending").exists())
+            self.assertFalse((Path(home) / "previous").exists())
+
+    def test_release_update_checks_the_archive_before_swapping_files(self):
+        import bagholder, zipfile, hashlib
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as app, tempfile.TemporaryDirectory() as rel:
+            bagholder.HOME = Path(home)
+            bagholder.APP_DIR = Path(app)
+            (Path(app) / "bagholder.py").write_text("APP_VERSION = '1.0.0'\n")
+            (Path(app) / "ledger.html").write_text("<old>")
+            good = Path(rel) / "bagholder-v9.9.9.zip"
+            with zipfile.ZipFile(good, "w") as z:
+                z.writestr("bagholder.py", "APP_VERSION = '9.9.9'\n")
+                z.writestr("ledger.html", "<new>")
+                z.writestr("../evil.py", "x = 1")
+            sha = Path(rel) / "good.sha256"
+            sha.write_text(hashlib.sha256(good.read_bytes()).hexdigest() + "  bagholder-v9.9.9.zip\n")
+            bad = Path(rel) / "bad.zip"
+            with zipfile.ZipFile(bad, "w") as z:
+                z.writestr("bagholder.py", "def broken(:\n")
+            badsha = Path(rel) / "bad.sha256"
+            badsha.write_text(hashlib.sha256(bad.read_bytes()).hexdigest() + "\n")
+            files = {"zip": good, "sha": sha}
+            def download(url, dest, max_bytes=0):
+                shutil.copy(files[url], dest)
+            restarts = []
+            with mock.patch.object(bagholder, "update_mode", return_value="release"), mock.patch.object(bagholder, "_download", side_effect=download), \
+                 mock.patch.object(bagholder, "request_restart", side_effect=lambda: restarts.append(1)):
+                bagholder._state["updateError"] = ""
+                # a broken archive: nothing changes, the error is reported
+                files.update({"zip": bad, "sha": badsha})
+                bagholder.perform_update("v9.9.9", {"assets": {"zip": "zip", "sha": "sha"}})
+                self.assertIn("Update failed", bagholder._state["updateError"])
+                self.assertEqual((Path(app) / "ledger.html").read_text(), "<old>")
+                self.assertEqual(restarts, [])
+                # a wrong checksum: nothing changes
+                files.update({"zip": good, "sha": badsha})
+                bagholder.perform_update("v9.9.9", {"assets": {"zip": "zip", "sha": "sha"}})
+                self.assertIn("checksum", bagholder._state["updateError"])
+                self.assertEqual((Path(app) / "ledger.html").read_text(), "<old>")
+                # the real thing: files swapped, previous kept, marker written, restart requested
+                files.update({"zip": good, "sha": sha})
+                bagholder._state["updateError"] = ""
+                bagholder.perform_update("v9.9.9", {"assets": {"zip": "zip", "sha": "sha"}})
+                self.assertEqual(bagholder._state["updateError"], "")
+                self.assertEqual((Path(app) / "ledger.html").read_text(), "<new>")
+                self.assertIn("9.9.9", (Path(app) / "bagholder.py").read_text())
+                self.assertEqual((Path(home) / "previous" / "ledger.html").read_text(), "<old>")
+                self.assertEqual((Path(home) / "update-pending").read_text(), "v9.9.9")
+                self.assertFalse((Path(app).parent / "evil.py").exists(), "a path that escapes the app folder is ignored")
+                self.assertEqual(restarts, [1])
+                bagholder._state["updating"] = ""
+
+    def test_a_swap_that_fails_part_way_puts_every_file_back(self):
+        import bagholder
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as app, tempfile.TemporaryDirectory() as stage:
+            bagholder.HOME = Path(home)
+            bagholder.APP_DIR = Path(app)
+            (Path(app) / "a.py").write_text("old a")
+            (Path(app) / "b.py").write_text("old b")
+            (Path(stage) / "a.py").write_text("new a")
+            (Path(stage) / "b.py").write_text("new b")
+            real = os.replace
+            def flaky(src, dst):
+                if str(dst).endswith("b.py"):
+                    raise PermissionError("held open")
+                real(src, dst)
+            with mock.patch.object(bagholder.os, "replace", side_effect=flaky):
+                with self.assertRaises(PermissionError):
+                    bagholder._install_files(Path(stage), ["a.py", "b.py"], "v9.9.9")
+            self.assertEqual((Path(app) / "a.py").read_text(), "old a", "the file already swapped is back")
+            self.assertEqual((Path(app) / "b.py").read_text(), "old b")
+            self.assertFalse((Path(home) / "update-pending").exists())
+
+    def test_update_button_refuses_during_a_sync(self):
+        import bagholder
+        from unittest import mock
+        with mock.patch.object(bagholder, "update_status", return_value={"updateAvailable": True, "latest": "v9.9.9", "assets": {"zip": "z", "sha": "s"}}):
+            bagholder._state["syncing"] = True
+            bagholder._state["updating"] = ""
+            self.assertFalse(bagholder.start_update()["ok"])
+            bagholder._state["syncing"] = False
+            with mock.patch.object(bagholder, "update_status", return_value={"updateAvailable": False}):
+                self.assertFalse(bagholder.start_update()["ok"], "nothing to install")
 
 
 class WealthsimpleHttpTest(unittest.TestCase):

@@ -187,7 +187,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
-const PROTOCOL = "2026-09-08.3"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-08.4"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -364,6 +364,8 @@ function setFilters(patch) {
 }
 function applyStatus(st) {
   if (!st) return;
+  // a new version is serving: this page belongs to the old one
+  if (st.version && state.status.version && st.version !== state.status.version) { location.reload(); return; }
   // A restarted server may answer differently (new sources, new timeframes):
   // forget what earlier answers said and let the open trade fetch again.
   if (st.startedAt && state.status.startedAt && st.startedAt !== state.status.startedAt) {
@@ -389,11 +391,13 @@ let _pollTimer = 0;
 function pollStatus() {
   clearTimeout(_pollTimer);
   api("GET", "/api/status").then((st) => {
+    // while the server restarts (an update) answers are not status payloads: keep asking
+    if (!st || !st.protocol) { _pollTimer = setTimeout(pollStatus, 1000); return; }
     const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version]);
     applyStatus(st);
     const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version]);
     if (before !== after) renderHeaderOnly();
-    const fast = state.status.syncing || state.status.capturing || state.busy;
+    const fast = state.status.syncing || state.status.capturing || state.busy || state.status.updating;
     _pollTimer = setTimeout(pollStatus, fast ? 2500 : 30000);
   });
 }
@@ -427,6 +431,8 @@ function saveJournal(id, patch, soon) {
 function showingEmpty() { return !!(state.model && !state.model.activityCount && !state.loadError); }
 function syncLine() {
   const s = state.status;
+  if (s.updating) return '<span class="spin"></span>' + esc(s.updating);
+  if (s.updateError) return '<span class="status-err">' + esc(s.updateError) + "</span>";
   if (s.protocol && s.protocol !== PROTOCOL) return '<span class="status-err">Restart Bagholder to finish the update</span>';
   if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login… <button class="pill" data-act="cancelConnect" style="padding:1px 8px;font-size:11px;width:auto;margin-left:6px">Cancel</button>';
   if (state.busy === "refresh") return '<span class="spin"></span>Refreshing session…';
@@ -438,7 +444,9 @@ function syncLine() {
 function headerHtml() {
   const m = state.model;
   return '<div id="hdr" style="display:flex;align-items:center;gap:22px;padding:12px 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
-    '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span>' + (state.status.version ? '<span class="muted" style="font-size:11px;margin-left:8px">v' + esc(state.status.version) + "</span>" : "") + (state.status.updateAvailable ? '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="font-size:11px;margin-left:8px;color:var(--accent-300);text-decoration:none">Update available</a>' : "") + "</div>" +
+    '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span>' + (state.status.version ? '<span class="muted" style="font-size:11px;margin-left:8px">v' + esc(state.status.version) + "</span>" : "") + (state.status.updateAvailable && !state.status.updating ? (state.status.canUpdate
+      ? '<button class="pill" data-act="update" style="font-size:11px;margin-left:8px;padding:1px 8px;width:auto;color:var(--accent-300)">Update to ' + esc(state.status.latestVersion) + "</button>"
+      : '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="font-size:11px;margin-left:8px;color:var(--accent-300);text-decoration:none">Update available</a>') : "") + "</div>" +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
     '<span style="font-size:12px;color:var(--ink55)">' + (state.notice ? '<span class="' + (state.noticeKind === "err" ? "status-err" : "") + '">' + esc(state.notice) + "</span>" : syncLine()) + "</span>" +
     '<div style="position:relative" data-pop="filter">' +
@@ -1474,6 +1482,7 @@ function act(name, arg, ev) {
     case "sync": syncNow(); break;
     case "connect": connect(); break;
     case "cancelConnect": cancelConnect(); break;
+    case "update": api("POST", "/api/update").then((r) => { if (!r || !r.ok) { state.notice = (r && r.error) || "Update failed."; state.noticeKind = "err"; } pollStatus(); renderHeaderOnly(); }); break;
     case "refreshSession": refreshSession(); break;
     case "disconnect": disconnect(); break;
     case "exportCsv": state.menuOpen = false; render(); exportCsv(); break;

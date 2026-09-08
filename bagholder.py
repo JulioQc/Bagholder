@@ -526,11 +526,19 @@ APP_VERSION = "1.3.0"
 REPO = "ProfessorBagholder/Bagholder"
 REPO_URL = "https://github.com/" + REPO
 RELEASE_URL = "https://api.github.com/repos/" + REPO + "/releases/latest"
+RELEASE_TAG_URL = "https://api.github.com/repos/" + REPO + "/releases/tags/%s"
+# In-app update: the running server is a child of a small supervisor (see
+# supervise). An update swaps the files, then the child exits with RESTART_CODE
+# and the supervisor starts it again in the same console, on the same port.
+RESTART_CODE = 3
+APP_DIR = Path(__file__).resolve().parent
+UPDATE_HEALTHY_SEC = 20          # a restarted server alive this long is a good update
+UPDATE_MAX_BYTES = 50 * 1024 * 1024
 UPDATE_CHECK_HOURS = 24
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-08.3"
+PROTOCOL = "2026-09-08.4"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 QUERIES = {
@@ -1180,9 +1188,13 @@ _state = {
     "error": "",
     "chrome_proc": None,
     "login_attempt": 0,
+    "updating": "",
+    "updateError": "",
     "listingsFilling": False,
 }
 _stop = threading.Event()
+_httpd = None
+_exit_code = [0]
 
 
 def _ensure_home():
@@ -3197,6 +3209,9 @@ def status_payload():
             "latestVersion": str(update_status().get("latest") or ""),
             "updateAvailable": bool(update_status().get("updateAvailable")),
             "updateUrl": str(update_status().get("url") or REPO_URL),
+            "canUpdate": can_update(),
+            "updating": str(_state.get("updating") or ""),
+            "updateError": str(_state.get("updateError") or ""),
         }
 
 
@@ -3324,6 +3339,7 @@ def check_for_update(now=None):
         if latest is None:
             raise ValueError("no release")
         record.update({"ok": True, "latest": str(rel.get("tag_name")), "url": str(rel.get("html_url") or record["url"]), "updateAvailable": latest > parse_version(APP_VERSION)})
+        record["assets"] = release_assets(rel)
     except Exception:
         pass
     try:
@@ -3340,6 +3356,268 @@ def update_status():
         return rec if isinstance(rec, dict) else {}
     except Exception:
         return {}
+
+
+def release_assets(rel):
+    """{zip, sha} download URLs of a release's bagholder-<tag>.zip and its .sha256, when present."""
+    tag = str((rel or {}).get("tag_name") or "")
+    out = {}
+    for a in (rel or {}).get("assets") or []:
+        name = str(a.get("name") or "")
+        if name == "bagholder-%s.zip" % tag:
+            out["zip"] = str(a.get("browser_download_url") or "")
+        elif name == "bagholder-%s.zip.sha256" % tag:
+            out["sha"] = str(a.get("browser_download_url") or "")
+    return out if out.get("zip") and out.get("sha") else {}
+
+
+# --------------------------------------------------------------------------
+# in-app update
+# --------------------------------------------------------------------------
+
+
+def update_mode():
+    """'git' when this copy is a git checkout with git on the path, else 'release'."""
+    return "git" if (APP_DIR / ".git").exists() and shutil.which("git") else "release"
+
+
+def _git(*args):
+    return subprocess.run(["git"] + list(args), cwd=str(APP_DIR), capture_output=True, text=True, timeout=120)
+
+
+def git_update_ready():
+    """(ok, reason) for updating a git checkout: clean tree on master."""
+    try:
+        if _git("status", "--porcelain").stdout.strip():
+            return False, "This copy is a git checkout with local changes; pull it yourself."
+        if _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != "master":
+            return False, "This copy is a git checkout on another branch; pull it yourself."
+        return True, ""
+    except Exception as e:
+        return False, "git: %s" % e
+
+
+def can_update(rec=None):
+    rec = rec if rec is not None else update_status()
+    if not rec.get("updateAvailable"):
+        return False
+    if update_mode() == "git":
+        return git_update_ready()[0]
+    return bool(rec.get("assets"))
+
+
+def _download(url, dest, max_bytes=UPDATE_MAX_BYTES):
+    req = Request(url, headers={"User-Agent": "Bagholder/" + APP_VERSION, "Accept": "application/octet-stream"})
+    with urlopen(req, timeout=120, context=_ssl_context()) as resp, open(dest, "wb") as f:
+        total = 0
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError("release archive is larger than expected")
+            f.write(chunk)
+
+
+def _extract_release(zip_path, staging):
+    """The archive's regular files into `staging`, refusing anything that would
+    land outside it. Returns the relative paths written."""
+    import zipfile
+    written = []
+    with zipfile.ZipFile(zip_path) as z:
+        for info in z.infolist():
+            name = info.filename
+            if info.is_dir() or not name or name.startswith("/") or ".." in name.split("/"):
+                continue
+            target = staging / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(info) as src, open(target, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            written.append(name)
+    if not written:
+        raise ValueError("release archive is empty")
+    return written
+
+
+def _check_python(staging, names):
+    import py_compile
+    for name in names:
+        if name.endswith(".py"):
+            py_compile.compile(str(staging / name), doraise=True)
+
+
+def _install_files(staging, names, tag):
+    """Keep the current copies under HOME/previous, then put the new files in
+    place, and leave the marker the supervisor watches for."""
+    previous = HOME / "previous"
+    if previous.exists():
+        shutil.rmtree(previous)
+    for name in names:
+        cur = APP_DIR / name
+        if cur.exists():
+            (previous / name).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(cur, previous / name)
+    try:
+        for name in names:
+            (APP_DIR / name).parent.mkdir(parents=True, exist_ok=True)
+            os.replace(staging / name, APP_DIR / name)
+    except Exception:
+        # a replace failed part way (a file held open, a permission): every file
+        # goes back to its previous copy before the failure is reported
+        _rollback()
+        raise
+    (HOME / "update-pending").write_text(tag)
+
+
+def _rollback():
+    """Put the previous copies back (a restarted server that died at once)."""
+    previous = HOME / "previous"
+    if not previous.exists():
+        return False
+    for p in previous.rglob("*"):
+        if p.is_file():
+            rel = p.relative_to(previous)
+            (APP_DIR / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, APP_DIR / rel)
+    shutil.rmtree(previous, ignore_errors=True)
+    return True
+
+
+def request_restart():
+    """Finish the response in flight, then stop serving so the supervisor restarts us."""
+    _exit_code[0] = RESTART_CODE
+    def go():
+        time.sleep(0.5)
+        _stop.set()
+        try:
+            if _httpd is not None:
+                _httpd.shutdown()
+        except Exception:
+            pass
+    threading.Thread(target=go, name="bagholder-restart", daemon=True).start()
+
+
+def perform_update(tag, rec):
+    """Bring this copy to `tag`: a git checkout pulls, anything else downloads the
+    release, checks it, swaps the files. Then a restart. Never raises; failures
+    land in _state['updateError'] and nothing is changed."""
+    try:
+        if update_mode() == "git":
+            with _lock:
+                _state["updating"] = "Updating to %s…" % tag
+            ok, why = git_update_ready()
+            if not ok:
+                raise RuntimeError(why)
+            r = _git("pull", "--ff-only")
+            if r.returncode != 0:
+                raise RuntimeError("git pull failed: " + (r.stderr or r.stdout).strip()[:200])
+            (HOME / "update-pending").write_text(tag)
+        else:
+            assets = rec.get("assets") or {}
+            if not assets:
+                raise RuntimeError("This release has no downloadable archive.")
+            with _lock:
+                _state["updating"] = "Downloading %s…" % tag
+            staging = HOME / "staging"
+            if staging.exists():
+                shutil.rmtree(staging)
+            staging.mkdir(parents=True)
+            zip_path = HOME / ("bagholder-%s.zip" % tag)
+            _download(assets["zip"], zip_path)
+            _download(assets["sha"], HOME / "release.sha256", max_bytes=4096)
+            import hashlib
+            want = (HOME / "release.sha256").read_text().split()[0].strip().lower()
+            got = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+            if want != got:
+                raise RuntimeError("The download did not match the release's checksum.")
+            with _lock:
+                _state["updating"] = "Installing %s…" % tag
+            names = _extract_release(zip_path, staging)
+            _check_python(staging, names)
+            _install_files(staging, names, tag)
+            shutil.rmtree(staging, ignore_errors=True)
+            try:
+                zip_path.unlink()
+                (HOME / "release.sha256").unlink()
+            except Exception:
+                pass
+        with _lock:
+            _state["updating"] = "Restarting…"
+        sys.stderr.write("bagholder update: %s installed, restarting\n" % tag)
+        request_restart()
+    except Exception as e:
+        with _lock:
+            _state["updating"] = ""
+            _state["updateError"] = "Update failed: %s" % e
+        sys.stderr.write("bagholder update failed: %s\n" % e)
+
+
+def start_update():
+    """Begin the update the page asked for; the work runs in the background."""
+    rec = update_status()
+    with _lock:
+        if _state.get("updating"):
+            return {"ok": True}
+        if _state.get("syncing"):
+            return {"ok": False, "error": "Wait for the sync to finish, then update."}
+        if not rec.get("updateAvailable") or not rec.get("latest"):
+            return {"ok": False, "error": "No update to install."}
+        if not can_update(rec):
+            return {"ok": False, "error": git_update_ready()[1] if update_mode() == "git" else "This release has no downloadable archive."}
+        _state["updateError"] = ""
+        _state["updating"] = "Updating to %s…" % rec["latest"]
+    threading.Thread(target=perform_update, args=(rec["latest"], rec), name="bagholder-update", daemon=True).start()
+    return {"ok": True}
+
+
+def supervise(spawn=None, healthy_sec=UPDATE_HEALTHY_SEC):
+    """Run the server as a child and start it again whenever it exits asking to
+    be restarted (an update). A restarted server that dies within `healthy_sec`
+    of an update gets the previous files put back and is started once more."""
+    def default_spawn():
+        env = dict(os.environ)
+        env["BAGHOLDER_CHILD"] = "1"
+        return subprocess.Popen([sys.executable, str(Path(__file__).resolve())], env=env)
+    spawn = spawn or default_spawn
+    marker = HOME / "update-pending"
+    while True:
+        child = spawn()
+        pending = marker.exists()
+        try:
+            if pending:
+                try:
+                    child.wait(timeout=healthy_sec)
+                except subprocess.TimeoutExpired:
+                    # alive past the window: the update took
+                    try:
+                        marker.unlink()
+                    except Exception:
+                        pass
+                    shutil.rmtree(HOME / "previous", ignore_errors=True)
+                    pending = False
+                    child.wait()
+            else:
+                child.wait()
+        except KeyboardInterrupt:
+            try:
+                child.terminate()
+                child.wait(timeout=10)
+            except Exception:
+                pass
+            return 0
+        code = child.returncode
+        if code == RESTART_CODE:
+            continue
+        if pending and code != 0:
+            try:
+                marker.unlink()
+            except Exception:
+                pass
+            if _rollback():
+                sys.stderr.write("bagholder update: the new version did not start; the previous one is back\n")
+                continue
+        return code or 0
 
 
 def check_for_update_if_due(now=None):
@@ -3583,6 +3861,10 @@ class Handler(BaseHTTPRequestHandler):
             self._read_json()
             self._send(200, cancel_login())
             return
+        if path == "/api/update":
+            self._read_json()
+            self._send(200, start_update())
+            return
         if path == "/api/capture":
             body = self._read_json()
             result = capture_tokens(body)
@@ -3769,10 +4051,12 @@ def bind_server():
 
 
 def main():
+    global _httpd
     _ensure_home()
     store.ensure()
     boot_session()
     httpd, port = bind_server()
+    _httpd = httpd
     t = threading.Thread(target=auto_sync_loop, name="bagholder-auto-sync", daemon=True)
     t.start()
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
@@ -3811,7 +4095,12 @@ def main():
             httpd.server_close()
         except Exception:
             pass
+    if _exit_code[0]:
+        sys.exit(_exit_code[0])
 
 
 if __name__ == "__main__":
-    main()
+    if os.environ.get("BAGHOLDER_CHILD") == "1":
+        main()
+    else:
+        sys.exit(supervise())
