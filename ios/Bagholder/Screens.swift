@@ -36,7 +36,12 @@ struct RootView: View {
         // (passkeys and AutoFill need that; presenting over a dismissing sheet leaves it behind)
         .sheet(isPresented: $showMenu) { MenuSheet(book: book).environment(\.theme, t) }
         .fullScreenCover(isPresented: $showConnect) { ConnectLoginView(book: book, isPresented: $showConnect).environment(\.theme, t) }
-        .onAppear { book.handleAppear(); if !book.connected { book.warmLogin() } }
+        .onAppear {
+            LaunchProbe.mark("RootView onAppear")
+            book.handleAppear()
+            // the login engine starts after the first frame is on screen, not during launch
+            if !book.connected { DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { book.warmLogin() } }
+        }
         .onChange(of: scenePhase) { _, p in if p == .active { book.handleAppear() } else if p == .background { book.handleBackground() } }
     }
 
@@ -1375,7 +1380,7 @@ struct MenuSheet: View {
                         Button("Disconnect", role: .destructive) { book.disconnect(); dismiss() }
                     } else {
                         // the login opens over the menu at once; waiting for the menu to dismiss first left the tap dead
-                        Button("Connect Wealthsimple") { showConnect = true }
+                        Button("Connect Wealthsimple") { LaunchProbe.mark("TAP connect"); showConnect = true }
                     }
                 }
                 .listRowBackground(t.surface)
