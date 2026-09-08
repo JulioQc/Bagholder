@@ -538,7 +538,7 @@ UPDATE_CHECK_HOURS = 24
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-08.4"
+PROTOCOL = "2026-09-08.5"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 QUERIES = {
@@ -3205,6 +3205,7 @@ def status_payload():
             "dataVersion": store.data_version() + "|" + model.today_local(),
             "protocol": PROTOCOL,
             "startedAt": STARTED_AT,
+            "sources": market.source_health(),
             "version": APP_VERSION,
             "latestVersion": str(update_status().get("latest") or ""),
             "updateAvailable": bool(update_status().get("updateAvailable")),
@@ -3664,7 +3665,8 @@ def history_payload(query):
     except Exception:
         bars = []
     return {"ok": True, "symbol": rec["symbol"], "chartSymbol": rec["symbol"] if basis == "contract" else inst["symbol"], "source": "recorded" if basis == "contract" else (src[0] if src else ""),
-            "tf": tf, "basis": basis, "available": recorded if basis == "contract" else available, "contractAvailable": recorded, "bars": bars, "pending": pending}
+            "tf": tf, "basis": basis, "available": recorded if basis == "contract" else available, "contractAvailable": recorded, "bars": bars, "pending": pending,
+            "reason": "" if bars or pending else (market.chart_reason(inst, tf) if basis != "contract" else "No premium was recorded for this contract while the app was running.")}
 
 
 def _model_filters(query):
