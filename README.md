@@ -37,7 +37,7 @@ The app opens at `http://127.0.0.1:8765` in your browser. Use that address as wr
 
 ## First use
 
-Open the menu at the top right and choose **Connect Wealthsimple**. A Chrome window opens on Wealthsimple's sign-in page; sign in as usual. Once Bagholder shows it is syncing, you can close that Chrome window. It pulls your full history, and from then on syncs every weekday after 2 PM Mountain time while it is running. The session is refreshed automatically so you are not asked to sign in again.
+Open the menu at the top right and choose **Connect Wealthsimple**. A Chrome window opens on Wealthsimple's sign-in page; sign in as usual. Bagholder closes that window itself once it has the session and starts syncing. Closing the window, or pressing Cancel in the header, ends the attempt; nothing reopens until you choose Connect again. It pulls your full history, and from then on syncs every weekday after 2 PM Mountain time while it is running. The session is refreshed automatically so you are not asked to sign in again.
 
 The menu also offers:
 

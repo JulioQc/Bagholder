@@ -187,7 +187,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
-const PROTOCOL = "2026-09-08.2"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-08.3"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -428,7 +428,7 @@ function showingEmpty() { return !!(state.model && !state.model.activityCount &&
 function syncLine() {
   const s = state.status;
   if (s.protocol && s.protocol !== PROTOCOL) return '<span class="status-err">Restart Bagholder to finish the update</span>';
-  if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login…';
+  if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login… <button class="pill" data-act="cancelConnect" style="padding:1px 8px;font-size:11px;width:auto;margin-left:6px">Cancel</button>';
   if (state.busy === "refresh") return '<span class="spin"></span>Refreshing session…';
   if (s.syncing) return '<span class="spin"></span>' + esc(s.syncStep || "Syncing…");
   if (s.error && !showingEmpty()) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
@@ -1383,13 +1383,22 @@ function connect() {
     if (!res || !res.ok) { state.busy = ""; state.status.error = (res && res.error) || "Install Chrome. Passkey login has to happen on Wealthsimple’s site."; render(); return; }
     const t0 = Date.now();
     const tick = () => api("GET", "/api/status").then((st) => {
+      if (state.busy !== "connecting") return;   // cancelled meanwhile
       applyStatus(st); renderHeaderOnly();
       if (st && st.connected) { state.busy = ""; return syncNow(); }
+      // the server stopped waiting: the window closed, or nothing showed up in time
+      if (st && !st.capturing) { state.busy = ""; state.status.error = st.error || "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
       if (Date.now() - t0 > 180000) { state.busy = ""; state.status.error = "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
       setTimeout(tick, 1500);
     });
     tick();
   });
+}
+function cancelConnect() {
+  state.busy = "";
+  state.status.error = "";
+  render();
+  api("POST", "/api/login/cancel").then(() => pollStatus());
 }
 function syncNow() {
   state.menuOpen = false;
@@ -1452,6 +1461,7 @@ function act(name, arg, ev) {
     case "menu": state.menuOpen = !state.menuOpen; state.picker = null; render(); break;
     case "sync": syncNow(); break;
     case "connect": connect(); break;
+    case "cancelConnect": cancelConnect(); break;
     case "refreshSession": refreshSession(); break;
     case "disconnect": disconnect(); break;
     case "exportCsv": state.menuOpen = false; render(); exportCsv(); break;

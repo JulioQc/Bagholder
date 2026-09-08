@@ -135,6 +135,8 @@ Positive amounts use the theme's green, negative its red, both on the P&L figure
 
 All pages share the header (brand and version, sync status, filter, menu), the tab row and the current filter set. A short-lived notice from an action (session refreshed, trade added, folder scanned, or an error) takes the sync status's place for four seconds; it is red only when it reports an error. A sync error appears once: on the "No activity yet" page it is shown in full beneath the page's button and the header keeps its plain status; everywhere else it takes the header's sync status.
 
+**Connecting.** Connect Wealthsimple opens one Chrome window on the app's own profile at Wealthsimple's sign-in page, and the header reads `Waiting for Wealthsimple login…` with a Cancel button beside it. The wait ends the moment any of these happens: the session is captured (the app then closes the window itself and syncs); the window is closed or Chrome quit (the header shows `The Chrome window closed before a session showed up.` within seconds); Cancel is pressed (the app closes the window); or three minutes pass. Nothing is ever relaunched: a closed window stays closed until Connect is pressed again, and pressing Connect while the app's window is still open brings that window forward instead of opening another.
+
 ### Dashboard
 
 Six KPI tiles in one row, all in CAD over the trades in scope:
