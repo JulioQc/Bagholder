@@ -200,7 +200,7 @@ struct Card<Content: View>: View {
                     Spacer()
                     if let trailing { trailing }
                 }
-                .frame(minHeight: Card.headerHeight)
+                .frame(minHeight: Card.headerHeight, alignment: .top)
             }
             content
         }
