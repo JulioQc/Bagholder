@@ -429,11 +429,12 @@ struct DashboardScreen: View {
         }
     }
 
-    /// The pressed day's equity, at the card's top right; nothing when the chart is not pressed.
+    /// The current equity at the card's top right; the pressed day's while the chart is pressed.
     private func equityAmount(_ v: BHView) -> some View {
-        Group {
-            if let i = equityPick, v.equity.series.indices.contains(i) {
-                Text(BHFmt.money(v.equity.series[i].v)).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(t.ink)
+        let point = equityPick.flatMap { i in v.equity.series.indices.contains(i) ? v.equity.series[i] : nil } ?? v.equity.series.last
+        return Group {
+            if let point {
+                Text(BHFmt.money(point.v)).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(t.ink)
             }
         }
     }

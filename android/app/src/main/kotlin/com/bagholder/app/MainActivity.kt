@@ -345,9 +345,10 @@ fun DashboardScreen(chrome: Chrome, onTrade: (String) -> Unit, onTrades: () -> U
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Tiles(v) }
             item {
-                // the pressed day's equity at the card's top right; nothing when the chart is not pressed
+                // the current equity at the card's top right; the pressed day's while the chart is pressed
                 Card("Equity", trailing = {
-                    equityPick?.let { i -> if (i in v.equity.series.indices) Text(Fmt.money(v.equity.series[i].v), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink) }
+                    val point = equityPick?.let { i -> v.equity.series.getOrNull(i) } ?: v.equity.series.lastOrNull()
+                    if (point != null) Text(Fmt.money(point.v), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
                 }) {
                     if (v.equity.series.size > 1) EquityCurveChart(v.equity.series, equityPick, { equityPick = it }) else Muted("No equity history for this span.")
                 }
