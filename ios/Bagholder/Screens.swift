@@ -36,12 +36,12 @@ struct RootView: View {
         // (passkeys and AutoFill need that; presenting over a dismissing sheet leaves it behind)
         .sheet(isPresented: $showMenu) { MenuSheet(book: book, onConnect: { showMenu = false; showConnect = true }).environment(\.theme, t) }
         .fullScreenCover(isPresented: $showConnect) { ConnectLoginView(book: book, isPresented: $showConnect).environment(\.theme, t) }
-        .onAppear { book.handleAppear() }
+        .onAppear { book.handleAppear(); if !book.connected { book.warmLogin() } }
         .onChange(of: scenePhase) { _, p in if p == .active { book.handleAppear() } else if p == .background { book.handleBackground() } }
     }
 
     private var chrome: Chrome {
-        Chrome(onFilters: { showFilters = true }, onMenu: { showMenu = true }, onConnect: { showConnect = true })
+        Chrome(onFilters: { showFilters = true }, onMenu: { showMenu = true; book.warmLogin() }, onConnect: { showConnect = true })
     }
 }
 

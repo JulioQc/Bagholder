@@ -239,6 +239,9 @@ final class Book: ObservableObject {
         pull()
     }
 
+    /// Get the login page loading before the user taps Connect, so it appears at once.
+    func warmLogin() { LoginWeb.shared.warm() }
+
     func disconnect() {
         task?.cancel()
         generation += 1
@@ -264,6 +267,8 @@ final class Book: ObservableObject {
         lastSync = nil
         UserDefaults.standard.removeObject(forKey: Self.lastSyncKey)
         LastPullStore.clear()
+        LoginWeb.shared.reset()
+        LoginWeb.shared.warm()
     }
 
     func syncNow() {
@@ -453,6 +458,91 @@ final class Book: ObservableObject {
 
 // MARK: - the Wealthsimple login in a web view
 
+/// One login web view, kept alive and warm across opens so the engine is already
+/// running and the page (and its bot-check) is already past by the time Connect is
+/// tapped, the way a browser feels instant. `warm()` starts the load early; capture
+/// runs only while the sheet is open; `reset()` drops the page after a login or a
+/// disconnect so the next warm loads a fresh one.
+@MainActor
+final class LoginWeb {
+    static let shared = LoginWeb()
+
+    let webView: WKWebView
+    private let coordinator: Coordinator
+    private var timer: Timer?
+    private var done = false
+    var onSession: ((String, String?) -> Void)?
+
+    private static let loginURL = URL(string: "https://my.wealthsimple.com/app/login")!
+
+    init() {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .default()
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        webView = WKWebView(frame: .zero, configuration: config)
+        coordinator = Coordinator()
+        webView.navigationDelegate = coordinator
+        webView.uiDelegate = coordinator
+    }
+
+    /// Start loading the login page if it is not already loaded or loading.
+    func warm() {
+        guard webView.url == nil || webView.url?.absoluteString == "about:blank" else { return }
+        if webView.isLoading { return }
+        webView.load(URLRequest(url: Self.loginURL))
+    }
+
+    /// While the sheet is open: watch for the session cookie and hand it back once.
+    func beginCapture(_ onSession: @escaping (String, String?) -> Void) {
+        self.onSession = onSession
+        done = false
+        warm()
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.inspectCookies() }
+    }
+
+    func endCapture() {
+        timer?.invalidate(); timer = nil
+        onSession = nil
+    }
+
+    /// Drop the current page (after a successful login, or on disconnect) so a later warm reloads fresh.
+    func reset() {
+        endCapture()
+        done = false
+        webView.load(URLRequest(url: URL(string: "about:blank")!))
+    }
+
+    private func inspectCookies() {
+        WKWebsiteDataStore.default().httpCookieStore.getAllCookies { [weak self] cookies in
+            guard let self, !self.done else { return }
+            var oauth: String?
+            var wssdi: String?
+            for cookie in cookies {
+                if cookie.name == "wssdi", !cookie.value.isEmpty { wssdi = cookie.value }
+                else if cookie.name == "_oauth2_access_v2", WSPull.jsonWithAccessToken(cookie.value) != nil { oauth = cookie.value }
+            }
+            if oauth == nil {
+                for cookie in cookies where cookie.name != "wssdi" {
+                    if WSPull.jsonWithAccessToken(cookie.value) != nil { oauth = cookie.value; break }
+                }
+            }
+            guard let oauth else { return }
+            self.done = true
+            let hand = self.onSession
+            self.endCapture()
+            hand?(oauth, wssdi)
+        }
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
+            return nil
+        }
+    }
+}
+
 struct ConnectLoginView: View {
     @Environment(\.theme) private var t
     @ObservedObject var book: Book
@@ -462,84 +552,25 @@ struct ConnectLoginView: View {
         NavigationStack {
             WealthsimpleLoginWebView { oauth, wssdi in
                 book.connect(cookie: oauth, wssdi: wssdi)
+                LoginWeb.shared.reset()
                 isPresented = false
             }
             .ignoresSafeArea(edges: .bottom)
             .navigationTitle("Connect Wealthsimple")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { isPresented = false } } }
+            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { LoginWeb.shared.endCapture(); isPresented = false } } }
         }
     }
 }
 
+/// Hosts the one warm login web view; it is never recreated, so opens after the first are instant.
 struct WealthsimpleLoginWebView: UIViewRepresentable {
     var onSession: (String, String?) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onSession: onSession) }
-
     func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
-        config.defaultWebpagePreferences.allowsContentJavaScript = true
-        let web = WKWebView(frame: .zero, configuration: config)
-        web.navigationDelegate = context.coordinator
-        web.uiDelegate = context.coordinator
-        context.coordinator.start()
-        web.load(URLRequest(url: URL(string: "https://my.wealthsimple.com/app/login")!))
-        return web
+        LoginWeb.shared.beginCapture(onSession)
+        return LoginWeb.shared.webView
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
-
-    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) { coordinator.stop() }
-
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKHTTPCookieStoreObserver {
-        let onSession: (String, String?) -> Void
-        private var done = false
-        private var timer: Timer?
-
-        init(onSession: @escaping (String, String?) -> Void) { self.onSession = onSession }
-
-        func start() {
-            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.inspectCookies() }
-        }
-
-        func stop() {
-            timer?.invalidate()
-            timer = nil
-        }
-
-        func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {}
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { inspectCookies() }
-
-        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-            if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
-            return nil
-        }
-
-        private func inspectCookies() {
-            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { [weak self] cookies in
-                guard let self, !self.done else { return }
-                var oauth: String?
-                var wssdi: String?
-                for cookie in cookies {
-                    if cookie.name == "wssdi", !cookie.value.isEmpty { wssdi = cookie.value }
-                    else if cookie.name == "_oauth2_access_v2", WSPull.jsonWithAccessToken(cookie.value) != nil { oauth = cookie.value }
-                }
-                // fall back to any cookie holding an access token only once the named one is absent
-                if oauth == nil {
-                    for cookie in cookies where cookie.name != "wssdi" {
-                        if WSPull.jsonWithAccessToken(cookie.value) != nil { oauth = cookie.value; break }
-                    }
-                }
-                guard let oauth else { return }
-                self.done = true
-                DispatchQueue.main.async {
-                    self.stop()
-                    self.onSession(oauth, wssdi)
-                }
-            }
-        }
-    }
 }
