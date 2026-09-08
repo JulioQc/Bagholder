@@ -262,7 +262,7 @@ fun Card(title: String? = null, subtitle: String? = null, trailing: (@Composable
         if (title != null || trailing != null) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
-                    if (title != null) Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = t.ink)
+                    if (title != null) Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
                     if (subtitle != null) Text(subtitle, fontSize = 13.sp, color = t.ink55)
                 }
                 trailing?.invoke()
