@@ -232,7 +232,7 @@ Avg and Market belong to the row's own position, matched by position id, never b
 
 ## 5. Filters
 
-One filter set applies to every page: Date (presets 1D 1W 1M 3M 6M YTD 1Y 5Y, years, or a range), Account, Symbol, Grade, Tag, Side, Kind, Exchange, Result, and ranges on Price, Hold, P&L and Qty. Trades are scoped by close date. Cashflow honours only Date, Account and Symbol and says which other filters it ignored. ⌘K on a Mac, Ctrl+K elsewhere, opens the filter popover on Symbol with its search box focused, from anywhere on the page; Escape closes it.
+One filter set applies to every page: Date (presets 1D 1W 1M 3M 6M YTD 1Y 5Y, years, or a range), Account, Symbol, Grade, Tag, Side, Kind, Exchange, Result, and ranges on Price, Hold, P&L and Qty. Trades are scoped by close date. Cashflow honours only Date, Account and Symbol and says which other filters it ignored. The filter popover opens on a search box above the field list. Typing lists every value from the list fields that contains the text (symbols first, then account, grade, tag, side, kind, exchange, result, each row naming its field), the first match highlighted; the arrow keys move the highlight and Enter toggles the highlighted value in its field and clears the box for the next one, the box keeping focus throughout. When no value matches, the text is the free-text Search filter, applied as before. ⌘K on a Mac, Ctrl+K elsewhere, opens the popover with that box focused, from anywhere on the page; Escape closes it. Inside a single list filter the same keys drive its own value list.
 
 ## 6. Layout
 
