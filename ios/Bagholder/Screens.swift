@@ -192,7 +192,7 @@ struct Card<Content: View>: View {
             if title != nil || trailing != nil {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
-                        if let title { Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(t.ink) }
+                        if let title { Text(title).font(.system(size: 14, weight: .medium)).foregroundStyle(t.ink) }
                         if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(t.ink55) }
                     }
                     Spacer()
