@@ -232,21 +232,34 @@ struct Tile: View {
 struct TilePager: View {
     @Environment(\.theme) private var t
     let tiles: [Tile]
+    @State private var page = 0
 
     var body: some View {
         let pages = stride(from: 0, to: tiles.count, by: 2).map { Array(tiles[$0..<min($0 + 2, tiles.count)]) }
-        TabView {
-            ForEach(Array(pages.enumerated()), id: \.offset) { _, page in
-                HStack(spacing: 12) {
-                    ForEach(Array(page.enumerated()), id: \.offset) { _, tile in tile }
-                    if page.count == 1 { Color.clear.frame(maxWidth: .infinity) }
+        VStack(spacing: 10) {
+            TabView(selection: $page) {
+                ForEach(Array(pages.enumerated()), id: \.offset) { i, page in
+                    HStack(spacing: 12) {
+                        ForEach(Array(page.enumerated()), id: \.offset) { _, tile in tile }
+                        if page.count == 1 { Color.clear.frame(maxWidth: .infinity) }
+                    }
+                    .tag(i)
                 }
-                .padding(.bottom, 22)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 96)
+            if pages.count > 1 {
+                // 4 pt dots at 24 % ink; the current page a 14 × 4 accent pill that slides on swipe
+                HStack(spacing: 5) {
+                    ForEach(pages.indices, id: \.self) { i in
+                        Capsule()
+                            .fill(i == page ? t.accent : t.ink.opacity(0.24))
+                            .frame(width: i == page ? 14 : 4, height: 4)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: page)
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: pages.count > 1 ? .always : .never))
-        .indexViewStyle(.page(backgroundDisplayMode: .never))
-        .frame(height: 118)
     }
 }
 

@@ -37,6 +37,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
@@ -391,15 +394,21 @@ fun TilePager(tiles: List<@Composable (Modifier) -> Unit>) {
     val t = LocalTheme.current
     val pages = tiles.chunked(2)
     val state = rememberPagerState(pageCount = { pages.size })
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         HorizontalPager(state, pageSpacing = 12.dp) { i ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 for (tile in pages[i]) tile(Modifier.weight(1f))
                 if (pages[i].size == 1) Spacer(Modifier.weight(1f))
             }
         }
-        if (pages.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (i in pages.indices) Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(if (i == state.currentPage) t.ink60 else t.hair))
+        // 4 dp dots at 24 % ink; the current page a 14 × 4 accent pill that slides on swipe
+        if (pages.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            for (i in pages.indices) {
+                val active = i == state.currentPage
+                val width by animateDpAsState(if (active) 14.dp else 4.dp, tween(200), label = "dot")
+                val color by animateColorAsState(if (active) t.accent else t.ink.copy(alpha = 0.24f), tween(200), label = "dotColor")
+                Box(Modifier.width(width).height(4.dp).clip(RoundedCornerShape(2.dp)).background(color))
+            }
         }
     }
 }
