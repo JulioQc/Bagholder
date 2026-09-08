@@ -94,6 +94,7 @@ textarea.input{resize:none;line-height:1.5}
 .pop-row.on{background:var(--accent-900);color:var(--accent-300);box-shadow:inset 3px 0 0 var(--chip-fg)}
 .pop-row.on:hover{background:rgba(var(--accent-rgb),.28)}
 .pop-row.hi{background:rgba(var(--ink-rgb),var(--hover))}
+.pop-row:focus{outline:none}
 .pop-row.on.hi{background:rgba(var(--accent-rgb),.28)}
 .pill{cursor:pointer;border:0;font:400 11.5px Inter,system-ui,sans-serif;padding:4px 0;border-radius:6px;background:rgba(var(--ink-rgb),.06);color:rgba(var(--ink-rgb),.7);font-variant-numeric:tabular-nums}
 .pill:hover{background:rgba(var(--ink-rgb),.18)}
@@ -681,7 +682,7 @@ function popValuesHtml(active) {
   if (!opts.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">Nothing to choose from yet.</div>';
   if (!shown.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">No match.</div>';
   const hi = Math.min(state.valueHi || 0, shown.length - 1);
-  return shown.map((v, i) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + esc(v) + "</button>").join("");
+  return shown.map((v, i) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" tabindex="-1" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + esc(v) + "</button>").join("");
 }
 // Values from every list field that contain the typed text, symbols first:
 // [{key, value, label}], at most 40.
@@ -705,7 +706,7 @@ function popFieldsBodyHtml() {
   if (q && matches.length) {
     const hi = Math.min(state.valueHi || 0, matches.length - 1);
     return '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' + matches.map((m, i) =>
-      '<button class="pop-row' + (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: m.key, value: m.value }) + "'>" + esc(m.value) +
+      '<button class="pop-row' + (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" tabindex="-1" data-act="toggleList" data-arg=\'' + attr({ key: m.key, value: m.value }) + "'>" + esc(m.value) +
       '<span style="margin-left:auto;font-size:11px;color:var(--ink55)">' + esc(m.label) + "</span></button>").join("") + "</div>";
   }
   return (q ? '<div class="muted" style="padding:2px 7px 8px;font-size:12px">No match.</div>' : "") +
@@ -1356,10 +1357,12 @@ function render() {
   // across a redraw too, matched by position in the page.
   const boxes = [...root.querySelectorAll(".scroll, .scroll-xy")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
   const focusId = document.activeElement ? document.activeElement.id : "";
+  const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
   root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.dataOpen ? dataDialogHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
   if (focusId === "valueQuery" || focusId === "searchInput") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
+  else if (rowHadFocus) { const row = document.querySelector("#popMatches .pop-row.hi, #popValues .pop-row.hi"); if (row) row.focus(); }
   root.querySelectorAll(".scroll, .scroll-xy").forEach((el, i) => { const b = boxes[i]; if (b && !el.dataset.keepScroll) { el.scrollTop = b.top; el.scrollLeft = b.left; } });
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
   const menu = document.getElementById("tagMenu");
@@ -1449,6 +1452,37 @@ function connect() {
     tick();
   });
 }
+// Keys shared by the popover's search boxes: Tab goes to Done (Shift+Tab to Clear all), since the rows
+// are driven by the arrows; Delete, or Backspace in an empty box, deselects the highlighted value.
+function popoverRowKeys(e) {
+  // a row has the keyboard only after a mouse click on it: the same keys work from there,
+  // and the up arrow past the first row, or typing a character, returns to the box
+  const row = e.target;
+  const rows = [...row.parentElement.querySelectorAll("[data-act=toggleList]")];
+  const i = rows.indexOf(row);
+  const box = document.getElementById("valueQuery") || document.getElementById("searchInput");
+  const go = (j) => { state.valueHi = j; rows.forEach((r, k) => r.classList.toggle("hi", k === j)); rows[j].focus(); rows[j].scrollIntoView({ block: "nearest" }); };
+  if (e.key === "ArrowUp" && i === 0 && box) { e.preventDefault(); box.focus(); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); go((i + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length); return; }
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {} act("toggleList", arg); return; }
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); if (row.classList.contains("on")) { let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {} act("toggleList", arg); } return; }
+  if (e.key === "Tab") { const to = document.querySelector(e.shiftKey ? '[data-pop] [data-act="clearAll"]' : '[data-pop] [data-act="closeFilter"]'); if (to) { e.preventDefault(); to.focus(); } return; }
+  if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && box) { e.preventDefault(); box.focus(); box.value += e.key; box.dispatchEvent(new Event("input", { bubbles: true })); return; }
+  if (box && (e.key === "Home" || e.key === "End")) { box.focus(); }
+}
+function popoverBoxKeys(e, rows) {
+  if (e.key === "Tab") {
+    const to = document.querySelector(e.shiftKey ? '[data-pop] [data-act="clearAll"]' : '[data-pop] [data-act="closeFilter"]');
+    if (to) { e.preventDefault(); to.focus(); }
+    return true;
+  }
+  if (e.key === "Delete" || (e.key === "Backspace" && !e.target.value)) {
+    const row = rows[Math.min(state.valueHi || 0, rows.length - 1)];
+    if (row && row.classList.contains("on")) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {} act("toggleList", arg); }
+    return true;
+  }
+  return false;
+}
 function cancelConnect() {
   state.busy = "";
   state.status.error = "";
@@ -1513,7 +1547,7 @@ function act(name, arg, ev) {
       // a value picked from the search's matches stays in the list, checked, so several can be picked in a row
       if (document.getElementById("popMatches") && f.search) f.search = "";
       setFilters({});
-      const vq = document.getElementById("valueQuery") || document.getElementById("searchInput"); if (vq) { vq.focus(); vq.select(); }
+      if (!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"))) { const vq = document.getElementById("valueQuery") || document.getElementById("searchInput"); if (vq) { vq.focus(); vq.select(); } }
       break;
     }
     case "toggleYear": { const i = f.years.indexOf(arg.year); if (i >= 0) f.years.splice(i, 1); else f.years.push(arg.year); setFilters({ from: "", to: "", preset: "all" }); break; }
@@ -1609,8 +1643,18 @@ function bind() {
       return;
     }
     if (e.target && e.target.id === "rangeInput" && e.key === "Enter") { e.target.blur(); }
+    if (e.target && e.target.classList && e.target.classList.contains("pop-row") && e.target.dataset.act === "toggleList") { popoverRowKeys(e); return; }
+    // the popover's footer: Tab runs box → Done → Clear all → box, and Shift+Tab runs it backwards
+    if (e.key === "Tab" && e.target && e.target.closest && e.target.closest('[data-pop="filter"]') && (e.target.dataset.act === "closeFilter" || e.target.dataset.act === "clearAll")) {
+      const box = document.getElementById("valueQuery") || document.getElementById("searchInput");
+      const done = document.querySelector('[data-pop="filter"] [data-act="closeFilter"]'), clear = document.querySelector('[data-pop="filter"] [data-act="clearAll"]');
+      const to = e.target.dataset.act === "closeFilter" ? (e.shiftKey ? box : clear) : (e.shiftKey ? done : box);
+      if (to) { e.preventDefault(); to.focus(); }
+      return;
+    }
     if (e.target && e.target.id === "searchInput") {
       const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList]")];
+      if (popoverBoxKeys(e, rows)) return;
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && rows.length) {
         e.preventDefault();
         state.valueHi = (Math.min(state.valueHi || 0, rows.length - 1) + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
@@ -1637,6 +1681,7 @@ function bind() {
     if (e.target && e.target.id === "valueQuery") {
       // the value list is driven from the search box: arrows move the highlight, Enter toggles it
       const rows = [...document.querySelectorAll("#popValues [data-act=toggleList]")];
+      if (popoverBoxKeys(e, rows)) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         if (!rows.length) return;
         e.preventDefault();
