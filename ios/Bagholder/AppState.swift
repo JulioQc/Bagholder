@@ -243,9 +243,18 @@ final class Book: ObservableObject {
         task?.cancel()
         generation += 1
         Keychain.clear()
+        // clear the session and anything that could hold a token, but keep the HTTP cache
+        // (scripts, fonts, the bot-check assets) so the next login is not a cold re-download
         let store = WKWebsiteDataStore.default()
-        store.httpCookieStore.getAllCookies { cookies in for c in cookies { store.httpCookieStore.delete(c) } }
-        store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+        let sessionTypes: Set<String> = [
+            WKWebsiteDataTypeCookies,
+            WKWebsiteDataTypeLocalStorage,
+            WKWebsiteDataTypeSessionStorage,
+            WKWebsiteDataTypeIndexedDBDatabases,
+            WKWebsiteDataTypeWebSQLDatabases,
+            WKWebsiteDataTypeServiceWorkerRegistrations,
+        ]
+        store.removeData(ofTypes: sessionTypes, modifiedSince: .distantPast) {}
         connected = false
         result = nil
         base = nil
