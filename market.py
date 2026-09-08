@@ -29,7 +29,7 @@ STOOQ_URL = "https://stooq.com/q/d/l/?s=^spx&i=d"
 TMX_URL = "https://app-money.tmx.com/graphql"
 TMX_QUOTE_QUERY = (
     "query getQuoteBySymbol($symbol: String, $locale: String) { getQuoteBySymbol(symbol: $symbol, locale: $locale) "
-    "{ symbol name price priceChange percentChange prevClose currency dividendFrequency dividendYield dividendAmount exDividendDate } }"
+    "{ symbol name exchangeName price priceChange percentChange prevClose currency dividendFrequency dividendYield dividendAmount exDividendDate } }"
 )
 QUOTE_REFRESH_MINUTES = 1
 MARKET_CHECK_MINUTES = 60
@@ -49,17 +49,16 @@ TMX_HISTORY_QUERY = (
     "{ getTimeSeriesData(symbol: $symbol, freq: $freq, interval: $interval, start: $start, end: $end) { dateTime open high low close volume } }"
 )
 CBOE_CA_HISTORY_URL = "https://www-api.cboe.com/ca/equities/securities-1/%s/trading-activity-historical/"
-COINGECKO_SEARCH_URL = "https://api.coingecko.com/api/v3/search?query=%s"
-COINGECKO_RANGE_URL = "https://api.coingecko.com/api/v3/coins/%s/market_chart/range?vs_currency=%s&from=%d&to=%d&interval=daily"
-COINGECKO_MAX_DAYS = 365
-COINGECKO_HOURLY_DAYS = 89
+COINBASE_EXCHANGE_PRODUCT_URL = "https://api.exchange.coinbase.com/products/%s"
+COINBASE_CANDLES_URL = "https://api.exchange.coinbase.com/products/%s/candles?granularity=%d&start=%s&end=%s"
+COINBASE_CANDLE_LIMIT = 300
+COINBASE_EXCHANGE_START = "2015-01-01"
 TMX_CHART_QUERY = (
     "query getCompanyChart($symbol: String!, $from: String!, $to: String!) "
     "{ intraday: getChartDataBySymbol(symbol: $symbol, fromDate: $from, toDate: $to) { dateTime open high low close volume } }"
 )
 TMX_INTRADAY_DAYS = 365
 SESSION_OPEN_MINUTES = 9 * 60 + 30
-COINGECKO_HOURLY_URL = "https://api.coingecko.com/api/v3/coins/%s/market_chart/range?vs_currency=%s&from=%d&to=%d"
 TIMEFRAMES = ("1h", "4h", "1d", "1w", "1M")
 INTRADAY_SECONDS = {"1h": 3600, "4h": 14400}
 HISTORY_STALE_HOURS = 20
@@ -289,17 +288,104 @@ def tmx_record_symbol(symbol, exchange):
 
 
 def tmx_quote_symbol(symbol, exchange, currency):
-    """TMX Money symbol for a listing: bare for Canadian listings, ':US' for
-    US listings. None when TMX does not carry it (Cboe Canada, crypto, options)."""
+    """TMX Money symbol for a listing, in the form its venue takes (tmx_form).
+    None when TMX does not carry it (crypto, options, unknown venues)."""
     s = tmx_symbol(symbol)
     if not s or " " in s:
         return None
+    form = tmx_form(exchange, currency)
+    return s + form if form is not None else None
+
+
+# TMX Money names a listing by its venue: bare for TSX and TSX-V, ':CNX' for the
+# CSE, ':AQL' for Cboe Canada (the former NEO), ':US' for US exchanges. The venue
+# in the security record picks the form (tmx_form). Every TMX query goes through
+# tmx_lookup: when the record's form answers nothing, the other forms for the
+# record's currency are asked for a quote, the one naming a matching venue is
+# remembered for the symbol, and the query is repeated with it. No venue is a
+# special case, and a record with a wrong or missing venue still resolves.
+TMX_FORMS = {"CAD": ("", ":CNX", ":AQL"), "USD": (":US",)}
+TMX_VENUE_OF_FORM = {"": ("TORONTO STOCK EXCHANGE", "TSX VENTURE"), ":CNX": ("CANADIAN SECURITIES EXCHANGE",), ":AQL": ("CBOE", "NEO"), ":US": ("NYSE", "NASDAQ", "NEW YORK")}
+TMX_RESOLVE_RETRY_DAYS = 1
+
+
+def tmx_form(exchange, currency):
+    """TMX's symbol suffix for a listing venue, or None when TMX does not carry it."""
     ex = str(exchange or "").strip().upper()
-    if ex in US_EXCHANGES or (not ex and str(currency or "").upper() == "USD"):
-        return s + ":US"
-    if ex in ("TSX", "TSX-V", "TSXV", "CSE", "") or (not ex and str(currency or "").upper() == "CAD"):
-        return s
+    ccy = str(currency or "").strip().upper()
+    if ex in US_EXCHANGES or (not ex and ccy == "USD"):
+        return ":US"
+    if ex in CBOE_CANADA_EXCHANGES:
+        return ":AQL"
+    if ex == "CSE":
+        return ":CNX"
+    if ex in ("TSX", "TSX-V", "TSXV") or (not ex and ccy == "CAD"):
+        return ""
     return None
+
+
+def tmx_record_symbol(symbol, exchange):
+    """TMX Money symbol for a Canadian listing's declared distribution record."""
+    s = tmx_symbol(symbol)
+    if not s:
+        return None
+    form = tmx_form(exchange, "CAD")
+    return s + form if form is not None else None
+
+
+def tmx_bare(key):
+    return str(key or "").split(":", 1)[0]
+
+
+def tmx_remembered(key):
+    """The form TMX answered to for this symbol, when one has been remembered."""
+    if not key or key.startswith("^"):
+        return key
+    v = store.get_meta("tmx_form:" + tmx_bare(key))
+    return tmx_bare(key) + v[1:] if v.startswith("@") else key
+
+
+def tmx_resolve(key, ssl_context=None, now=None):
+    """Which of TMX's forms of a symbol answers, checked by the venue its quote
+    names; remembered for good, and a miss remembered for a day. '' when none."""
+    if not key or key.startswith("^"):
+        return key
+    bare = tmx_bare(key)
+    suffix = key[len(bare):]
+    forms = TMX_FORMS["USD"] if suffix == ":US" else TMX_FORMS["CAD"]
+    forms = [suffix] + [f for f in forms if f != suffix] if suffix in forms else list(forms)   # the record's own form first
+    meta_key = "tmx_form:" + bare
+    v = store.get_meta(meta_key)
+    if v.startswith("@"):
+        return bare + v[1:]
+    today = (now or datetime.now(timezone.utc)).date()
+    if v.startswith("none@") and v[5:] > (today - timedelta(days=TMX_RESOLVE_RETRY_DAYS)).isoformat():
+        return ""
+    for form in forms:
+        cand = bare + form
+        try:
+            q = ((_post_json(TMX_URL, {"operationName": "getQuoteBySymbol", "variables": {"symbol": cand, "locale": "en"}, "query": TMX_QUOTE_QUERY}, ssl_context, _TMX_HEADERS) or {}).get("data") or {}).get("getQuoteBySymbol") or {}
+        except Exception:
+            q = {}
+        venue = str(q.get("exchangeName") or "").upper()
+        if venue and any(v_ in venue for v_ in TMX_VENUE_OF_FORM[form]):
+            store.set_meta(meta_key, "@" + form)
+            return cand
+    store.set_meta(meta_key, "none@" + today.isoformat())
+    return ""
+
+
+def tmx_lookup(key, fn, ssl_context=None):
+    """(result, form) of fn(form): the remembered or given form first; when it
+    answers nothing, the form TMX resolves for the symbol instead."""
+    first = tmx_remembered(key)
+    r = fn(first)
+    if r or not key or key.startswith("^"):
+        return r, first
+    alt = tmx_resolve(key, ssl_context)
+    if alt and alt != first:
+        return fn(alt), alt
+    return r, first
 
 
 def is_canadian_listing(exchange, currency):
@@ -324,6 +410,7 @@ def parse_tmx_quote(data):
         "dividendFrequency": str(q.get("dividendFrequency") or ""),
         "exDividendDate": ex,
         "name": str(q.get("name") or ""),
+        "exchange": str(q.get("exchangeName") or ""),
     }
 
 
@@ -350,24 +437,24 @@ def fetch_tmx(symbol, ssl_context=None, exchange=None):
     sym = tmx_record_symbol(symbol, exchange)
     if not sym:
         return None, []
-    quote = None
-    try:
-        quote = parse_tmx_quote(_post_json(TMX_URL, {"operationName": "getQuoteBySymbol", "variables": {"symbol": sym, "locale": "en"}, "query": TMX_QUOTE_QUERY}, ssl_context, _TMX_HEADERS))
-    except Exception:
-        quote = None
+    quote, form = tmx_lookup(sym, lambda k: _tmx_quote(k, ssl_context), ssl_context)
     divs = []
     try:
-        divs = parse_tmx_dividends(_post_json(TMX_URL, {"operationName": "getDividendsForSymbol", "variables": {"symbol": sym, "page": 1, "batch": TMX_BATCH}, "query": TMX_DIVIDENDS_QUERY}, ssl_context, _TMX_HEADERS))
+        divs = parse_tmx_dividends(_post_json(TMX_URL, {"operationName": "getDividendsForSymbol", "variables": {"symbol": form, "page": 1, "batch": TMX_BATCH}, "query": TMX_DIVIDENDS_QUERY}, ssl_context, _TMX_HEADERS))
     except Exception:
         divs = []
     return quote, divs
 
 
-def fetch_tmx_quote(tmx_sym, ssl_context=None):
+def _tmx_quote(tmx_sym, ssl_context=None):
     try:
         return parse_tmx_quote(_post_json(TMX_URL, {"operationName": "getQuoteBySymbol", "variables": {"symbol": tmx_sym, "locale": "en"}, "query": TMX_QUOTE_QUERY}, ssl_context, _TMX_HEADERS))
     except Exception:
         return None
+
+
+def fetch_tmx_quote(tmx_sym, ssl_context=None):
+    return tmx_lookup(tmx_sym, lambda k: _tmx_quote(k, ssl_context), ssl_context)[0]
 
 
 def _num(v, default=0.0):
@@ -668,39 +755,109 @@ def parse_cboe_ca_history(text):
     return out
 
 
-def parse_coingecko_range(text):
-    """CoinGecko gives one price per day (no open/high/low): close only."""
-    d = json.loads(text or "{}") or {}
+def parse_coinbase_candles(text):
+    """Coinbase Exchange candles, [time, low, high, open, close, volume] rows, oldest first."""
+    rows = json.loads(text or "[]") or []
     out = {}
-    for ts, px in d.get("prices") or []:
-        try:
-            day = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).date().isoformat()
-        except (TypeError, ValueError, OSError):
+    for r in rows:
+        if not isinstance(r, list) or len(r) < 6:
             continue
-        if px and px > 0:
-            out[day] = {"date": day, "open": None, "high": None, "low": None, "close": px, "volume": None}
+        try:
+            t = int(r[0])
+            lo, hi, op, cl, vol = (float(x) for x in r[1:6])
+        except (TypeError, ValueError):
+            continue
+        if cl > 0:
+            out[t] = {"time": t, "open": op, "high": hi, "low": lo, "close": cl, "volume": vol}
     return [out[k] for k in sorted(out)]
 
 
-def coingecko_id(symbol, ssl_context=None):
-    """CoinGecko's id for a crypto symbol, remembered once found."""
-    sym = str(symbol or "").strip().upper()
-    if not sym:
-        return ""
-    key = "coingecko_id:" + sym
-    cached = store.get_meta(key)
-    if cached:
-        return cached
-    try:
-        d = json.loads(_get_text(COINGECKO_SEARCH_URL % sym, ssl_context) or "{}") or {}
-    except Exception:
-        return ""
-    hits = [c for c in d.get("coins") or [] if str(c.get("symbol") or "").upper() == sym and c.get("id")]
-    hits.sort(key=lambda c: c.get("market_cap_rank") or 10 ** 9)
-    if not hits:
-        return ""
-    store.set_meta(key, hits[0]["id"])
-    return hits[0]["id"]
+def coinbase_products(pair, ssl_context=None, now=None):
+    """Coinbase Exchange markets for a 'SYM-CCY' pair, in order of preference:
+    the pair itself when it trades there, then the asset's USD market. Remembered;
+    a pair with no market is remembered as such for a day. A fetch tries them in
+    order and the first with bars for the span wins."""
+    pair = str(pair or "").strip().upper()
+    if "-" not in pair:
+        return []
+    meta_key = "coinbase_product:" + pair
+    v = store.get_meta(meta_key)
+    if v.startswith("@"):
+        return [x for x in v[1:].split(",") if x]
+    today = (now or datetime.now(timezone.utc)).date()
+    if v.startswith("none@") and v[5:] > (today - timedelta(days=TMX_RESOLVE_RETRY_DAYS)).isoformat():
+        return []
+    sym, ccy = pair.split("-", 1)
+    found = []
+    for cand in [pair] + ([sym + "-USD"] if ccy != "USD" else []):
+        try:
+            d = json.loads(_get_text(COINBASE_EXCHANGE_PRODUCT_URL % cand, ssl_context) or "{}") or {}
+        except Exception:
+            continue
+        if str(d.get("id") or "").upper() == cand:
+            found.append(cand)
+    store.set_meta(meta_key, "@" + ",".join(found) if found else "none@" + today.isoformat())
+    return found
+
+
+def coinbase_product(pair, ssl_context=None, now=None):
+    """The preferred Coinbase Exchange market for a pair, or ''."""
+    products = coinbase_products(pair, ssl_context, now)
+    return products[0] if products else ""
+
+
+def fetch_coinbase_candles(product, granularity, start_ts, end_ts, ssl_context=None):
+    """Candles of `granularity` seconds over [start_ts, end_ts], fetched
+    COINBASE_CANDLE_LIMIT at a time, a few spans in parallel."""
+    span = COINBASE_CANDLE_LIMIT * granularity
+    chunks = []
+    cur = int(start_ts) // granularity * granularity
+    while cur < end_ts:
+        chunks.append((cur, min(cur + span, int(end_ts))))
+        cur += span
+    iso = lambda ts: datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    def one(c):
+        try:
+            return parse_coinbase_candles(_get_text(COINBASE_CANDLES_URL % (product, granularity, iso(c[0]), iso(c[1])), ssl_context))
+        except Exception:
+            return []
+    out = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for bars in pool.map(one, chunks):
+            for b in bars:
+                out[b["time"]] = b
+    return [out[k] for k in sorted(out)]
+
+
+def _rate_on_or_before(fx, day, days=7):
+    d = datetime.strptime(day, "%Y-%m-%d").date()
+    for i in range(days):
+        r = fx.get((d - timedelta(days=i)).isoformat())
+        if r and r > 0:
+            return r
+    return None
+
+
+def in_position_currency(bars, product, currency):
+    """Bars of a Coinbase market in the position's currency: unchanged when the
+    market is quoted in it; a USD market into CAD at the Bank of Canada rate of
+    the bar's day. A bar whose day has no published rate within a week is
+    dropped, never guessed. Anything else cannot be converted and yields nothing."""
+    quote = product.split("-", 1)[1] if "-" in product else ""
+    ccy = str(currency or "CAD").upper()
+    if quote == ccy:
+        return list(bars)
+    if not (quote == "USD" and ccy == "CAD"):
+        return []
+    fx = store.fx_rates()
+    out = []
+    for b in bars:
+        day = b["date"] if b.get("date") else datetime.fromtimestamp(b["time"], tz=timezone.utc).date().isoformat()
+        rate = _rate_on_or_before(fx, day)
+        if not rate:
+            continue
+        out.append(dict(b, open=b["open"] * rate, high=b["high"] * rate, low=b["low"] * rate, close=b["close"] * rate))
+    return out
 
 
 def chart_instrument(rec):
@@ -725,7 +882,7 @@ def history_source(rec):
     if source == "cboe_ca":
         return ("cboe_ca", key)
     if source == "coinbase":
-        return ("coingecko", key)
+        return ("coinbase", key)
     return None
 
 
@@ -737,18 +894,21 @@ def fetch_history(rec, start, end, ssl_context=None):
     source, key = src
     try:
         if source == "tmx":
-            data = _post_json(TMX_URL, {"operationName": "getTimeSeriesData", "variables": {"symbol": key, "freq": "day", "interval": 1, "start": start, "end": end}, "query": TMX_HISTORY_QUERY}, ssl_context, _TMX_HEADERS)
-            return parse_tmx_history(data), source
+            def daily(form):
+                data = _post_json(TMX_URL, {"operationName": "getTimeSeriesData", "variables": {"symbol": form, "freq": "day", "interval": 1, "start": start, "end": end}, "query": TMX_HISTORY_QUERY}, ssl_context, _TMX_HEADERS)
+                return parse_tmx_history(data)
+            return tmx_lookup(key, daily, ssl_context)[0], source
         if source == "cboe_ca":
             return parse_cboe_ca_history(_get_text(CBOE_CA_HISTORY_URL % key, ssl_context)), source
-        if source == "coingecko":
-            sym, ccy = key.split("-", 1)
-            cid = coingecko_id(sym, ssl_context)
-            if not cid:
-                return [], ""
-            end_dt = datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
-            start_dt = max(datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc), end_dt - timedelta(days=COINGECKO_MAX_DAYS))
-            return parse_coingecko_range(_get_text(COINGECKO_RANGE_URL % (cid, ccy.lower(), int(start_dt.timestamp()), int(end_dt.timestamp())), ssl_context)), source
+        if source == "coinbase":
+            start_ts = int(datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+            end_ts = int(datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()) + 86400
+            for product in coinbase_products(key, ssl_context):
+                days = [dict(b, date=datetime.fromtimestamp(b["time"], tz=timezone.utc).date().isoformat()) for b in fetch_coinbase_candles(product, 86400, start_ts, end_ts, ssl_context)]
+                bars = in_position_currency(days, product, key.split("-", 1)[1])
+                if bars:
+                    return bars, source
+            return [], ""
     except Exception:
         return [], ""
     return [], ""
@@ -779,20 +939,6 @@ def ensure_history(rec, start, end, ssl_context=None, now=None):
             store.upsert_price_history(sym, bars, source)
             store.mark_history_fetched(sym, fetch_from, now.strftime("%Y-%m-%dT%H:%M:%SZ"))
     return store.price_history(sym, start, end)
-
-
-def parse_coingecko_hourly(text):
-    """[{time, close}] on the hour, from CoinGecko's hourly points."""
-    d = json.loads(text or "{}") or {}
-    out = {}
-    for ts, px in d.get("prices") or []:
-        try:
-            hour = int(ts // 1000) // 3600 * 3600
-        except (TypeError, ValueError):
-            continue
-        if px and px > 0:
-            out[hour] = {"time": hour, "close": float(px)}
-    return [out[k] for k in sorted(out)]
 
 
 def aggregate_daily(bars, tf):
@@ -944,11 +1090,20 @@ def record_option_bars(symbol, price, now=None):
 
 
 def aggregate_hourly(bars, seconds):
-    """Closes on a coarser intraday grid, each bucket taking its last hourly close."""
+    """Hourly bars onto a coarser grid aligned to the clock: open, high, low,
+    close and volume are the bucket's first, max, min, last and sum."""
     out = {}
     for b in bars:
         k = int(b["time"]) // seconds * seconds
-        out[k] = {"time": k, "close": b["close"]}
+        cur = out.get(k)
+        hi, lo = b.get("high", b["close"]), b.get("low", b["close"])
+        if cur is None:
+            out[k] = {"time": k, "open": b.get("open", b["close"]), "high": hi, "low": lo, "close": b["close"], "volume": b.get("volume") or 0}
+        else:
+            cur["high"] = max(cur["high"], hi)
+            cur["low"] = min(cur["low"], lo)
+            cur["close"] = b["close"]
+            cur["volume"] += b.get("volume") or 0
     return [out[k] for k in sorted(out)]
 
 
@@ -956,8 +1111,8 @@ def intraday_reach(rec, now=None):
     """Earliest date intraday bars exist for, or '' when the source has none."""
     src = history_source(rec)
     now = now or datetime.now(timezone.utc)
-    if src and src[0] == "coingecko":
-        return (now.date() - timedelta(days=COINGECKO_HOURLY_DAYS)).isoformat()
+    if src and src[0] == "coinbase":
+        return COINBASE_EXCHANGE_START
     if src and src[0] == "tmx":
         return (now.date() - timedelta(days=TMX_INTRADAY_DAYS)).isoformat()
     return ""
@@ -976,8 +1131,8 @@ def available_timeframes(rec, start, now=None):
 
 def fetch_intraday(rec, start_ts, end_ts, ssl_context=None):
     """{tf: bars} for the intraday timeframes a source provides over [start_ts, end_ts].
-    TMX: one-minute bars aggregated to session-aligned 1h and 4h. CoinGecko: hourly
-    closes, 4h taken from them on a four-hour grid."""
+    TMX: one-minute bars aggregated to session-aligned 1h and 4h. Coinbase Exchange:
+    hourly candles in the position's currency, 4h from them on a four-hour grid."""
     src = history_source(rec)
     if not src:
         return {}, ""
@@ -986,15 +1141,14 @@ def fetch_intraday(rec, start_ts, end_ts, ssl_context=None):
         if source == "tmx":
             start = datetime.fromtimestamp(start_ts, tz=timezone.utc).date().isoformat()
             end = datetime.fromtimestamp(end_ts, tz=timezone.utc).date().isoformat()
-            minutes = fetch_tmx_minutes(key, start, end, ssl_context)
+            minutes = tmx_lookup(key, lambda form: fetch_tmx_minutes(form, start, end, ssl_context), ssl_context)[0]
             return {"1h": aggregate_session(minutes, 60), "4h": aggregate_session(minutes, 240)}, source
-        if source == "coingecko":
-            sym, ccy = key.split("-", 1)
-            cid = coingecko_id(sym, ssl_context)
-            if not cid:
-                return {}, ""
-            hourly = parse_coingecko_hourly(_get_text(COINGECKO_HOURLY_URL % (cid, ccy.lower(), int(start_ts), int(end_ts)), ssl_context))
-            return {"1h": hourly, "4h": aggregate_hourly(hourly, 14400)}, source
+        if source == "coinbase":
+            for product in coinbase_products(key, ssl_context):
+                hourly = in_position_currency(fetch_coinbase_candles(product, 3600, start_ts, end_ts, ssl_context), product, key.split("-", 1)[1])
+                if hourly:
+                    return {"1h": hourly, "4h": aggregate_hourly(hourly, 14400)}, source
+            return {}, ""
     except Exception:
         return {}, ""
     return {}, ""
@@ -1071,12 +1225,12 @@ def archive_intraday(recs, ssl_context=None, now=None, limit=ARCHIVE_BATCH):
     return done
 
 
-SHORT_DAILY_SOURCES = ("cboe_ca", "coingecko")
+SHORT_DAILY_SOURCES = ("cboe_ca",)
 
 
 def archive_daily(recs, ssl_context=None, now=None, limit=ARCHIVE_BATCH):
     """Keep daily bars for instruments whose source forgets them (Cboe Canada after
-    about three months, CoinGecko after a year). TMX keeps full history itself."""
+    about three months). TMX and Coinbase keep full history themselves."""
     now = now or datetime.now(timezone.utc)
     todo = []
     for rec in recs or []:

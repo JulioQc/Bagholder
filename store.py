@@ -247,6 +247,7 @@ def _init_schema(conn):
     _ensure_activity_security_id(conn)
     _migrate_spy_meta(conn)
     _ensure_quote_columns(conn)
+    _drop_close_only_history(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES (?, ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -1537,6 +1538,21 @@ def mark_history_fetched(symbol, start, when):
             conn.commit()
         finally:
             conn.close()
+
+
+def _drop_close_only_history(conn):
+    """Bars from a source that gave closes only (CoinGecko) are dropped once, with
+    their fetch stamps, so the chart refetches real candles from the source that
+    replaced it. Runs once; the meta flag records that it has."""
+    done = conn.execute("SELECT value FROM meta WHERE key = 'close_only_history_dropped'").fetchone()
+    if done:
+        return
+    conn.execute("DELETE FROM price_history WHERE source = 'coingecko'")
+    conn.execute("DELETE FROM history_fetches WHERE symbol NOT IN (SELECT DISTINCT symbol FROM price_history)")
+    conn.execute("DELETE FROM price_bars WHERE source = 'coingecko'")
+    conn.execute("DELETE FROM bar_fetches WHERE symbol NOT IN (SELECT DISTINCT symbol FROM price_bars)")
+    conn.execute("INSERT INTO meta(key, value) VALUES ('close_only_history_dropped', '1')")
+    conn.commit()
 
 
 def _ensure_bar_columns(conn):

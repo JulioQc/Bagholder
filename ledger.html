@@ -187,7 +187,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
-const PROTOCOL = "2026-09-08.1"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-08.2"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -1023,36 +1023,26 @@ function drawTradeChart(host, t, h, tf, c, LW, provisional) {
     const step = { "1h": 3600, "4h": 14400 }[tf] || 0;
     // With real bars every execution is marked on its day, a zero-price fill
     // (a staking reward) included. Without bars only priced fills can be placed.
-    const timed = (t.fills || []).filter((f) => isFinite(Date.parse(f.when))).sort((a, b) => (a.when < b.when ? -1 : a.when > b.when ? 1 : 0));
-    const fills = bars.length ? timed : timed.filter((f) => f.price > 0);
+    const fills = (t.fills || []).filter((f) => isFinite(Date.parse(f.when))).sort((a, b) => (a.when < b.when ? -1 : a.when > b.when ? 1 : 0));
     const candles = bars.length > 0 && bars.every((b) => b.open != null && b.high != null && b.low != null);
+    // The chart is candlesticks or nothing: a span the source has no bars for
+    // says so instead of drawing a line through the executions.
+    if (!candles) { host.innerHTML = '<div class="muted empty" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:12px">No price history for this span.</div>'; return; }
     const chart = LW.createChart(host, {
       autoSize: true,
       layout: { background: { type: "solid", color: "transparent" }, textColor: c.text, fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11, attributionLogo: true },
       grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
       rightPriceScale: { borderColor: c.grid },
-      timeScale: { borderColor: c.grid, timeVisible: step > 0 || !bars.length, secondsVisible: false },
+      timeScale: { borderColor: c.grid, timeVisible: step > 0, secondsVisible: false },
       crosshair: { mode: LW.CrosshairMode.Normal },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     });
     _chart = chart;
     window.__bhChart = chart;
-    let series;
-    if (candles) {
-      series = chart.addSeries(LW.CandlestickSeries, { upColor: c.up, downColor: c.down, borderUpColor: c.up, borderDownColor: c.down, wickUpColor: c.up, wickDownColor: c.down, priceLineVisible: false, lastValueVisible: false });
-      series.setData(bars.map((b) => ({ time: b.date != null ? b.date : localTime(b.time), open: b.open, high: b.high, low: b.low, close: b.close })));
-    } else if (bars.length) {
-      series = chart.addSeries(LW.LineSeries, { color: c.line, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      series.setData(bars.map((b) => ({ time: b.date != null ? b.date : localTime(b.time), value: b.close })));
-    } else {
-      const pts = fills.map((f) => ({ time: localTime(Math.round(Date.parse(f.when) / 1000)), value: f.price }));
-      for (let i = 1; i < pts.length; i++) if (pts[i].time <= pts[i - 1].time) pts[i].time = pts[i - 1].time + 1;
-      series = chart.addSeries(LW.LineSeries, { color: c.line, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
-      series.setData(pts);
-    }
+    const series = chart.addSeries(LW.CandlestickSeries, { upColor: c.up, downColor: c.down, borderUpColor: c.up, borderDownColor: c.down, wickUpColor: c.up, wickDownColor: c.down, priceLineVisible: false, lastValueVisible: false });
+    series.setData(bars.map((b) => ({ time: b.date != null ? b.date : localTime(b.time), open: b.open, high: b.high, low: b.low, close: b.close })));
     const markers = fillMarkers(fills, bars, c, step);
-    if (!bars.length) { const pts = series.data(); markers.forEach((m, i) => { if (pts[i]) m.time = pts[i].time; }); }
     // Labels only once the view is zoomed in enough to read them: at most 40
     // executions in view. Arrows are always shown.
     const bare = markers.map((m) => Object.assign({}, m, { text: "" }));

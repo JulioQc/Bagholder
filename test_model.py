@@ -1004,7 +1004,9 @@ class QuoteTest(unittest.TestCase):
         self.assertEqual(market.tmx_quote_symbol("CH", "TSX-V", "CAD"), "CH")
         self.assertEqual(market.tmx_quote_symbol("LUNR", "NASDAQ", "USD"), "LUNR:US")
         self.assertEqual(market.tmx_quote_symbol("ASTS", "", "USD"), "ASTS:US")
-        self.assertIsNone(market.tmx_quote_symbol("HBIX", "Cboe Canada", "CAD"))
+        self.assertEqual(market.tmx_quote_symbol("HBIX", "Cboe Canada", "CAD"), "HBIX:AQL")
+        self.assertEqual(market.tmx_quote_symbol("QIMC", "CSE", "CAD"), "QIMC:CNX", "TMX names CSE listings with :CNX")
+        self.assertIsNone(market.tmx_quote_symbol("VOD", "LSE", "GBP"), "a venue TMX does not carry")
         self.assertIsNone(market.tmx_quote_symbol("QNC 20NOV26 3.00 CALL", "", "USD"))
 
     def test_positions_use_the_quote_when_present(self):
@@ -1410,16 +1412,15 @@ class MarketParseTest(unittest.TestCase):
         cboe = json.dumps({"data": [{"date": "2026-09-04", "open": "6.59", "close": "6.70", "high": 6.7, "low": 6.58, "volume": 53193.0}, {"date": "2026-09-03", "open": "6.56", "close": "6.76", "high": 6.76, "low": 6.54, "volume": 35377.0}]})
         bars = market.parse_cboe_ca_history(cboe)
         self.assertEqual([(b["date"], b["close"]) for b in bars], [("2026-09-03", "6.76"), ("2026-09-04", "6.70")])
-        gecko = json.dumps({"prices": [[1787000400000, 89278.71], [1787086800000, 88900.0], [1787090400000, 88950.0]]})
-        bars = market.parse_coingecko_range(gecko)
-        self.assertEqual([b["date"] for b in bars], ["2026-08-17", "2026-08-18"])
-        self.assertEqual(bars[1]["close"], 88950.0, "the last point of a day wins")
-        self.assertIsNone(bars[0]["open"])
+        # Coinbase Exchange rows are [time, low, high, open, close, volume]
+        candles = json.dumps([[1787097600, 63000.5, 65341.83, 64848.68, 63911.88, 6197.03], [1787011200, 62000, 64000, 63000, 63500, 100], ["bad"]])
+        bars = market.parse_coinbase_candles(candles)
+        self.assertEqual([(b["time"], b["open"], b["high"], b["low"], b["close"], b["volume"]) for b in bars], [(1787011200, 63000, 64000, 62000, 63500, 100), (1787097600, 64848.68, 65341.83, 63000.5, 63911.88, 6197.03)])
         src = market.history_source
         self.assertEqual(src({"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}), ("tmx", "RDDY"))
         self.assertEqual(src({"symbol": "LUNR", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}), ("tmx", "LUNR:US"))
         self.assertEqual(src({"symbol": "HBIX", "exchange": "Cboe Canada", "currency": "CAD", "kind": "Shares"}), ("cboe_ca", "HBIX"))
-        self.assertEqual(src({"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}), ("coingecko", "BTC-CAD"))
+        self.assertEqual(src({"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}), ("coinbase", "BTC-CAD"))
         self.assertIsNone(src({"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}))
 
     def test_timeframes_aggregate_and_report_availability(self):
@@ -1434,18 +1435,16 @@ class MarketParseTest(unittest.TestCase):
         self.assertEqual([(w["date"], w["open"], w["high"], w["low"], w["close"], w["volume"]) for w in weeks], [("2026-08-31", 1, 4, 0.5, 2.5, 30), ("2026-09-07", 2.5, 5, 2, 4.5, 10)])
         months = market.aggregate_daily(daily, "1M")
         self.assertEqual([(m["date"], m["open"], m["close"]) for m in months], [("2026-08-01", 1, 2), ("2026-09-01", 2, 4.5)])
-        hourly = [{"time": 3600 * h, "close": h} for h in range(1, 10)]
+        hourly = [{"time": 3600 * h, "open": h, "high": h + 0.5, "low": h - 0.5, "close": h, "volume": 1} for h in range(1, 10)]
         four = market.aggregate_hourly(hourly, 14400)
-        self.assertEqual([(b["time"], b["close"]) for b in four], [(0, 3), (14400, 7), (28800, 9)])
-        pts = json.dumps({"prices": [[1788800400123, 100.0], [1788801000000, 101.0], [1788804000000, 102.0]]})
-        self.assertEqual(market.parse_coingecko_hourly(pts), [{"time": 1788800400, "close": 101.0}, {"time": 1788804000, "close": 102.0}])
+        self.assertEqual([(b["time"], b["open"], b["high"], b["low"], b["close"], b["volume"]) for b in four], [(0, 1, 3.5, 0.5, 3, 3), (14400, 4, 7.5, 3.5, 7, 4), (28800, 8, 9.5, 7.5, 9, 2)])
         now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
         share = {"symbol": "RDDY", "exchange": "TSX", "currency": "CAD", "kind": "Shares"}
         coin = {"symbol": "BTC", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}
         opt = {"symbol": "QNC 20NOV26 3.00 CALL", "exchange": "NYSE", "currency": "USD", "kind": "Options"}
         self.assertEqual(market.available_timeframes(share, "2025-01-01", now), ["1d", "1w", "1M"])
         self.assertEqual(market.available_timeframes(coin, "2026-08-01", now), ["1h", "4h", "1d", "1w", "1M"])
-        self.assertEqual(market.available_timeframes(coin, "2026-01-01", now), ["1d", "1w", "1M"], "hourly reaches back 89 days only")
+        self.assertEqual(market.available_timeframes(coin, "2019-01-01", now), ["1h", "4h", "1d", "1w", "1M"], "Coinbase keeps hourly candles for good")
         self.assertEqual(market.available_timeframes(opt, "2026-08-01", now), [])
 
     def test_tmx_minutes_become_session_aligned_hourly_and_four_hour_bars(self):
@@ -1609,10 +1608,95 @@ class MarketParseTest(unittest.TestCase):
                 ]
                 bars = [{"date": "2026-06-02", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
                 with mock.patch.object(market, "fetch_history", return_value=(bars, "cboe_ca")) as f:
-                    self.assertEqual(market.archive_daily(recs, now=now), ["BTC", "HBIX"], "TMX keeps its own history")
-                    self.assertEqual(f.call_count, 2)
+                    self.assertEqual(market.archive_daily(recs, now=now), ["HBIX"], "TMX and Coinbase keep their own full history")
+                    self.assertEqual(f.call_count, 1)
                     self.assertEqual(market.archive_daily(recs, now=now), [])
                 self.assertEqual(store.price_history("HBIX")[0]["date"], "2026-06-02")
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_tmx_symbol_form_is_resolved_by_venue_and_remembered(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                venues = {"QIMC:CNX": "Canadian Securities Exchange", "HBIX:AQL": "NEO-L (Cboe Canada Listed)", "HG:US": "New York Stock Exchange"}
+                asked = []
+                def post(url, body, *a, **k):
+                    sym = body["variables"]["symbol"]
+                    asked.append((body["operationName"], sym))
+                    if body["operationName"] == "getQuoteBySymbol":
+                        return {"data": {"getQuoteBySymbol": {"symbol": sym, "exchangeName": venues[sym], "price": 1.0} if sym in venues else None}}
+                    return {"data": {"getTimeSeriesData": [{"dateTime": "2026-02-02T16:00:00-05:00", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}] if sym in venues else []}}
+                rec = {"symbol": "QIMC", "exchange": "", "currency": "CAD", "kind": "Shares"}
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    # A record with no venue asks for the bare form, gets nothing, and
+                    # resolves the form whose quote names a venue: remembered from then on.
+                    bars, _ = market.fetch_history(rec, "2026-02-01", "2026-02-03")
+                self.assertEqual(len(bars), 1)
+                self.assertEqual([s for op, s in asked if op == "getTimeSeriesData"], ["QIMC", "QIMC:CNX"])
+                self.assertEqual([s for op, s in asked if op == "getQuoteBySymbol"], ["QIMC", "QIMC:CNX"], "the bare form is probed first, the CSE form answers")
+                self.assertEqual(market.tmx_remembered("QIMC"), "QIMC:CNX")
+                asked.clear()
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    market.fetch_history(rec, "2026-02-01", "2026-02-03")
+                self.assertEqual(asked, [("getTimeSeriesData", "QIMC:CNX")], "remembered: no probing, straight to the right form")
+                # A Canadian record never resolves to a US form, and a miss is remembered for a day.
+                asked.clear()
+                hg = {"symbol": "HG", "exchange": "CSE", "currency": "CAD", "kind": "Shares"}
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    self.assertEqual(market.fetch_history(hg, "2026-02-01", "2026-02-03")[0], [])
+                    self.assertEqual(market.fetch_history(hg, "2026-02-01", "2026-02-03")[0], [])
+                probes = [s for op, s in asked if op == "getQuoteBySymbol"]
+                self.assertEqual(probes, ["HG:CNX", "HG", "HG:AQL"], "only the forms for the record's currency, once")
+                self.assertEqual(market.tmx_remembered("HG"), "HG")
+                # The quote path and the record path resolve the same way.
+                asked.clear()
+                with mock.patch.object(market, "_post_json", side_effect=post):
+                    self.assertEqual(market.fetch_tmx_quote("QIMC")["exchange"], "Canadian Securities Exchange")
+                self.assertEqual(asked, [("getQuoteBySymbol", "QIMC:CNX")])
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_crypto_candles_come_from_coinbase_in_the_position_currency(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                store.upsert_fx_rates({"2026-02-05": 1.40, "2026-02-06": 1.50})   # Thursday, Friday
+                fetched = []
+                def get(url, *a, **k):
+                    fetched.append(url)
+                    if "/products/PEPE-CAD" in url or "/products/NOPE-" in url:
+                        raise OSError("404")
+                    if url.endswith("/products/PEPE-USD"):
+                        return json.dumps({"id": "PEPE-USD", "status": "online"})
+                    if url.endswith("/products/USDC-CAD"):
+                        return json.dumps({"id": "USDC-CAD", "status": "online"})
+                    if "/candles?" in url:
+                        # Friday 2026-02-06 and Sunday 2026-02-08 (Friday's rate), then a day with no rate at all
+                        return json.dumps([[1770336000, 1.0, 3.0, 2.0, 2.5, 10], [1770508800, 1.0, 3.0, 2.0, 2.5, 10], [1769040000, 1.0, 3.0, 2.0, 2.5, 10]])
+                    raise OSError("unexpected " + url)
+                with mock.patch.object(market, "_get_text", side_effect=get):
+                    self.assertEqual(market.coinbase_products("PEPE-CAD"), ["PEPE-USD"], "no CAD market: the USD one")
+                    self.assertEqual(market.coinbase_products("USDC-CAD"), ["USDC-CAD"], "USDC has a CAD market and no USD one")
+                    self.assertEqual(market.coinbase_products("NOPE-CAD"), [])
+                    n = len(fetched)
+                    self.assertEqual(market.coinbase_product("PEPE-CAD"), "PEPE-USD")
+                    self.assertEqual(market.coinbase_products("NOPE-CAD"), [])
+                    self.assertEqual(len(fetched), n, "products are remembered, misses for a day")
+                    bars, source = market.fetch_history({"symbol": "PEPE", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}, "2026-01-20", "2026-02-09")
+                self.assertEqual(source, "coinbase")
+                self.assertEqual([(b["date"], b["open"], b["high"], b["low"], b["close"], b["volume"]) for b in bars],
+                                 [("2026-02-06", 3.0, 4.5, 1.5, 3.75, 10), ("2026-02-08", 3.0, 4.5, 1.5, 3.75, 10)],
+                                 "USD candles at the Bank of Canada rate of the day (Sunday takes Friday's); the day with no rate within a week is dropped")
+                self.assertEqual(market.in_position_currency([{"time": 1770336000, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 0}], "USDC-CAD", "CAD")[0]["close"], 1, "a CAD market is used as is")
+                self.assertEqual(market.in_position_currency([{"time": 1770336000, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 0}], "PEPE-EUR", "CAD"), [], "nothing else is converted")
+                self.assertEqual(market.intraday_reach({"symbol": "PEPE", "exchange": "Crypto", "currency": "CAD", "kind": "Crypto"}), market.COINBASE_EXCHANGE_START)
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
