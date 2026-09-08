@@ -120,33 +120,6 @@ extension BHFilters {
 }
 
 
-// DIAGNOSTIC (temporary, to be removed): launch milestones and a main-thread stall watchdog, printed to the console
-enum LaunchProbe {
-    static let t0 = Date()
-    static var last = "start"
-    static var started = false
-    static func mark(_ what: String) {
-        last = what
-        let line = String(format: "%.0f ms  %@", Date().timeIntervalSince(t0) * 1000, what)
-        print("PROBE " + line)
-    }
-    static func start() {
-        if started { return }
-        started = true
-        Thread.detachNewThread {
-            while true {
-                let sent = Date(); let tag = last
-                let sem = DispatchSemaphore(value: 0)
-                DispatchQueue.main.async { sem.signal() }
-                _ = sem.wait(timeout: .now() + 20)
-                let d = Date().timeIntervalSince(sent) * 1000
-                if d >= 80 { mark(String(format: "MAIN STALL %.0f ms (after: %@)", d, tag)) }
-                Thread.sleep(forTimeInterval: 0.05)
-            }
-        }
-    }
-}
-
 // MARK: - the book
 
 @MainActor
@@ -175,17 +148,13 @@ final class Book: ObservableObject {
     private static let lastSyncKey = "bagholder.lastSync"
 
     init() {
-        LaunchProbe.start(); LaunchProbe.mark("Book.init")
         connected = Keychain.hasSession()
         lastSync = UserDefaults.standard.object(forKey: Self.lastSyncKey) as? Date ?? LastPullStore.modifiedAt()
-        LaunchProbe.mark("before LastPullStore.load")
         if let saved = LastPullStore.load() {
-            LaunchProbe.mark("LastPullStore.load done")
             result = saved
             phase = .ready
             rebuild()
         }
-        LaunchProbe.mark("Book.init done")
     }
 
     // MARK: status
@@ -441,7 +410,6 @@ final class Book: ObservableObject {
             let v = BHModel.buildView(b, filters)
             await MainActor.run { [weak self] in
                 guard let self, gen == self.buildGeneration else { return }
-                LaunchProbe.mark("rebuild main hop")
                 self.base = b
                 // the view was built off the main thread; only redo it here if the filters moved meanwhile
                 self.view = self.filters == filters ? v : BHModel.buildView(b, self.filters)
@@ -516,7 +484,6 @@ final class LoginWeb {
     private static let loginURL = URL(string: "https://my.wealthsimple.com/app/login")!
 
     init() {
-        LaunchProbe.mark("LoginWeb.init")
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -524,18 +491,14 @@ final class LoginWeb {
         coordinator = Coordinator()
         webView.navigationDelegate = coordinator
         webView.uiDelegate = coordinator
-        LaunchProbe.mark("LoginWeb.init done")
     }
 
     /// Start loading the login page if it is not already loaded or loading.
     func warm() {
-        LaunchProbe.mark("warm() url=\(webView.url?.absoluteString ?? "nil")")
         guard webView.url == nil || webView.url?.absoluteString == "about:blank" else { return }
         if webView.isLoading { return }
         park()
-        LaunchProbe.mark("parked=\(webView.superview != nil)")
         webView.load(URLRequest(url: Self.loginURL))
-        LaunchProbe.mark("load() issued")
     }
 
     private static var keyWindow: UIWindow? {
@@ -625,7 +588,7 @@ struct ConnectLoginView: View {
                     Color.white
                 }
             }
-            .onAppear { LaunchProbe.mark("ConnectLoginView onAppear"); DispatchQueue.main.async { attached = true } }
+            .onAppear { DispatchQueue.main.async { attached = true } }
             .ignoresSafeArea(edges: .bottom)
             .ignoresSafeArea(.keyboard)   // the web view scrolls its own focused field; no relayout for the keyboard
             .onAppear { book.loginShown() }
@@ -642,7 +605,6 @@ struct WealthsimpleLoginWebView: UIViewRepresentable {
     var onSession: (String, String?) -> Void
 
     func makeUIView(context: Context) -> WKWebView {
-        LaunchProbe.mark("makeUIView")
         LoginWeb.shared.webView.removeFromSuperview()   // out from behind the root, into the sheet
         LoginWeb.shared.beginCapture(onSession)
         return LoginWeb.shared.webView

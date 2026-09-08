@@ -37,7 +37,6 @@ struct RootView: View {
         .sheet(isPresented: $showMenu) { MenuSheet(book: book).environment(\.theme, t) }
         .fullScreenCover(isPresented: $showConnect) { ConnectLoginView(book: book, isPresented: $showConnect).environment(\.theme, t) }
         .onAppear {
-            LaunchProbe.mark("RootView onAppear")
             book.handleAppear()
             // the login engine starts after the first frame is on screen, not during launch
             if !book.connected { DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { book.warmLogin() } }
@@ -1380,7 +1379,7 @@ struct MenuSheet: View {
                         Button("Disconnect", role: .destructive) { book.disconnect(); dismiss() }
                     } else {
                         // the login opens over the menu at once; waiting for the menu to dismiss first left the tap dead
-                        Button("Connect Wealthsimple") { LaunchProbe.mark("TAP connect"); showConnect = true }
+                        Button("Connect Wealthsimple") { showConnect = true }
                     }
                 }
                 .listRowBackground(t.surface)
