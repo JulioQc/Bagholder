@@ -1293,7 +1293,7 @@ function emptyHtml() {
     : "Connected to Wealthsimple, but no activity has come back yet.";
   const action = !s.connected ? '<button class="btn btn-primary" data-act="connect">Connect Wealthsimple</button>'
     : s.syncing ? "" : '<button class="btn btn-primary" data-act="sync">Sync now</button>';
-  return '<div class="empty" style="min-height:60vh"><img src="favicon.png" alt="" style="width:48px;height:48px;border-radius:10px;opacity:.9"><div style="font-size:16px;font-weight:500">' + head + "</div>" +
+  return '<div class="empty" style="min-height:60vh"><div style="font-size:16px;font-weight:500">' + head + "</div>" +
     '<div class="dim" style="font-size:12.5px;max-width:420px">' + body + "</div>" + action +
     (s.error ? '<div class="status-err" style="font-size:12px">' + esc(s.error) + "</div>" : "") + "</div>";
 }
