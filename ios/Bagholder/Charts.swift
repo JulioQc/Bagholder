@@ -37,11 +37,22 @@ struct ChartPress: UIViewRepresentable {
             super.touchesBegan(touches, with: event)
         }
 
+        /// The scroll views above the chart, held still while the press lasts so the drag
+        /// reads the chart rather than paging or scrolling.
+        private var heldScrollViews: [UIScrollView] = []
+
         @objc private func pressed(_ g: UILongPressGestureRecognizer) {
             switch g.state {
-            case .began: onChange?((origin ?? g.location(in: self)).x, bounds.width)
+            case .began:
+                var v = superview
+                while let sv = v { if let s = sv as? UIScrollView, s.isScrollEnabled { s.isScrollEnabled = false; heldScrollViews.append(s) }; v = sv.superview }
+                onChange?((origin ?? g.location(in: self)).x, bounds.width)
             case .changed: onChange?(g.location(in: self).x, bounds.width)
-            default: origin = nil; onChange?(nil, bounds.width)
+            default:
+                for s in heldScrollViews { s.isScrollEnabled = true }
+                heldScrollViews = []
+                origin = nil
+                onChange?(nil, bounds.width)
             }
         }
     }
@@ -129,6 +140,64 @@ struct EquityCurveChart: View {
         let a = BHModel.dayNumber(first.d) ?? 0, b = BHModel.dayNumber(last.d) ?? 0
         let n = 4
         return (0..<n).map { i in BHFmt.monthAxis(BHModel.isoDate(fromDayNumber: a + (b - a) * i / (n - 1))) }
+    }
+}
+
+/// The Dashboard's P&L bars, edge to edge with no value axis: one bar per month on
+/// the page's scale. A long press picks a month: the card shows its P&L at the top
+/// right and the month sits under the finger at the bottom; a tap opens it.
+struct PnlBarsChart: View {
+    @Environment(\.theme) private var t
+    let months: [BHMonthBucket]
+    @Binding var pick: Int?
+    var height: CGFloat = 130
+    var onPick: ((BHMonthBucket) -> Void)?
+
+    var body: some View {
+        let sc = MonthlyBarsChart.scale(months, height: height)
+        VStack(spacing: 6) {
+            GeometryReader { geo in
+                let w = geo.size.width
+                let n = CGFloat(max(months.count, 1))
+                let pitch = w / n
+                let barW = max(2, min(14, pitch * 0.6))
+                let zeroY = sc.posH
+                ZStack(alignment: .topLeading) {
+                    Path { p in p.move(to: CGPoint(x: 0, y: zeroY)); p.addLine(to: CGPoint(x: w, y: zeroY)) }
+                        .stroke(t.hair, lineWidth: 1)
+                    ForEach(Array(months.enumerated()), id: \.element.key) { i, m in
+                        let h = MonthlyBarsChart.barHeight(m.value, sc, height: height)
+                        let x = CGFloat(i) * pitch + (pitch - barW) / 2
+                        let y = m.value >= 0 ? zeroY - h : zeroY
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill((m.value >= 0 ? t.pos : t.neg).opacity(pick == nil || pick == i ? 1 : 0.35))
+                            .frame(width: barW, height: max(h, 1.5))
+                            .offset(x: x, y: y)
+                            .onTapGesture { onPick?(m) }
+                    }
+                }
+                .overlay(ChartPress { x, width in
+                    guard let x, width > 0, !months.isEmpty else { pick = nil; return }
+                    pick = max(0, min(months.count - 1, Int(x / width * CGFloat(months.count))))
+                })
+            }
+            .frame(height: height)
+            GeometryReader { geo in
+                if let i = pick, months.indices.contains(i) {
+                    let x = (CGFloat(i) + 0.5) / CGFloat(max(months.count, 1)) * geo.size.width
+                    Text(months[i].label).font(.system(size: 11, weight: .medium)).foregroundStyle(t.ink)
+                        .fixedSize().position(x: min(max(x, 30), geo.size.width - 30), y: 7)
+                } else {
+                    HStack {
+                        ForEach(Array(MonthlyBarsChart.labels(months).enumerated()), id: \.offset) { i, l in
+                            if i > 0 { Spacer(minLength: 0) }
+                            Text(l).font(.system(size: 11)).foregroundStyle(t.ink55)
+                        }
+                    }
+                }
+            }
+            .frame(height: 14)
+        }
     }
 }
 

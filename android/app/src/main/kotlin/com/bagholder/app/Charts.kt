@@ -208,6 +208,52 @@ fun equityDateLabels(series: List<EquityPoint>): List<String> {
     return (0 until 4).map { i -> Fmt.monthAxis(java.time.LocalDate.ofEpochDay(a + (b - a) * i / 3).toString()) }
 }
 
+/**
+ * The Dashboard's P&L bars, edge to edge with no value axis: one bar per month on the
+ * page's scale. A long press picks a month: the card shows its P&L at the top right and
+ * the month sits under the finger at the bottom; a tap opens it.
+ */
+@Composable
+fun PnlBarsChart(months: List<MonthBucket>, pick: Int?, onPickChange: (Int?) -> Unit, height: Int = 130, onOpen: ((MonthBucket) -> Unit)? = null) {
+    val t = LocalTheme.current
+    val sc = monthlyScale(months, height.toFloat())
+    Column(Modifier.fillMaxWidth()) {
+        Canvas(Modifier.fillMaxWidth().height(height.dp).pointerInput(months) {
+            detectTapGestures { pos ->
+                val n = max(months.size, 1)
+                val i = (pos.x / (size.width / n)).toInt().coerceIn(0, n - 1)
+                if (months.isNotEmpty()) onOpen?.invoke(months[i])
+            }
+        }.pressReadout(months.size, onPickChange)) {
+            val n = max(months.size, 1).toFloat()
+            val pitch = size.width / n
+            val barW = max(2f, min(14.dp.toPx(), pitch * 0.6f))
+            val zeroY = sc.posH.dp.toPx()
+            drawLine(t.hair, Offset(0f, zeroY), Offset(size.width, zeroY), 1f)
+            for ((i, m) in months.withIndex()) {
+                val h = monthlyBarHeight(m.value, sc, height.toFloat()).dp.toPx()
+                val x = i * pitch + (pitch - barW) / 2
+                val y = if (m.value >= 0) zeroY - h else zeroY
+                val dim = pick != null && pick != i
+                drawRect((if (m.value >= 0) t.pos else t.neg).copy(alpha = if (dim) 0.35f else 1f), Offset(x, y), Size(barW, max(h, 1.5f)))
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        BoxWithConstraints(Modifier.fillMaxWidth().height(14.dp)) {
+            val i = pick
+            if (i != null && i in months.indices) {
+                val x = (i + 0.5f) / max(months.size, 1) * maxWidth.value
+                Text(months[i].label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = t.ink, maxLines = 1,
+                    modifier = Modifier.offset(x = (x - 30f).coerceIn(0f, maxWidth.value - 60f).dp).width(60.dp), textAlign = TextAlign.Center)
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    for (l in monthLabels(months.map { it.key })) AxisLabel(l)
+                }
+            }
+        }
+    }
+}
+
 /** One bar per calendar month, positive up, negative down; a long press reads the month, amount and count. */
 @Composable
 fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, countLabel: String = "trade", onPick: ((MonthBucket) -> Unit)? = null) {

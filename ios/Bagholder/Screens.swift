@@ -228,36 +228,48 @@ struct Tile: View {
     }
 }
 
-/// Two tiles per page, swiped sideways: the phone's version of the tile row.
-struct TilePager: View {
+/// A row of full-width pages swiped sideways, at a fixed height, with the indicator
+/// below: 4 pt dots at 24 % ink, the current page a 14 × 4 accent pill that slides on swipe.
+struct PagedRow<Page: View>: View {
     @Environment(\.theme) private var t
-    let tiles: [Tile]
-    @State private var page = 0
+    let count: Int
+    let height: CGFloat
+    @ViewBuilder let page: (Int) -> Page
+    @State private var current = 0
 
     var body: some View {
-        let pages = stride(from: 0, to: tiles.count, by: 2).map { Array(tiles[$0..<min($0 + 2, tiles.count)]) }
         VStack(spacing: 10) {
-            TabView(selection: $page) {
-                ForEach(Array(pages.enumerated()), id: \.offset) { i, page in
-                    HStack(spacing: 12) {
-                        ForEach(Array(page.enumerated()), id: \.offset) { _, tile in tile }
-                        if page.count == 1 { Color.clear.frame(maxWidth: .infinity) }
-                    }
-                    .tag(i)
+            TabView(selection: $current) {
+                ForEach(0..<max(count, 1), id: \.self) { i in
+                    page(i).frame(maxHeight: .infinity, alignment: .top).tag(i)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 96)
-            if pages.count > 1 {
-                // 4 pt dots at 24 % ink; the current page a 14 × 4 accent pill that slides on swipe
+            .frame(height: height)
+            if count > 1 {
                 HStack(spacing: 5) {
-                    ForEach(pages.indices, id: \.self) { i in
+                    ForEach(0..<count, id: \.self) { i in
                         Capsule()
-                            .fill(i == page ? t.accent : t.ink.opacity(0.24))
-                            .frame(width: i == page ? 14 : 4, height: 4)
+                            .fill(i == current ? t.accent : t.ink.opacity(0.24))
+                            .frame(width: i == current ? 14 : 4, height: 4)
                     }
                 }
-                .animation(.easeInOut(duration: 0.2), value: page)
+                .animation(.easeInOut(duration: 0.2), value: current)
+            }
+        }
+    }
+}
+
+/// Two tiles per page, swiped sideways: the phone's version of the tile row.
+struct TilePager: View {
+    let tiles: [Tile]
+
+    var body: some View {
+        let pages = stride(from: 0, to: tiles.count, by: 2).map { Array(tiles[$0..<min($0 + 2, tiles.count)]) }
+        PagedRow(count: pages.count, height: 96) { i in
+            HStack(spacing: 12) {
+                ForEach(Array(pages[i].enumerated()), id: \.offset) { _, tile in tile }
+                if pages[i].count == 1 { Color.clear.frame(maxWidth: .infinity) }
             }
         }
     }
@@ -326,6 +338,11 @@ struct DashboardScreen: View {
     @State private var symbolSort = "pnl"
     @State private var symbolDesc = true
     @State private var equityPick: Int? = nil
+    @State private var pnlPick: Int? = nil
+
+    /// The swiping row's cards share one body height; the row is that plus the card's header and padding.
+    static let bodyHeight: CGFloat = 150
+    static let rowHeight: CGFloat = bodyHeight + 12 + 20 + 32
 
     var body: some View {
         VStack(spacing: 0) {
@@ -339,22 +356,13 @@ struct DashboardScreen: View {
                             if v.equity.series.count > 1 { EquityCurveChart(series: v.equity.series, pick: $equityPick) }
                             else { Text("No equity history for this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
                         }
-                        annualized(v)
-                        Card(title: "Monthly P&L") {
-                            if v.monthly.isEmpty { Text("No closed trades in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
-                            else {
-                                MonthlyBarsChart(months: v.monthly) { m in
-                                    var f = book.filters
-                                    f.preset = "all"; f.years = []
-                                    f.from = m.key + "-01"
-                                    f.to = BHModel.shiftDate(BHModel.shiftDate(m.key + "-01", 31).prefix(7) + "-01", -1)
-                                    book.setFilters(f)
-                                    tab = 1
-                                }
+                        // Annual returns, P&L and Grade vs P&L: one swiping row of equal cards
+                        PagedRow(count: 3, height: Self.rowHeight) { i in
+                            switch i {
+                            case 0: AnyView(annualized(v))
+                            case 1: AnyView(pnl(v))
+                            default: AnyView(Card(title: "Grade vs P&L") { GradeBarsChart(grades: v.grades, height: Self.bodyHeight - 20).frame(height: Self.bodyHeight, alignment: .top) })
                             }
-                        }
-                        Card(title: "Grade vs P&L") {
-                            GradeBarsChart(grades: v.grades)
                         }
                         bySymbol(v)
                         queue(v)
@@ -390,7 +398,6 @@ struct DashboardScreen: View {
 
     private func annualized(_ v: BHView) -> some View {
         let scale = v.years.flatMap { [abs($0.r), abs($0.spR ?? 0)] }.max() ?? 1
-        let beat = v.years.filter { y in y.spR.map { y.r > $0 } ?? false }.count
         let picker = Menu {
             ForEach(["SP500", "TSX", "TSX60"], id: \.self) { key in
                 Button(BHModel.benchmarkLabels[key] ?? key) { book.setBenchmark(key) }
@@ -402,28 +409,49 @@ struct DashboardScreen: View {
             }
             .foregroundStyle(t.ink75).padding(.horizontal, 10).padding(.vertical, 6).background(RoundedRectangle(cornerRadius: 7).fill(t.well))
         }
+        // the years scroll inside the card's fixed body
         return Card(title: "Annual returns", trailing: AnyView(picker)) {
             if v.years.isEmpty {
-                Text("No equity history for this span.").font(.system(size: 14)).foregroundStyle(t.ink55)
+                Text("No equity history for this span.").font(.system(size: 14)).foregroundStyle(t.ink55).frame(height: Self.bodyHeight, alignment: .top)
             } else {
-                VStack(spacing: 14) {
-                    ForEach(v.years.reversed(), id: \.year) { y in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(y.year).font(.system(size: 16, weight: .medium)).foregroundStyle(t.ink)
-                                Spacer()
-                                HStack(spacing: 4) {
-                                    Text(BHFmt.pct(y.r)).foregroundStyle(t.signed(y.r))
-                                    Text("/").foregroundStyle(t.ink55)
-                                    Text(BHFmt.pct(y.spR)).foregroundStyle(y.spR.map { t.signed($0) } ?? t.ink55)
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 12) {
+                        ForEach(v.years.reversed(), id: \.year) { y in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(y.year).font(.system(size: 16, weight: .medium)).foregroundStyle(t.ink)
+                                    Spacer()
+                                    HStack(spacing: 4) {
+                                        Text(BHFmt.pct(y.r)).foregroundStyle(t.signed(y.r))
+                                        Text("/").foregroundStyle(t.ink55)
+                                        Text(BHFmt.pct(y.spR)).foregroundStyle(y.spR.map { t.signed($0) } ?? t.ink55)
+                                    }
+                                    .font(.system(size: 15, weight: .medium)).monospacedDigit()
                                 }
-                                .font(.system(size: 15, weight: .medium)).monospacedDigit()
+                                YearPairBars(mine: y.r, index: y.spR, scale: scale)
                             }
-                            YearPairBars(mine: y.r, index: y.spR, scale: scale)
                         }
                     }
-                    Divider().overlay(t.hair)
-                    Text("Outperformed \(v.benchmarkLabel) in \(beat) of \(v.years.count) years.").font(.system(size: 13)).foregroundStyle(t.ink60)
+                }
+                .frame(height: Self.bodyHeight)
+            }
+        }
+    }
+
+    /// The P&L in scope at the card's top right; the pressed month's while the chart is pressed.
+    private func pnl(_ v: BHView) -> some View {
+        let value = pnlPick.flatMap { i in v.monthly.indices.contains(i) ? v.monthly[i].value : nil } ?? v.monthly.reduce(0.0) { $0 + $1.value }
+        let amount = Text(BHFmt.money(value)).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(t.signed(value))
+        return Card(title: "P&L", trailing: AnyView(amount)) {
+            if v.monthly.isEmpty { Text("No closed trades in this span.").font(.system(size: 14)).foregroundStyle(t.ink55).frame(height: Self.bodyHeight, alignment: .top) }
+            else {
+                PnlBarsChart(months: v.monthly, pick: $pnlPick, height: Self.bodyHeight - 20) { m in
+                    var f = book.filters
+                    f.preset = "all"; f.years = []
+                    f.from = m.key + "-01"
+                    f.to = BHModel.shiftDate(BHModel.shiftDate(m.key + "-01", 31).prefix(7) + "-01", -1)
+                    book.setFilters(f)
+                    tab = 1
                 }
             }
         }

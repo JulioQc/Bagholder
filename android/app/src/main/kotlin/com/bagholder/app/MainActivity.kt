@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -338,6 +339,7 @@ fun DashboardScreen(chrome: Chrome, onTrade: (String) -> Unit, onTrades: () -> U
     val t = LocalTheme.current
     val v = Book.view
     var equityPick by remember { mutableStateOf<Int?>(null) }
+    var pnlPick by remember { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxSize()) {
         Header(chrome)
         FilterChips()
@@ -353,21 +355,16 @@ fun DashboardScreen(chrome: Chrome, onTrade: (String) -> Unit, onTrades: () -> U
                     if (v.equity.series.size > 1) EquityCurveChart(v.equity.series, equityPick, { equityPick = it }) else Muted("No equity history for this span.")
                 }
             }
-            item { AnnualizedCard(v) }
+            // Annual returns, P&L and Grade vs P&L: one swiping row of equal cards
             item {
-                Card("Monthly P&L") {
-                    if (v.monthly.isEmpty()) Muted("No closed trades in this span.")
-                    else MonthlyBarsChart(v.monthly) { m ->
-                        val f = Book.copyFilters(Book.filters)
-                        f.preset = "all"; f.years = emptyList()
-                        f.from = m.key + "-01"
-                        f.to = Model.shiftDate(Model.shiftDate(m.key + "-01", 31).take(7) + "-01", -1)
-                        Book.applyFilters(f)
-                        onTrades()
+                PagedRow(3) { i ->
+                    when (i) {
+                        0 -> AnnualizedCard(v)
+                        1 -> PnlCard(v, pnlPick, { pnlPick = it }, onTrades)
+                        else -> Card("Grade vs P&L") { Box(Modifier.height(CARD_BODY_HEIGHT.dp)) { GradeBarsChart(v.grades, CARD_BODY_HEIGHT - 20) } }
                     }
                 }
             }
-            item { Card("Grade vs P&L") { GradeBarsChart(v.grades) } }
             item { BySymbolCard(v, onTrades) }
             item { QueueCard(v, onTrade) }
         }
@@ -392,23 +389,19 @@ private fun Tiles(v: View) {
     TilePager(tiles)
 }
 
-/** Two tiles per page, swiped sideways: the phone's version of the tile row. */
+/**
+ * A row of full-width pages swiped sideways, with the indicator below: 4 dp dots at 24 %
+ * ink, the current page a 14 × 4 accent pill that slides on swipe.
+ */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun TilePager(tiles: List<@Composable (Modifier) -> Unit>) {
+fun PagedRow(count: Int, page: @Composable (Int) -> Unit) {
     val t = LocalTheme.current
-    val pages = tiles.chunked(2)
-    val state = rememberPagerState(pageCount = { pages.size })
+    val state = rememberPagerState(pageCount = { count })
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        HorizontalPager(state, pageSpacing = 12.dp) { i ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (tile in pages[i]) tile(Modifier.weight(1f))
-                if (pages[i].size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-        // 4 dp dots at 24 % ink; the current page a 14 × 4 accent pill that slides on swipe
-        if (pages.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            for (i in pages.indices) {
+        HorizontalPager(state, pageSpacing = 12.dp, verticalAlignment = Alignment.Top) { i -> page(i) }
+        if (count > 1) Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            for (i in 0 until count) {
                 val active = i == state.currentPage
                 val width by animateDpAsState(if (active) 14.dp else 4.dp, tween(200), label = "dot")
                 val color by animateColorAsState(if (active) t.accent else t.ink.copy(alpha = 0.24f), tween(200), label = "dotColor")
@@ -418,11 +411,25 @@ fun TilePager(tiles: List<@Composable (Modifier) -> Unit>) {
     }
 }
 
+/** Two tiles per page, swiped sideways: the phone's version of the tile row. */
+@Composable
+fun TilePager(tiles: List<@Composable (Modifier) -> Unit>) {
+    val pages = tiles.chunked(2)
+    PagedRow(pages.size) { i ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            for (tile in pages[i]) tile(Modifier.weight(1f))
+            if (pages[i].size == 1) Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
+/** The swiping row's cards share one body height. */
+const val CARD_BODY_HEIGHT = 150
+
 @Composable
 private fun AnnualizedCard(v: View) {
     val t = LocalTheme.current
     val scale = v.years.flatMap { listOf(abs(it.r), abs(it.spR ?: 0.0)) }.maxOrNull() ?: 1.0
-    val beat = v.years.count { y -> y.spR?.let { y.r > it } ?: false }
     var pick by remember { mutableStateOf(false) }
     Card("Annual returns", trailing = {
         Box {
@@ -438,9 +445,10 @@ private fun AnnualizedCard(v: View) {
                 }
             }
         }
-        if (v.years.isEmpty()) Muted("No equity history for this span.")
+        // the years scroll inside the card's fixed body
+        if (v.years.isEmpty()) Box(Modifier.height(CARD_BODY_HEIGHT.dp)) { Muted("No equity history for this span.") }
         else {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.height(CARD_BODY_HEIGHT.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 for (y in v.years.reversed()) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(Modifier.fillMaxWidth()) {
@@ -453,9 +461,25 @@ private fun AnnualizedCard(v: View) {
                         YearPairBars(y.r, y.spR, scale)
                     }
                 }
-                HorizontalDivider(color = t.hair)
-                Text("Outperformed ${v.benchmarkLabel} in $beat of ${v.years.size} years.", fontSize = 13.sp, color = t.ink60)
             }
+        }
+    }
+}
+
+/** The P&L in scope at the card's top right; the pressed month's while the chart is pressed. */
+@Composable
+private fun PnlCard(v: View, pick: Int?, onPickChange: (Int?) -> Unit, onTrades: () -> Unit) {
+    val t = LocalTheme.current
+    val value = pick?.let { v.monthly.getOrNull(it)?.value } ?: v.monthly.sumOf { it.value }
+    Card("P&L", trailing = { Text(Fmt.money(value), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.signed(value)) }) {
+        if (v.monthly.isEmpty()) Box(Modifier.height(CARD_BODY_HEIGHT.dp)) { Muted("No closed trades in this span.") }
+        else PnlBarsChart(v.monthly, pick, onPickChange, CARD_BODY_HEIGHT - 20) { m ->
+            val f = Book.copyFilters(Book.filters)
+            f.preset = "all"; f.years = emptyList()
+            f.from = m.key + "-01"
+            f.to = Model.shiftDate(Model.shiftDate(m.key + "-01", 31).take(7) + "-01", -1)
+            Book.applyFilters(f)
+            onTrades()
         }
     }
 }
