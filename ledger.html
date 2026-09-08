@@ -1627,6 +1627,14 @@ function bind() {
       const si = document.getElementById("searchInput"); if (si) { si.focus(); si.select(); }
       return;
     }
+    // Left and Right move between the tabs when nothing else has the keyboard
+    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.metaKey && !e.ctrlKey && !e.altKey && !state.picker && !state.menuOpen && !state.modal && !state.dataOpen &&
+        !(document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].indexOf(document.activeElement.tagName) >= 0)) {
+      const pages = ["dashboard", "trades", "positions", "cashflow"];
+      const j = pages.indexOf(state.page) + (e.key === "ArrowRight" ? 1 : -1);
+      if (j >= 0 && j < pages.length) { e.preventDefault(); go(pages[j]); }
+      return;
+    }
     if (e.key === "Escape") { if (state.dataOpen) { state.dataOpen = false; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); }
       // nothing open, nothing being typed: Escape clears the filters
       else if (filtersActive() && !(document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA"))) { act("clearAll"); }

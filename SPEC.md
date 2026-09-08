@@ -137,7 +137,7 @@ Positive amounts use the theme's green, negative its red, both on the P&L figure
 
 ## 4. Pages
 
-All pages share the header (brand and version, sync status, filter, menu), the tab row and the current filter set. A short-lived notice from an action (session refreshed, trade added, folder scanned, or an error) takes the sync status's place for four seconds; it is red only when it reports an error. A sync error appears once: on the "No activity yet" page it is shown in full beneath the page's button and the header keeps its plain status; everywhere else it takes the header's sync status.
+All pages share the header (brand and version, sync status, filter, menu), the tab row and the current filter set. With nothing open and nothing being typed, the Left and Right arrow keys move between the tabs in their order, Dashboard to Cashflow, stopping at the ends. A short-lived notice from an action (session refreshed, trade added, folder scanned, or an error) takes the sync status's place for four seconds; it is red only when it reports an error. A sync error appears once: on the "No activity yet" page it is shown in full beneath the page's button and the header keeps its plain status; everywhere else it takes the header's sync status.
 
 **The page with nothing to show.** No image (the mark already sits in the header). Not connected: `No activity yet`, a line inviting the user to connect, and a Connect Wealthsimple button. Connected and syncing: `Pulling your history`, a line saying the first sync can take a minute, and no button (the header shows the sync step). Connected with nothing back: `No activity yet`, a line saying nothing has come back yet, and a Sync now button. A sync error, when there is one, sits beneath in full.
 
