@@ -419,9 +419,9 @@ private fun AnnualizedCard(v: View) {
     val scale = v.years.flatMap { listOf(abs(it.r), abs(it.spR ?: 0.0)) }.maxOrNull() ?: 1.0
     val beat = v.years.count { y -> y.spR?.let { y.r > it } ?: false }
     var pick by remember { mutableStateOf(false) }
-    Card("Annualized returns", "Vs " + v.benchmarkLabel, trailing = {
+    Card("Annual returns", trailing = {
         Box {
-            Text(v.benchmarkLabel + " ▾", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = t.ink75,
+            Text("Vs " + v.benchmarkLabel + " ▾", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = t.ink75,
                 modifier = Modifier.clip(RoundedCornerShape(7.dp)).background(t.well).clickable { pick = !pick }.padding(horizontal = 10.dp, vertical = 6.dp))
         }
     }) {

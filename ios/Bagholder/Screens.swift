@@ -396,12 +396,12 @@ struct DashboardScreen: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text(v.benchmarkLabel).font(.system(size: 13, weight: .medium))
+                Text("Vs " + v.benchmarkLabel).font(.system(size: 13, weight: .medium))
                 Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
             }
             .foregroundStyle(t.ink75).padding(.horizontal, 10).padding(.vertical, 6).background(RoundedRectangle(cornerRadius: 7).fill(t.well))
         }
-        return Card(title: "Annualized returns", subtitle: "Vs " + v.benchmarkLabel, trailing: AnyView(picker)) {
+        return Card(title: "Annual returns", trailing: AnyView(picker)) {
             if v.years.isEmpty {
                 Text("No equity history for this span.").font(.system(size: 14)).foregroundStyle(t.ink55)
             } else {
