@@ -1228,7 +1228,6 @@ query FetchAccountHistoricalFinancials(
             merged[i].fifoId = pools[aid] ?? aid
         }
         let activities = merged
-        let fifo = matchFifo(activities)
         progress("Fetching balances…")
         progress("Fetching equity history…")
         let sinceNav = navMissingDeposits(storedNav) ? nil : storedNav.map(\.date).filter { !$0.isEmpty }.max()
@@ -1262,11 +1261,9 @@ query FetchAccountHistoricalFinancials(
         async let fxTask = ensureFxRates(activities: activities)
         let spy = await spyTask
         let fx = await fxTask
-        // ledger.html render(): applyFx(closed) then groupClosedByClose(visible) for computeMetrics.
-        let closedFx = applyFx(fifo.closed, fx: fx)
-        let closedForMetrics = groupClosedByClose(closedFx)
-        let metrics = computeMetrics(closedForMetrics)
-        let monthly = monthlyPnl(closedForMetrics)
+        let closedFx = roundTrips(activities: activities, listings: storedListings, fx: fx)
+        let metrics = computeMetrics(closedFx)
+        let monthly = monthlyPnl(closedFx)
         let yearRows = annualRows(nav: nav, spy: spy, activities: activities)
         let ann = accountAnnualizedReturn(nav: nav, years: yearRows.map(\.year).sorted())
         return WSPullResult(
@@ -1286,13 +1283,11 @@ query FetchAccountHistoricalFinancials(
 
     /// Rematch FIFO from a saved snapshot. No network. Uses bagholder.fx.boc.v1 and the FRED cache.
     static func rematchStored(_ snap: WSPullResult) -> WSPullResult {
-        let fifo = matchFifo(snap.activities)
         let fx = loadCachedFx()
         let spy = loadCachedSP500()
-        let closedFx = applyFx(fifo.closed, fx: fx)
-        let closedForMetrics = groupClosedByClose(closedFx)
-        let metrics = computeMetrics(closedForMetrics)
-        let monthly = monthlyPnl(closedForMetrics)
+        let closedFx = roundTrips(activities: snap.activities, listings: snap.listings, fx: fx)
+        let metrics = computeMetrics(closedFx)
+        let monthly = monthlyPnl(closedFx)
         let yearRows = annualRows(nav: snap.nav, spy: spy, activities: snap.activities)
         let ann = accountAnnualizedReturn(nav: snap.nav, years: yearRows.map(\.year).sorted())
         return WSPullResult(
@@ -2158,32 +2153,6 @@ query FetchAccountHistoricalFinancials(
         if t.contains("OPTIONSSELL") { return "SELL" }
         return nil
     }
-    private static func isIntentionalOpen(_ a: WSActivity) -> Bool {
-        let fields = [compactType(a.activityType), compactType(a.activitySubType)]
-        if fields.contains(where: { $0.contains("TOOPEN") }) { return true }
-        if fields.contains(where: { $0 == "STO" || $0 == "BTO" }) { return true }
-        return false
-    }
-    private static func isCloseOnly(_ a: WSActivity) -> Bool {
-        let fields = [compactType(a.activityType), compactType(a.activitySubType)]
-        if fields.contains(where: { $0.contains("TOCLOSE") || $0 == "BTC" || $0 == "STC" }) { return true }
-        if fields.contains(where: { $0.contains("EXPIR") || $0.contains("ASSIGN") || $0.contains("EXERCISE") }) { return true }
-        return false
-    }
-    private static func openingDirection(_ a: WSActivity, side: String) -> String? {
-        if side == "BUY" {
-            if isCloseOnly(a) { return nil }
-            return "LONG"
-        }
-        if isIntentionalOpen(a) { return "SHORT" }
-        return nil
-    }
-    private static func fifoAccount(_ a: WSActivity) -> String {
-        let nick = a.accountType.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !nick.isEmpty { return nick }
-        if !a.fifoId.isEmpty { return a.fifoId }
-        return a.accountId
-    }
     static func isOptionSymbol(_ symbol: String) -> Bool {
         let u = symbol.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -2210,43 +2179,6 @@ query FetchAccountHistoricalFinancials(
         return s0
     }
 
-    private static func foldStkdis(_ activities: [WSActivity]) -> [WSActivity] {
-        var rest: [WSActivity] = []
-        var groups: [String: (pos: Double, neg: Double, sample: WSActivity)] = [:]
-        var groupOrder: [String] = []
-        for a in activities {
-            if compactType(a.activityType) != "STKDIS" {
-                rest.append(a)
-                continue
-            }
-            let k = [a.symbol, a.transactionDate, a.currency].joined(separator: "|")
-            // ledger.html foldStkdis: Map insertion order, then forEach leftover BUY.
-            if groups[k] == nil {
-                groups[k] = (0, 0, a)
-                groupOrder.append(k)
-            }
-            var g = groups[k]!
-            let q = a.quantity
-            if a.activitySubType == "SELL" || q < 0 { g.neg += abs(q) }
-            else { g.pos += abs(q) }
-            groups[k] = g
-        }
-        for k in groupOrder {
-            guard let g = groups[k] else { continue }
-            let net = g.pos - g.neg
-            if net > 1e-10 {
-                var a = g.sample
-                a.quantity = net
-                a.activitySubType = "BUY"
-                a.unitPrice = 0
-                a.netCashAmount = 0
-                a.category = "trade"
-                rest.append(a)
-            }
-        }
-        return rest
-    }
-
     private static func daysBetween(_ a: String, _ b: String) -> Int {
         guard let da = ymd(a), let db = ymd(b) else { return 0 }
         let ms = db.timeIntervalSince(da)
@@ -2270,215 +2202,6 @@ query FetchAccountHistoricalFinancials(
         f.dateFormat = "yyyy-MM-dd"
         return f.string(from: d)
     }
-
-    private static func stableTradeId(_ t: WSClosedTrade) -> String {
-        [
-            t.accountId, t.symbol, t.currency, t.entryDate, t.exitDate,
-            jsToFixed(t.quantity, digits: 8),
-            jsToFixed(t.entryPrice, digits: 8),
-            jsToFixed(t.exitPrice, digits: 8),
-            t.side,
-        ].joined(separator: "|")
-    }
-
-    private struct Lot {
-        var qty: Double
-        var price: Double
-        var date: String
-        var commission: Double
-        var direction: String
-        var accountId: String
-        var accountType: String
-        var symbol: String
-        var name: String
-        var currency: String
-        var activityId: String
-        var securityId: String
-    }
-
-    private static func tickerWasReplaced(_ activities: [WSActivity], accountId: String, symbol: String, currency: String, byDate: String) -> Bool {
-        var removedOn = ""
-        for a in activities {
-            if fifoAccount(a) != accountId { continue }
-            if a.symbol != symbol || a.currency != currency { continue }
-            let t = compactType(a.activityType)
-            let raw = compactType(a.rawType) + compactType(a.aftType)
-            let sub = compactType(a.activitySubType)
-            let q = a.quantity
-            let removal = (t == "STKDIS" && (sub == "SELL" || q < 0)) ||
-                raw.range(of: "CODECHANGE|SYMBOLCHANGE|TICKERCHANGE|LISTINGSTATUS|SECURITYSWAP", options: .regularExpression) != nil
-            if removal && !a.transactionDate.isEmpty && (removedOn.isEmpty || a.transactionDate < removedOn) {
-                removedOn = a.transactionDate
-            }
-        }
-        if removedOn.isEmpty || removedOn > byDate { return false }
-        for a in activities {
-            if fifoAccount(a) != accountId { continue }
-            if a.symbol != symbol || a.currency != currency { continue }
-            if a.transactionDate <= removedOn { continue }
-            if (a.category == "trade" || a.category == "option_event") && compactType(a.activityType) != "STKDIS" && tradeSide(a) != nil {
-                return false
-            }
-        }
-        return true
-    }
-
-    static func matchFifo(_ activities: [WSActivity]) -> (closed: [WSClosedTrade], open: [WSOpenLot]) {
-        struct Fill { var activity: WSActivity; var side: String; var qty: Double }
-        func fillRank(_ f: Fill) -> Int {
-            let t = compactType(f.activity.activityType)
-            let s = compactType(f.activity.activitySubType)
-            let blob = t + s
-            if (blob.contains("TOOPEN") || t == "STO" || s == "STO") && f.side == "SELL" { return 0 }
-            if isCloseOnly(f.activity) && f.side == "BUY" { return 1 }
-            if f.side == "BUY" { return 2 }
-            if blob.contains("TOCLOSE") || t == "STC" || s == "STC" { return 3 }
-            return 4
-        }
-        var fills: [Fill] = foldStkdis(activities).compactMap { a in
-            guard a.category == "trade" || a.category == "option_event", !a.symbol.isEmpty else { return nil }
-            guard let side = tradeSide(a) else { return nil }
-            let qty = abs(a.quantity)
-            if qty <= 0 { return nil }
-            return Fill(activity: a, side: side, qty: qty)
-        }
-        // ledger.html matchFifo fills.sort (1565-1571): transactionDate, fillRank, id.
-        fills.sort { a, b in
-            let d = a.activity.transactionDate.compare(b.activity.transactionDate)
-            if d != .orderedSame { return d == .orderedAscending }
-            let ra = fillRank(a), rb = fillRank(b)
-            if ra != rb { return ra < rb }
-            return a.activity.id.localizedCompare(b.activity.id) == .orderedAscending
-        }
-        var books: [String: [Lot]] = [:]
-        var bookOrder: [String] = []
-        func bookKey(_ a: WSActivity) -> String { fifoAccount(a) + "::" + a.symbol + "::" + a.currency }
-        func getBook(_ a: WSActivity) -> String {
-            let k = bookKey(a)
-            if books[k] == nil {
-                books[k] = []
-                bookOrder.append(k)
-            }
-            return k
-        }
-        var closed: [WSClosedTrade] = []
-        func makeTrade(lot: Lot, a: WSActivity, fillQty: Double, matched: Double, side: String, symbol: String, name: String, multSymbol: String) -> WSClosedTrade {
-            let exitCommission = fillQty > 0 ? a.commission * (matched / fillQty) : 0
-            let entryCommission = lot.qty > 0 ? lot.commission * (matched / lot.qty) : 0
-            let commission = entryCommission + exitCommission
-            let rawPnl = (lot.direction == "LONG" ? (a.unitPrice - lot.price) * matched : (lot.price - a.unitPrice) * matched) * optionMultiplier(multSymbol)
-            var trade = WSClosedTrade(
-                id: "",
-                accountId: lot.accountId,
-                accountType: lot.accountType,
-                symbol: symbol,
-                name: name,
-                currency: lot.currency,
-                side: side,
-                quantity: matched,
-                entryPrice: lot.price,
-                exitPrice: a.unitPrice,
-                entryDate: isoDateOnly(lot.date),
-                exitDate: isoDateOnly(a.transactionDate),
-                holdDays: daysBetween(isoDateOnly(lot.date), isoDateOnly(a.transactionDate)),
-                commission: commission,
-                entryCommission: entryCommission,
-                exitCommission: exitCommission,
-                pnl: rawPnl - commission,
-                pnlCad: rawPnl - commission,
-                openDirection: lot.direction,
-                buyActivityId: lot.activityId,
-                sellActivityId: a.id
-            )
-            trade.id = stableTradeId(trade)
-            return trade
-        }
-        for fill in fills {
-            let a = fill.activity
-            let k = getBook(a)
-            var book = books[k] ?? []
-            let closingDir = fill.side == "BUY" ? "SHORT" : "LONG"
-            var remaining = fill.qty
-            while remaining > 0 && !book.isEmpty && book[0].direction == closingDir {
-                var lot = book[0]
-                let matched = min(lot.qty, remaining)
-                closed.append(makeTrade(lot: lot, a: a, fillQty: fill.qty, matched: matched, side: fill.side, symbol: lot.symbol, name: lot.name, multSymbol: lot.symbol))
-                lot.commission *= (lot.qty - matched) / lot.qty
-                lot.qty -= matched
-                remaining -= matched
-                if lot.qty <= 1e-10 { book.removeFirst() }
-                else { book[0] = lot }
-            }
-            if remaining > 1e-10 && fill.side == "SELL" {
-                for dk in bookOrder {
-                    if remaining <= 1e-10 { break }
-                    if dk == bookKey(a) { continue }
-                    let parts = dk.components(separatedBy: "::")
-                    if parts.count != 3 { continue }
-                    if parts[0] != fifoAccount(a) || parts[2] != a.currency { continue }
-                    if !tickerWasReplaced(activities, accountId: parts[0], symbol: parts[1], currency: parts[2], byDate: a.transactionDate) { continue }
-                    var dbook = books[dk] ?? []
-                    while remaining > 1e-10 && !dbook.isEmpty && dbook[0].direction == closingDir {
-                        var lot = dbook[0]
-                        let matched = min(lot.qty, remaining)
-                        closed.append(makeTrade(lot: lot, a: a, fillQty: fill.qty, matched: matched, side: fill.side, symbol: a.symbol, name: a.name.isEmpty ? lot.name : a.name, multSymbol: a.symbol))
-                        lot.commission *= (lot.qty - matched) / lot.qty
-                        lot.qty -= matched
-                        remaining -= matched
-                        if lot.qty <= 1e-10 { dbook.removeFirst() }
-                        else { dbook[0] = lot }
-                    }
-                    books[dk] = dbook
-                }
-            }
-            if remaining > 1e-10 {
-                if let opening = openingDirection(a, side: fill.side) {
-                    book.append(Lot(
-                        qty: remaining,
-                        price: a.unitPrice,
-                        date: isoDateOnly(a.transactionDate),
-                        commission: fill.qty > 0 ? a.commission * (remaining / fill.qty) : 0,
-                        direction: opening,
-                        accountId: a.accountId,
-                        accountType: a.accountType,
-                        symbol: a.symbol,
-                        name: a.name,
-                        currency: a.currency,
-                        activityId: a.id,
-                        securityId: a.securityId
-                    ))
-                }
-            }
-            books[k] = book
-        }
-        var open: [WSOpenLot] = []
-        for book in books.values {
-            for lot in book where lot.qty > 1e-10 {
-                open.append(WSOpenLot(
-                    id: lot.activityId + "|" + lot.symbol + "|" + lot.date,
-                    accountId: lot.accountId,
-                    accountType: lot.accountType,
-                    symbol: lot.symbol,
-                    name: lot.name,
-                    currency: lot.currency,
-                    quantity: lot.qty,
-                    price: lot.price,
-                    date: lot.date,
-                    commission: lot.commission,
-                    direction: lot.direction,
-                    activityId: lot.activityId,
-                    securityId: lot.securityId
-                ))
-            }
-        }
-        closed.sort { a, b in
-            if a.exitDate != b.exitDate { return a.exitDate < b.exitDate }
-            return a.id.localizedCompare(b.id) == .orderedAscending
-        }
-        return (closed, open)
-    }
-
-    // MARK: - Metrics / NAV years (ledger.html)
 
     static func formatCad(_ n: Double, digits: Int = 2) -> String {
         let f = NumberFormatter()
@@ -3133,163 +2856,12 @@ query FetchAccountHistoricalFinancials(
     }
 
     /// ledger.html applyFx (1748–1764): convert USD entry/exit notionals on their own dates. CAD pnlCad = pnl.
-    private static func applyFx(_ trades: [WSClosedTrade], fx: [String: Double]) -> [WSClosedTrade] {
-        trades.map { t in
-            var t = t
-            let ccy = t.currency.uppercased()
-            if ccy != "USD" {
-                t.pnlCad = t.pnl
-                return t
-            }
-            let qty = t.quantity
-            let entryC = t.entryCommission
-            let exitC = t.exitCommission
-            let entryNotional = t.entryPrice * qty * optionMultiplier(t.symbol)
-            let exitNotional = t.exitPrice * qty * optionMultiplier(t.symbol)
-            if t.openDirection == "SHORT" {
-                t.pnlCad = toCad(entryNotional - entryC, currency: ccy, date: t.entryDate, fx: fx)
-                    - toCad(exitNotional + exitC, currency: ccy, date: t.exitDate, fx: fx)
-            } else {
-                t.pnlCad = toCad(exitNotional - exitC, currency: ccy, date: t.exitDate, fx: fx)
-                    - toCad(entryNotional + entryC, currency: ccy, date: t.entryDate, fx: fx)
-            }
-            return t
-        }
-    }
-
-    /// ledger.html groupClosedByClose (2776–2819): one metrics row per close (symbol/ccy/exitDate/exitPrice/side/dir).
-    /// Sums pnlCad. Not the Closed-trades table grouping (groupClosedByExit).
-    private static func groupClosedByClose(_ trades: [WSClosedTrade]) -> [WSClosedTrade] {
-        var map: [String: WSClosedTrade] = [:]
-        var order: [String] = []
-        var entryNotional: [String: Double] = [:]
-        for s in trades {
-            // ledger.html 2780: [symbol, currency, exitDate, Number(exitPrice).toFixed(8), side, openDirection]
-            let k = [
-                s.symbol,
-                s.currency,
-                isoDateOnly(s.exitDate),
-                jsToFixed(s.exitPrice, digits: 8),
-                s.side,
-                s.openDirection,
-            ].joined(separator: "|")
-            if map[k] == nil {
-                var g = s
-                g.quantity = 0
-                g.pnl = 0
-                g.pnlCad = 0
-                g.commission = 0
-                map[k] = g
-                order.append(k)
-                entryNotional[k] = 0
-            }
-            var g = map[k]!
-            g.quantity += s.quantity
-            g.pnl += s.pnl
-            g.pnlCad += s.pnlCad
-            g.commission += s.commission
-            entryNotional[k, default: 0] += s.entryPrice * s.quantity
-            if s.entryDate < g.entryDate { g.entryDate = s.entryDate }
-            map[k] = g
-        }
-        return order.map { k in
-            var g = map[k]!
-            let en = entryNotional[k] ?? 0
-            g.entryPrice = g.quantity != 0 ? en / g.quantity : 0
-            g.holdDays = daysBetween(g.entryDate, g.exitDate)
-            return g
-        }
-    }
-
-    /// ledger.html groupClosedByExit with no saved groups: defaultGroupsUntilSideChange.
+    /// The Closed trades list: one row per round trip, newest exit first.
     static func closedTradesTable(_ trades: [WSClosedTrade], activities _: [WSActivity] = []) -> [WSClosedTrade] {
-        let grouped = defaultGroupsUntilSideChange(trades)
-        return grouped.sorted { a, b in
+        trades.sorted { a, b in
             if a.exitDate != b.exitDate { return a.exitDate > b.exitDate }
             return a.id > b.id
         }
-    }
-
-    private static func sliceMemberKey(_ t: WSClosedTrade) -> String {
-        if !t.buyActivityId.isEmpty && !t.sellActivityId.isEmpty {
-            return [t.buyActivityId, t.sellActivityId, jsToFixed(t.quantity, digits: 8)].joined(separator: "|")
-        }
-        return t.id
-    }
-
-    private static func groupLaneKey(_ t: WSClosedTrade) -> String {
-        [t.accountId, t.symbol, t.currency].joined(separator: "|")
-    }
-
-    private static func groupIdForKeys(_ keys: [String]) -> String {
-        let s = keys.sorted().joined(separator: "\n")
-        var h: UInt32 = 2_166_136_261
-        for u in s.utf8 {
-            h ^= UInt32(u)
-            h = h &* 16_777_619
-        }
-        return "g_" + String(h, radix: 16) + "_" + String(keys.count)
-    }
-
-    private static func collapseClosedGroup(_ slices: [WSClosedTrade], id: String) -> WSClosedTrade {
-        var g = slices[0]
-        g.id = id
-        g.quantity = 0
-        g.pnl = 0
-        g.pnlCad = 0
-        g.commission = 0
-        var entryN = 0.0
-        var exitN = 0.0
-        g.entryDate = slices[0].entryDate
-        g.exitDate = slices[0].exitDate
-        for s in slices {
-            g.quantity += s.quantity
-            g.pnl += s.pnl
-            g.pnlCad += s.pnlCad
-            g.commission += s.commission
-            entryN += s.entryPrice * s.quantity
-            exitN += s.exitPrice * s.quantity
-            if s.entryDate < g.entryDate { g.entryDate = s.entryDate }
-            if s.exitDate > g.exitDate { g.exitDate = s.exitDate }
-        }
-        g.entryPrice = g.quantity != 0 ? entryN / g.quantity : 0
-        g.exitPrice = g.quantity != 0 ? exitN / g.quantity : slices[0].exitPrice
-        g.holdDays = daysBetween(g.entryDate, g.exitDate)
-        g.slices = slices
-        return g
-    }
-
-    private static func defaultGroupsUntilSideChange(_ slices: [WSClosedTrade]) -> [WSClosedTrade] {
-        var lanes: [String: [WSClosedTrade]] = [:]
-        var laneOrder: [String] = []
-        for s in slices {
-            let k = groupLaneKey(s)
-            if lanes[k] == nil { laneOrder.append(k) }
-            lanes[k, default: []].append(s)
-        }
-        var out: [WSClosedTrade] = []
-        for k in laneOrder {
-            var list = lanes[k] ?? []
-            list.sort { a, b in
-                if a.exitDate != b.exitDate { return a.exitDate < b.exitDate }
-                if a.entryDate != b.entryDate { return a.entryDate < b.entryDate }
-                return sliceMemberKey(a) < sliceMemberKey(b)
-            }
-            var cur: [WSClosedTrade] = []
-            var dir: String?
-            func flush() {
-                if cur.isEmpty { return }
-                out.append(collapseClosedGroup(cur, id: groupIdForKeys(cur.map(sliceMemberKey))))
-                cur = []
-            }
-            for s in list {
-                if let d = dir, s.openDirection != d { flush() }
-                dir = s.openDirection
-                cur.append(s)
-            }
-            flush()
-        }
-        return out
     }
 
     private static func loadCachedFx() -> [String: Double] {
@@ -3385,7 +2957,47 @@ query FetchAccountHistoricalFinancials(
     }
 
     static func openLots(from activities: [WSActivity]) -> [WSOpenLot] {
-        matchFifo(activities).open
+        let base = BHModel.buildBase(activities: activities.map(BHAct.init), securities: [], market: BHMarket(), today: BHModel.todayLocal())
+        return base.openLots.map { l in
+            WSOpenLot(id: [l.activityId, l.symbol, l.currency, BHModel.fmt8(l.qty)].joined(separator: "|"), accountId: l.accountId,
+                      accountType: l.accountType, symbol: l.symbol, name: l.name, currency: l.currency, quantity: l.qty, price: l.price,
+                      date: l.date, commission: l.commission, direction: l.direction, activityId: l.activityId, securityId: l.securityId)
+        }
+    }
+
+    // MARK: - The model (Model.swift) in the shapes the screens draw
+
+    static func security(_ l: WSSecurityListing) -> BHSecurity {
+        BHSecurity(id: l.id, symbol: l.symbol, name: l.name, underlyingId: l.underlyingId, primaryExchange: l.primaryExchange, primaryMic: l.primaryMic, currency: l.currency)
+    }
+
+    private static func closedTrade(_ s: BHSlice) -> WSClosedTrade {
+        WSClosedTrade(
+            id: s.id, accountId: s.accountId, accountType: s.accountType, symbol: s.symbol, name: s.name, currency: s.currency,
+            side: s.side, quantity: s.quantity, entryPrice: s.entryPrice, exitPrice: s.exitPrice, entryDate: s.entryDate, exitDate: s.exitDate,
+            holdDays: s.holdDays, commission: s.commission, entryCommission: s.entryCommission, exitCommission: s.exitCommission,
+            pnl: s.pnl, pnlCad: s.pnlCad, openDirection: s.openDirection, buyActivityId: s.buyActivityId, sellActivityId: s.sellActivityId)
+    }
+
+    /// Round trips with P&L in CAD on the fill dates: the model's trades, each
+    /// carrying its FIFO slices for the executions list.
+    static func roundTrips(activities: [WSActivity], listings: [WSSecurityListing], fx: [String: Double]) -> [WSClosedTrade] {
+        let base = BHModel.buildBase(activities: activities.map(BHAct.init), securities: listings.map(security), market: BHMarket(fx: fx), today: BHModel.todayLocal())
+        var slicesByRt: [String: [BHSlice]] = [:]
+        for s in base.closed {
+            slicesByRt[s.rt ?? ("rt:" + BHModel.sliceMemberKey(s)), default: []].append(s)
+        }
+        return base.trades.map { t in
+            let slices = (slicesByRt[t.id] ?? []).map(closedTrade)
+            var g = WSClosedTrade(
+                id: t.id, accountId: t.accountId, accountType: t.account, symbol: t.symbol, name: t.name, currency: t.currency,
+                side: t.openDirection == "LONG" ? "SELL" : "BUY", quantity: t.qty, entryPrice: t.entry, exitPrice: t.exit,
+                entryDate: t.entryDate, exitDate: t.exitDate, holdDays: t.holdDays, commission: t.fees, entryCommission: 0, exitCommission: 0,
+                pnl: t.pnl, pnlCad: t.pnlCad, openDirection: t.openDirection,
+                buyActivityId: slices.first?.buyActivityId ?? "", sellActivityId: slices.last?.sellActivityId ?? "")
+            g.slices = slices
+            return g
+        }
     }
 
     private static func uniqueSorted(_ arr: [String]) -> [String] {
@@ -3557,8 +3169,7 @@ query FetchAccountHistoricalFinancials(
     /// Home numbers for the current filters. Unfiltered returns the snapshot unchanged.
     static func dashboard(_ snap: WSPullResult, filters: JournalFilters) -> WSPullResult {
         if !filters.isActive { return snap }
-        let visible = filteredTrades(snap.closed, filters: filters, activities: snap.activities, listings: snap.listings)
-        let closedForMetrics = groupClosedByClose(visible)
+        let closedForMetrics = filteredTrades(snap.closed, filters: filters, activities: snap.activities, listings: snap.listings)
         var out = snap
         out.metrics = computeMetrics(closedForMetrics)
         out.monthly = monthlyPnl(closedForMetrics)

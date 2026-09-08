@@ -596,10 +596,10 @@ enum BHModel {
             var n: Int
             var factor: Double
             if ratio >= 1.5 {
-                n = Int(ratio.rounded())
+                n = Int(ratio.rounded(.toNearestOrEven))
                 factor = 1.0 / Double(n)
             } else if ratio <= 1 / 1.5 {
-                n = Int((1 / ratio).rounded())
+                n = Int((1 / ratio).rounded(.toNearestOrEven))
                 factor = Double(n)
             } else {
                 continue
@@ -700,15 +700,15 @@ enum BHModel {
         if !(qty > 0) { return false }
         let px = abs(cash) / (qty * 100.0)
         if px < 0 { return false }
-        if abs(px * 100 - (px * 100).rounded()) < 1e-6 { return true }
-        if abs(px * 10000 - (px * 10000).rounded()) < 1e-4 { return true }
+        if abs(px * 100 - (px * 100).rounded(.toNearestOrEven)) < 1e-6 { return true }
+        if abs(px * 10000 - (px * 10000).rounded(.toNearestOrEven)) < 1e-4 { return true }
         return false
     }
 
     private static func inferStandaloneOptionQty(_ cash: Double) -> Double {
         let absCash = abs(cash)
         if !(absCash > 0) { return 0 }
-        let maxQty = min(10000, max(1, Int(absCash.rounded())))
+        let maxQty = min(10000, max(1, Int(absCash.rounded(.toNearestOrEven))))
         for q in 1...maxQty {
             if isCleanOptionQty(absCash, Double(q)) { return Double(q) }
         }
@@ -1059,7 +1059,7 @@ enum BHModel {
                     for i in lots.indices {
                         lots[i].qty *= factor
                         lots[i].price /= factor
-                        let label = "split " + (factor < 1 ? "1:\(Int((1 / factor).rounded()))" : "\(Int(factor.rounded())):1")
+                        let label = "split " + (factor < 1 ? "1:\(Int((1 / factor).rounded(.toNearestOrEven)))" : "\(Int(factor.rounded(.toNearestOrEven))):1")
                         if !lots[i].flags.contains(label) { lots[i].flags.append(label) }
                     }
                     if books[key] != nil { books[key] = lots }
@@ -1699,7 +1699,7 @@ enum BHModel {
             p.mv = mv
             p.unreal = unreal
             p.unrealPct = cost != 0 ? unreal / cost : nil
-            p.held = qty != 0 ? Int((held / qty).rounded()) : 0
+            p.held = qty != 0 ? Int((held / qty).rounded(.toNearestOrEven)) : 0
             p.opened = lots[0].date
             p.rt = lots[0].rt
             p.lots = lots.map { l in
