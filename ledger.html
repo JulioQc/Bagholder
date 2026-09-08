@@ -91,7 +91,7 @@ textarea.input{resize:none;line-height:1.5}
 .pop{position:absolute;top:42px;right:0;z-index:7;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
 .pop-row{cursor:pointer;border:0;display:flex;align-items:center;gap:8px;text-align:left;font:400 12.5px Inter,system-ui,sans-serif;padding:6px 7px;border-radius:5px;background:transparent;color:rgba(var(--ink-rgb),.85);width:100%}
 .pop-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
-.pop-row.on{background:var(--accent-900);color:var(--accent-300)}
+.pop-row.on{background:var(--accent-900);color:var(--accent-300);box-shadow:inset 3px 0 0 var(--chip-fg)}
 .pop-row.on:hover{background:rgba(var(--accent-rgb),.28)}
 .pop-row.hi{background:rgba(var(--ink-rgb),var(--hover))}
 .pop-row.on.hi{background:rgba(var(--accent-rgb),.28)}
@@ -672,8 +672,6 @@ function tabsHtml() {
 // ---------------------------------------------------------------------------
 // filter popover
 // ---------------------------------------------------------------------------
-// The check's place in a value row: always there, filled when the value is picked, so text never shifts.
-function checkSlot(on) { return '<span style="width:14px;flex:none;text-align:center;color:var(--chip-fg);font-size:12px;line-height:1">' + (on ? "✓" : "") + "</span>"; }
 function popValuesHtml(active) {
   const f = state.filters;
   const opts = ((state.model && state.model.options && state.model.options[active.opt]) || []).slice();
@@ -683,7 +681,7 @@ function popValuesHtml(active) {
   if (!opts.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">Nothing to choose from yet.</div>';
   if (!shown.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">No match.</div>';
   const hi = Math.min(state.valueHi || 0, shown.length - 1);
-  return shown.map((v, i) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + checkSlot(f.lists[active.key].indexOf(v) >= 0) + esc(v) + "</button>").join("");
+  return shown.map((v, i) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + esc(v) + "</button>").join("");
 }
 // Values from every list field that contain the typed text, symbols first:
 // [{key, value, label}], at most 40.
@@ -707,7 +705,7 @@ function popFieldsBodyHtml() {
   if (q && matches.length) {
     const hi = Math.min(state.valueHi || 0, matches.length - 1);
     return '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' + matches.map((m, i) =>
-      '<button class="pop-row' + (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: m.key, value: m.value }) + "'>" + checkSlot(f.lists[m.key].indexOf(m.value) >= 0) + esc(m.value) +
+      '<button class="pop-row' + (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" data-act="toggleList" data-arg=\'' + attr({ key: m.key, value: m.value }) + "'>" + esc(m.value) +
       '<span style="margin-left:auto;font-size:11px;color:var(--ink55)">' + esc(m.label) + "</span></button>").join("") + "</div>";
   }
   return (q ? '<div class="muted" style="padding:2px 7px 8px;font-size:12px">No match.</div>' : "") +
