@@ -17,7 +17,7 @@ Read this first, then `SPEC.md`. Bagholder is a local-first trading journal for 
 
 ## Verifying a change
 
-- Tests: `python3 -m unittest test_store test_model`. Add a test for every behaviour change; the suites are the contract for the model, store and server.
+- Tests: `python3 -m unittest test_store test_model test_fixtures`. Add a test for every behaviour change; the suites are the contract for the model, store and server. `fixtures/cases` are the shared model cases every implementation (Python, Swift, Kotlin) runs; after an intended model change regenerate them with `python3 fixtures/make_fixtures.py` and review the diff (see `fixtures/README.md`).
 - The page has no automated tests, so render it. Run a second instance on a copy of the user's data, never on the live database:
   ```
   mkdir -p /tmp/bh-scratch && cp ~/.bagholder/bagholder.db /tmp/bh-scratch/
@@ -46,6 +46,10 @@ To release: bump `APP_VERSION` in `bagholder.py` in the last PR going into the r
   gh release create vX.Y.Z bagholder-vX.Y.Z.zip bagholder-vX.Y.Z.zip.sha256 --target master --title vX.Y.Z --notes "..."
   ```
   with notes listing the merged PRs. The archive must be named exactly `bagholder-vX.Y.Z.zip` with the `.sha256` beside it, or running copies fall back to an "Update available" link. Master may carry unreleased features between releases; a release collects everything merged since the last tag, so the bump is decided by the biggest change in that set, not by the last PR alone. Running copies check the latest release at start and hourly, and show an "Update to vX.Y.Z" button when it is newer.
+
+## Mobile
+
+`MOBILE.md` holds the decision and the plan for the iOS and Android apps: native SwiftUI and Compose, each with its own model, kept in agreement by `fixtures/cases`. The iOS start is branch `ios-m1-shell` (PR #15, issue #14).
 
 ## Do not
 

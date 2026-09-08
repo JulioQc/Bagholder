@@ -1,0 +1,157 @@
+{
+  "expect": {
+    "kpi": {
+      "avgHold": 11.5,
+      "avgLoss": -50.0,
+      "avgWin": 200.0,
+      "count": 2,
+      "expectancy": 75.0,
+      "losses": 1,
+      "profitFactor": 4.0,
+      "realized": 150.0,
+      "winRate": 0.5,
+      "wins": 1
+    },
+    "positions": [],
+    "trades": [
+      {
+        "currency": "CAD",
+        "entry": 10.0,
+        "entryDate": "2026-01-05",
+        "exit": 12.0,
+        "exitDate": "2026-01-20",
+        "fees": 0.0,
+        "fills": [
+          "BUY",
+          "SELL"
+        ],
+        "holdDays": 15,
+        "kind": "Shares",
+        "mult": 1,
+        "pnl": 200.0,
+        "pnlCad": 200.0,
+        "pnlPct": 0.2,
+        "qty": 100.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "AAA"
+      },
+      {
+        "currency": "CAD",
+        "entry": 12.0,
+        "entryDate": "2026-02-02",
+        "exit": 11.0,
+        "exitDate": "2026-02-10",
+        "fees": 0.0,
+        "fills": [
+          "BUY",
+          "SELL"
+        ],
+        "holdDays": 8,
+        "kind": "Shares",
+        "mult": 1,
+        "pnl": -50.0,
+        "pnlCad": -50.0,
+        "pnlPct": -0.083333,
+        "qty": 50.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "AAA"
+      }
+    ]
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b1",
+        "name": "LUNR",
+        "netCashAmount": -1000.0,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": 100,
+        "rawType": "DIY_BUY",
+        "securityId": "",
+        "symbol": "AAA",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 10.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELL",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "s1",
+        "name": "LUNR",
+        "netCashAmount": 1200.0,
+        "occurredAt": "2026-01-20T15:00:00+00:00",
+        "quantity": -100,
+        "rawType": "DIY_SELL",
+        "securityId": "",
+        "symbol": "AAA",
+        "transactionDate": "2026-01-20",
+        "unitPrice": 12.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b2",
+        "name": "LUNR",
+        "netCashAmount": -600.0,
+        "occurredAt": "2026-02-02T15:00:00+00:00",
+        "quantity": 50,
+        "rawType": "DIY_BUY",
+        "securityId": "",
+        "symbol": "AAA",
+        "transactionDate": "2026-02-02",
+        "unitPrice": 12.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELL",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "s2",
+        "name": "LUNR",
+        "netCashAmount": 550.0,
+        "occurredAt": "2026-02-10T15:00:00+00:00",
+        "quantity": -50,
+        "rawType": "DIY_SELL",
+        "securityId": "",
+        "symbol": "AAA",
+        "transactionDate": "2026-02-10",
+        "unitPrice": 11.0
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-03-01"
+}

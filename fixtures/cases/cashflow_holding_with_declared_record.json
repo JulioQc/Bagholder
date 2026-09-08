@@ -1,0 +1,137 @@
+{
+  "expect": {
+    "cashflowHoldings": [
+      {
+        "annual": 7200.0,
+        "exPast": false,
+        "nextExDate": "2026-09-30",
+        "nextPayDate": "2026-10-06",
+        "payPast": false,
+        "per": 0.15,
+        "qty": 4000.0,
+        "symbol": "RDDY",
+        "yoc": 0.154639
+      }
+    ],
+    "kpi": {
+      "avgHold": null,
+      "avgLoss": 0.0,
+      "avgWin": 0.0,
+      "count": 0,
+      "expectancy": null,
+      "losses": 0,
+      "profitFactor": 0.0,
+      "realized": 0,
+      "winRate": null,
+      "wins": 0
+    },
+    "positions": [
+      {
+        "avg": 11.64,
+        "cost": 46560.0,
+        "currency": "CAD",
+        "kind": "Shares",
+        "qty": 4000.0,
+        "symbol": "RDDY"
+      }
+    ],
+    "trades": []
+  },
+  "filters": {},
+  "market": {
+    "benchmark": {},
+    "distributions": {
+      "RDDY": [
+        {
+          "amount": 0.15,
+          "currency": "CAD",
+          "exDate": "2026-07-31",
+          "payDate": "2026-08-06"
+        },
+        {
+          "amount": 0.15,
+          "currency": "CAD",
+          "exDate": "2026-08-31",
+          "payDate": "2026-09-04"
+        },
+        {
+          "amount": 0.15,
+          "currency": "CAD",
+          "exDate": "2026-09-30",
+          "payDate": "2026-10-06"
+        }
+      ]
+    },
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Cashflow",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b1",
+        "name": "LUNR",
+        "netCashAmount": -46560.0,
+        "occurredAt": "2026-05-01T15:00:00+00:00",
+        "quantity": 4000,
+        "rawType": "DIY_BUY",
+        "securityId": "",
+        "symbol": "RDDY",
+        "transactionDate": "2026-05-01",
+        "unitPrice": 11.64
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Cashflow",
+        "activitySubType": "",
+        "activityType": "Dividend",
+        "category": "dividend",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "d1",
+        "name": "LUNR",
+        "netCashAmount": 600.0,
+        "occurredAt": "2026-08-06T15:00:00+00:00",
+        "quantity": 4000,
+        "rawType": "DIVIDEND",
+        "securityId": "",
+        "symbol": "RDDY",
+        "transactionDate": "2026-08-06",
+        "unitPrice": 0.15
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Cashflow",
+        "activitySubType": "",
+        "activityType": "Dividend",
+        "category": "dividend",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "d2",
+        "name": "LUNR",
+        "netCashAmount": 600.0,
+        "occurredAt": "2026-09-04T15:00:00+00:00",
+        "quantity": 4000,
+        "rawType": "DIVIDEND",
+        "securityId": "",
+        "symbol": "RDDY",
+        "transactionDate": "2026-09-04",
+        "unitPrice": 0.15
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-09-07"
+}
