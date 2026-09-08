@@ -3,17 +3,71 @@
 // the trade chart. Nothing drawn is synthetic: every mark is a model figure.
 import SwiftUI
 
-/// The equity series with a `$` axis and date labels.
+/// A long press on a chart: the x of the first touch is reported the moment the
+/// press is recognized, so the readout starts where the finger is, then follows it.
+struct ChartPress: UIViewRepresentable {
+    var onChange: (CGFloat?, CGFloat) -> Void   // x within the view, or nil when the press ends; the view's width
+
+    func makeUIView(context: Context) -> PressView {
+        let v = PressView()
+        v.onChange = onChange
+        return v
+    }
+
+    func updateUIView(_ uiView: PressView, context: Context) { uiView.onChange = onChange }
+
+    final class PressView: UIView {
+        var onChange: ((CGFloat?, CGFloat) -> Void)?
+        private var origin: CGPoint?
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            backgroundColor = .clear
+            let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed))
+            press.minimumPressDuration = 0.2
+            press.allowableMovement = 30
+            press.cancelsTouchesInView = false
+            addGestureRecognizer(press)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            origin = touches.first?.location(in: self)
+            super.touchesBegan(touches, with: event)
+        }
+
+        @objc private func pressed(_ g: UILongPressGestureRecognizer) {
+            switch g.state {
+            case .began: onChange?((origin ?? g.location(in: self)).x, bounds.width)
+            case .changed: onChange?(g.location(in: self).x, bounds.width)
+            default: origin = nil; onChange?(nil, bounds.width)
+            }
+        }
+    }
+}
+
+/// The equity series with a `$` axis and date labels; a long press reads the value and day.
 struct EquityCurveChart: View {
     @Environment(\.theme) private var t
     let series: [BHEquityPoint]
     var height: CGFloat = 220
+    @State private var pick: Int? = nil
 
     var body: some View {
         let vals = series.map { $0.v }
         let hi = vals.max() ?? 1
         let lo = 0.0
         let ticks = Self.axisTicks(hi)
+        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 8) {
+            if let i = pick, series.indices.contains(i) {
+                Text(BHFmt.dayLabel(series[i].d)).font(.system(size: 13)).foregroundStyle(t.ink60)
+                Text(BHFmt.money(series[i].v)).font(.system(size: 13, weight: .semibold)).monospacedDigit().foregroundStyle(t.ink)
+            } else {
+                Text(" ").font(.system(size: 13))
+            }
+        }
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .trailing, spacing: 0) {
                 ForEach(Array(ticks.reversed().enumerated()), id: \.offset) { i, v in
@@ -45,8 +99,18 @@ struct EquityCurveChart: View {
                     line.move(to: pt(0))
                     for i in 1..<series.count { line.addLine(to: pt(i)) }
                     ctx.stroke(line, with: .color(t.pos), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                    if let i = pick, series.indices.contains(i) {
+                        let p = pt(i)
+                        var hair = Path(); hair.move(to: CGPoint(x: p.x, y: 0)); hair.addLine(to: CGPoint(x: p.x, y: size.height))
+                        ctx.stroke(hair, with: .color(t.hair), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        ctx.fill(Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)), with: .color(t.pos))
+                    }
                 }
                 .frame(height: height)
+                .overlay(ChartPress { x, width in
+                    guard let x, width > 0, series.count > 1 else { pick = nil; return }
+                    pick = max(0, min(series.count - 1, Int((x / width * CGFloat(series.count - 1)).rounded())))
+                })
                 HStack {
                     ForEach(Array(Self.dateLabels(series).enumerated()), id: \.offset) { i, l in
                         if i > 0 { Spacer(minLength: 0) }
@@ -54,6 +118,7 @@ struct EquityCurveChart: View {
                     }
                 }
             }
+        }
         }
     }
 
@@ -81,11 +146,23 @@ struct MonthlyBarsChart: View {
     let months: [BHMonthBucket]
     var height: CGFloat = 170
     var onPick: ((BHMonthBucket) -> Void)?
+    var countLabel = "trade"
+    @State private var pick: Int? = nil
 
     var body: some View {
         let hi = max(months.map { $0.value }.max() ?? 0, 0)
         let lo = min(months.map { $0.value }.min() ?? 0, 0)
         let span = (hi - lo) == 0 ? 1 : (hi - lo)
+        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 8) {
+            if let i = pick, months.indices.contains(i) {
+                Text(months[i].label).font(.system(size: 13)).foregroundStyle(t.ink60)
+                Text(BHFmt.money(months[i].value)).font(.system(size: 13, weight: .semibold)).monospacedDigit().foregroundStyle(t.signed(months[i].value))
+                Text("\(months[i].count) \(countLabel)" + (months[i].count == 1 ? "" : "s")).font(.system(size: 13)).foregroundStyle(t.ink55)
+            } else {
+                Text(" ").font(.system(size: 13))
+            }
+        }
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .trailing, spacing: 0) {
                 Text(BHFmt.compactMoney(hi)).font(.system(size: 11)).foregroundStyle(t.ink55)
@@ -115,12 +192,16 @@ struct MonthlyBarsChart: View {
                             let x = CGFloat(i) * pitch + (pitch - barW) / 2
                             let y = m.value >= 0 ? zeroY - h : zeroY
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(m.value >= 0 ? t.pos : t.neg)
+                                .fill((m.value >= 0 ? t.pos : t.neg).opacity(pick == nil || pick == i ? 1 : 0.35))
                                 .frame(width: barW, height: max(h, 1.5))
                                 .offset(x: x, y: y)
                                 .onTapGesture { onPick?(m) }
                         }
                     }
+                    .overlay(ChartPress { x, width in
+                        guard let x, width > 0, !months.isEmpty else { pick = nil; return }
+                        pick = max(0, min(months.count - 1, Int(x / width * CGFloat(months.count))))
+                    })
                 }
                 .frame(height: height)
                 HStack {
@@ -130,6 +211,7 @@ struct MonthlyBarsChart: View {
                     }
                 }
             }
+        }
         }
     }
 

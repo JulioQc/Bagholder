@@ -4,6 +4,7 @@
 package com.bagholder.app
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -25,6 +30,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +49,7 @@ import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.pow
 
 /** A bar of the trade chart. */
@@ -63,7 +70,24 @@ fun axisTicks(hi: Double): List<Double> {
     return (0..3).map { it * step }
 }
 
-/** The equity series with a `$` axis and date labels. */
+/** The readout line above a chart while it is pressed; blank otherwise, so the chart does not move. */
+@Composable
+private fun Readout(parts: List<Pair<String, Color>>?) {
+    val t = LocalTheme.current
+    Row(Modifier.height(20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        for ((text, color) in parts ?: emptyList()) Text(text, fontSize = 13.sp, color = color, fontWeight = if (color == t.ink60 || color == t.ink55) FontWeight.Normal else FontWeight.SemiBold)
+    }
+}
+
+/** A long press: the index under the finger's first touch at once, then following the drag. */
+private fun Modifier.pressReadout(count: Int, onPick: (Int?) -> Unit): Modifier = pointerInput(count) {
+    detectDragGesturesAfterLongPress(
+        onDragStart = { pos -> if (count > 0) onPick((pos.x / size.width * count).toInt().coerceIn(0, count - 1)) },
+        onDrag = { change, _ -> if (count > 0) onPick((change.position.x / size.width * count).toInt().coerceIn(0, count - 1)) },
+        onDragEnd = { onPick(null) }, onDragCancel = { onPick(null) })
+}
+
+/** The equity series with a `$` axis and date labels; a long press reads the value and day. */
 @Composable
 fun EquityCurveChart(series: List<EquityPoint>, height: Int = 220) {
     val t = LocalTheme.current
@@ -71,13 +95,23 @@ fun EquityCurveChart(series: List<EquityPoint>, height: Int = 220) {
     val hi = vals.maxOrNull() ?: 1.0
     val ticks = axisTicks(hi)
     val top = ticks.last()
+    var pick by remember { mutableStateOf<Int?>(null) }
+    Column {
+    Readout(pick?.let { i -> listOf(Fmt.dayLabel(series[i].d) to t.ink60, Fmt.money(series[i].v) to t.ink) })
     Row(Modifier.fillMaxWidth()) {
         Column(Modifier.height(height.dp), verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.End) {
             for (v in ticks.reversed()) AxisLabel(Fmt.wholeMoney(v))
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            Canvas(Modifier.fillMaxWidth().height(height.dp)) {
+            Canvas(Modifier.fillMaxWidth().height(height.dp).pointerInput(series) {
+                // the nearest point to the finger, from the first touch on
+                val n = series.size
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { pos -> if (n > 1) pick = (pos.x / size.width * (n - 1)).roundToInt().coerceIn(0, n - 1) },
+                    onDrag = { change, _ -> if (n > 1) pick = (change.position.x / size.width * (n - 1)).roundToInt().coerceIn(0, n - 1) },
+                    onDragEnd = { pick = null }, onDragCancel = { pick = null })
+            }) {
                 if (series.size < 2 || top <= 0) return@Canvas
                 val n = (series.size - 1).toFloat()
                 fun pt(i: Int) = Offset(i / n * size.width, size.height - ((vals[i] / top) * size.height).toFloat())
@@ -97,12 +131,18 @@ fun EquityCurveChart(series: List<EquityPoint>, height: Int = 220) {
                     for (i in 1 until series.size) lineTo(pt(i).x, pt(i).y)
                 }
                 drawPath(line, t.pos, style = Stroke(width = 1.6.dp.toPx()))
+                pick?.let { i ->
+                    val p = pt(i)
+                    drawLine(t.hair, Offset(p.x, 0f), Offset(p.x, size.height), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
+                    drawCircle(t.pos, 4.dp.toPx(), p)
+                }
             }
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 for (l in equityDateLabels(series)) AxisLabel(l)
             }
         }
+    }
     }
 }
 
@@ -113,13 +153,16 @@ fun equityDateLabels(series: List<EquityPoint>): List<String> {
     return (0 until 4).map { i -> Fmt.monthAxis(java.time.LocalDate.ofEpochDay(a + (b - a) * i / 3).toString()) }
 }
 
-/** One bar per calendar month, positive up, negative down. */
+/** One bar per calendar month, positive up, negative down; a long press reads the month, amount and count. */
 @Composable
-fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, onPick: ((MonthBucket) -> Unit)? = null) {
+fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, countLabel: String = "trade", onPick: ((MonthBucket) -> Unit)? = null) {
     val t = LocalTheme.current
     val hi = max(months.maxOfOrNull { it.value } ?: 0.0, 0.0)
     val lo = min(months.minOfOrNull { it.value } ?: 0.0, 0.0)
     val span = if (hi - lo == 0.0) 1.0 else hi - lo
+    var pick by remember { mutableStateOf<Int?>(null) }
+    Column {
+    Readout(pick?.let { i -> val m = months[i]; listOf(m.label to t.ink60, Fmt.money(m.value) to t.signed(m.value), ("${m.count} $countLabel" + if (m.count == 1) "" else "s") to t.ink55) })
     Row(Modifier.fillMaxWidth()) {
         Column(Modifier.width(52.dp).height(height.dp), verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.End) {
             AxisLabel(Fmt.compactMoney(hi))
@@ -133,7 +176,7 @@ fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, onPick: ((Mon
                     val i = (pos.x / (size.width / n)).toInt().coerceIn(0, n - 1)
                     if (months.isNotEmpty()) onPick?.invoke(months[i])
                 }
-            }) {
+            }.pressReadout(months.size) { pick = it }) {
                 val n = max(months.size, 1).toFloat()
                 val pitch = size.width / n
                 val barW = max(2f, min(14.dp.toPx(), pitch * 0.6f))
@@ -143,7 +186,8 @@ fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, onPick: ((Mon
                     val h = ((abs(m.value) / span) * size.height).toFloat()
                     val x = i * pitch + (pitch - barW) / 2
                     val y = if (m.value >= 0) zeroY - h else zeroY
-                    drawRect(if (m.value >= 0) t.pos else t.neg, Offset(x, y), Size(barW, max(h, 1.5f)))
+                    val dim = pick != null && pick != i
+                    drawRect((if (m.value >= 0) t.pos else t.neg).copy(alpha = if (dim) 0.35f else 1f), Offset(x, y), Size(barW, max(h, 1.5f)))
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -151,6 +195,7 @@ fun MonthlyBarsChart(months: List<MonthBucket>, height: Int = 170, onPick: ((Mon
                 for (l in monthLabels(months.map { it.key })) AxisLabel(l)
             }
         }
+    }
     }
 }
 
@@ -318,3 +363,4 @@ fun barLabels(bars: List<Bar>): List<String> {
     val n = min(4, bars.size)
     return (0 until n).map { i -> Fmt.dayLabel(bars[(bars.size - 1) * i / (n - 1)].time.take(10)) }
 }
+

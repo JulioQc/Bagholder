@@ -278,13 +278,14 @@ object Book {
         return g
     }
 
+    /** A journal entry changes only the trade's or position's own fields: no rematching. */
     fun saveJournal(id: String, entry: JournalEntry) {
         journal = journal + (id to entry)
         Store.saveJournal(journal)
-        scope.launch {
-            val v = rebuild()
-            withContext(Dispatchers.Main) { view = v }
-        }
+        val b = base ?: return
+        b.trades.firstOrNull { it.id == id }?.let { it.grade = entry.grade; it.thesis = entry.thesis; it.tags = entry.tags }
+        for (p in b.positions) if (p.id == id) { p.thesis = entry.thesis; p.tags = entry.tags }
+        view = ModelView.buildView(b, filters)
     }
 
     fun trade(id: String): Trade? = base?.trades?.firstOrNull { it.id == id }
@@ -305,9 +306,13 @@ object Book {
                     MarketData.refreshDistributions(payers)
                     val q = MarketData.refreshQuotes(held)
                     if (!isActive) return@launch
+                    // the book is rebuilt only when a price actually moved
+                    val changed = q.size != quotes.size || q.any { (sym, quote) -> quotes[sym]?.price != quote.price || quotes[sym]?.exDividendDate != quote.exDividendDate }
                     quotes = q
-                    val v = rebuild()
-                    withContext(Dispatchers.Main) { view = v }
+                    if (changed) {
+                        val v = rebuild()
+                        withContext(Dispatchers.Main) { view = v }
+                    }
                 }
                 delay(60_000)
             }

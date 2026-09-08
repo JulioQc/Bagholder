@@ -37,7 +37,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -337,13 +341,13 @@ fun DashboardScreen(chrome: Chrome, onTrade: (String) -> Unit, onTrades: () -> U
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Tiles(v) }
             item {
-                Card("Equity curve", v.equity.label) {
+                Card("Equity curve") {
                     if (v.equity.series.size > 1) EquityCurveChart(v.equity.series) else Muted("No equity history for this span.")
                 }
             }
             item { AnnualizedCard(v) }
             item {
-                Card("Monthly P&L", Fmt.compactMoney(v.monthly.sumOf { it.value }, signed = true)) {
+                Card("Monthly P&L") {
                     if (v.monthly.isEmpty()) Muted("No closed trades in this span.")
                     else MonthlyBarsChart(v.monthly) { m ->
                         val f = Book.copyFilters(Book.filters)
@@ -355,7 +359,7 @@ fun DashboardScreen(chrome: Chrome, onTrade: (String) -> Unit, onTrades: () -> U
                     }
                 }
             }
-            item { Card("Grade vs P&L", "Realized P&L by the grade you gave the trade") { GradeBarsChart(v.grades) } }
+            item { Card("Grade vs P&L") { GradeBarsChart(v.grades) } }
             item { BySymbolCard(v, onTrades) }
             item { QueueCard(v, onTrade) }
         }
@@ -368,19 +372,34 @@ private fun Tiles(v: View) {
     val k = v.kpi
     val dd = v.equity.drawdown
     val ann = v.equity.annualized
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Tile("Realized P&L", Fmt.money(k.realized), "${k.count} trades · CAD", t.signed(k.realized), Modifier.weight(1f))
-            Tile("Win rate", Fmt.pct(k.winRate, signed = false), "${k.wins} W · ${k.losses} L" + if (k.breakeven > 0) " · ${k.breakeven} BE" else "", modifier = Modifier.weight(1f))
+    val tiles: List<@Composable (Modifier) -> Unit> = listOf(
+        { m -> Tile("Realized P&L", Fmt.money(k.realized), "${k.count} trade" + (if (k.count == 1) "" else "s"), t.signed(k.realized), m) },
+        { m -> Tile("Win rate", Fmt.pct(k.winRate, signed = false), "${k.wins} W · ${k.losses} L" + if (k.breakeven > 0) " · ${k.breakeven} BE" else "", modifier = m) },
+        { m -> Tile("Profit factor", Fmt.profitFactor(k), "W " + Fmt.wholeMoney(k.grossWin) + " · L " + Fmt.wholeMoney(k.grossLoss), modifier = m) },
+        { m -> Tile("Expectancy", Fmt.money(k.expectancy), "avg W " + Fmt.wholeMoney(k.avgWin) + " · L " + Fmt.wholeMoney(abs(k.avgLoss)), modifier = m) },
+        { m -> Tile("Max drawdown", dd.pct?.let { Fmt.pct(it) } ?: Fmt.DASH, dd.abs?.let { Fmt.compactMoney(it) + " · " + Fmt.monthAxis(dd.at) } ?: Fmt.DASH,
+            dd.pct?.let { if (it < 0) t.neg else t.ink }, m) },
+        { m -> Tile("Avg annualized", Fmt.pct(ann.rate), if (ann.count > 0) "over ${ann.count} year" + (if (ann.count == 1) "" else "s") else Fmt.DASH, ann.rate?.let { t.signed(it) }, m) },
+    )
+    TilePager(tiles)
+}
+
+/** Two tiles per page, swiped sideways: the phone's version of the tile row. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun TilePager(tiles: List<@Composable (Modifier) -> Unit>) {
+    val t = LocalTheme.current
+    val pages = tiles.chunked(2)
+    val state = rememberPagerState(pageCount = { pages.size })
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        HorizontalPager(state, pageSpacing = 12.dp) { i ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                for (tile in pages[i]) tile(Modifier.weight(1f))
+                if (pages[i].size == 1) Spacer(Modifier.weight(1f))
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Tile("Profit factor", Fmt.profitFactor(k), "W " + Fmt.wholeMoney(k.grossWin) + " · L " + Fmt.wholeMoney(k.grossLoss), modifier = Modifier.weight(1f))
-            Tile("Expectancy", Fmt.money(k.expectancy), "avg W " + Fmt.wholeMoney(k.avgWin) + " · L " + Fmt.wholeMoney(abs(k.avgLoss)), modifier = Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Tile("Max drawdown", dd.pct?.let { Fmt.pct(it) } ?: Fmt.DASH, dd.abs?.let { Fmt.compactMoney(it) + " · " + Fmt.monthAxis(dd.at) } ?: Fmt.DASH,
-                dd.pct?.let { if (it < 0) t.neg else t.ink }, Modifier.weight(1f))
-            Tile("Avg annualized", Fmt.pct(ann.rate), if (ann.count > 0) "over ${ann.count} year" + (if (ann.count == 1) "" else "s") else Fmt.DASH, ann.rate?.let { t.signed(it) }, Modifier.weight(1f))
+        if (pages.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (i in pages.indices) Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(if (i == state.currentPage) t.ink60 else t.hair))
         }
     }
 }
@@ -432,10 +451,29 @@ fun symbolLine(r: SymbolRow): String = "${r.n} trade" + (if (r.n == 1) "" else "
 @Composable
 private fun BySymbolCard(v: View, onTrades: () -> Unit) {
     val t = LocalTheme.current
-    Card("By symbol", trailing = { Text("P&L ▼", fontSize = 13.sp, color = t.ink55) }) {
-        if (v.bySymbol.isEmpty()) Muted("No closed trades in this span.")
+    val sorts = listOf("pnl" to "P&L", "n" to "Trades", "winRate" to "Win rate", "avgHold" to "Avg hold")
+    var sortKey by remember { mutableStateOf("pnl") }
+    var desc by remember { mutableStateOf(true) }
+    var open by remember { mutableStateOf(false) }
+    fun value(r: SymbolRow): Double = when (sortKey) { "n" -> r.n.toDouble(); "winRate" -> r.winRate; "avgHold" -> r.avgHold; else -> r.pnl }
+    val rows = v.bySymbol.sortedWith(compareBy<SymbolRow> { if (desc) -value(it) else value(it) }.thenBy { it.symbol })
+    val label = (sorts.first { it.first == sortKey }.second) + if (desc) " ▼" else " ▲"
+    Card("By symbol", trailing = {
+        Box {
+            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = t.ink60, modifier = Modifier.clickable { open = true }.padding(4.dp))
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for ((key, name) in sorts) {
+                    DropdownMenuItem(text = { Text(name + if (key == sortKey) (if (desc) "  ▼" else "  ▲") else "") }, onClick = {
+                        if (sortKey == key) desc = !desc else { sortKey = key; desc = true }
+                        open = false
+                    })
+                }
+            }
+        }
+    }) {
+        if (rows.isEmpty()) Muted("No closed trades in this span.")
         Column {
-            for ((i, r) in v.bySymbol.take(12).withIndex()) {
+            for ((i, r) in rows.take(12).withIndex()) {
                 Row(Modifier.fillMaxWidth().clickable {
                     val f = Book.copyFilters(Book.filters)
                     f.lists["symbol"] = listOf(r.symbol)
@@ -448,7 +486,7 @@ private fun BySymbolCard(v: View, onTrades: () -> Unit) {
                     }
                     Text(Fmt.wholeMoney(r.pnl), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = t.signed(r.pnl))
                 }
-                if (i < minOf(v.bySymbol.size, 12) - 1) HorizontalDivider(color = t.hair)
+                if (i < minOf(rows.size, 12) - 1) HorizontalDivider(color = t.hair)
             }
         }
     }
@@ -457,7 +495,7 @@ private fun BySymbolCard(v: View, onTrades: () -> Unit) {
 @Composable
 private fun QueueCard(v: View, onTrade: (String) -> Unit) {
     val t = LocalTheme.current
-    Card("Review queue", "Closed trades with no grade or thesis") {
+    Card("Review queue") {
         if (v.queue.isEmpty()) Muted("Every closed trade has a grade and a thesis.")
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (q in v.queue.take(8)) {
@@ -801,7 +839,7 @@ fun CashflowScreen(chrome: Chrome) {
             item {
                 Card("Monthly distributions") {
                     if (cf.months.isEmpty()) Muted("No distributions in this span.")
-                    else MonthlyBarsChart(cf.months.map { m -> com.bagholder.model.MonthBucket(m.key, m.label).apply { value = m.value; count = m.count } })
+                    else MonthlyBarsChart(cf.months.map { m -> com.bagholder.model.MonthBucket(m.key, m.label).apply { value = m.value; count = m.count } }, countLabel = "payment")
                 }
             }
             item {
@@ -833,15 +871,13 @@ fun CashflowScreen(chrome: Chrome) {
                 }
             }
             item {
-                Card("Positions", "Open long positions in dividend payers") {
+                Card("Cashflow Positions") {
                     if (cf.holdings.isEmpty()) Muted("No income holdings in scope.")
                     Column {
                         for ((i, h) in cf.holdings.withIndex()) {
                             Column(Modifier.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                                    Text(h.symbol, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(h.account, fontSize = 12.sp, color = t.ink55, modifier = Modifier.weight(1f).padding(bottom = 2.dp))
+                                    Text(h.symbol, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = t.ink, modifier = Modifier.weight(1f))
                                     Text(h.annual?.let { Fmt.money(it / 12) + " / mo" } ?: Fmt.DASH, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.ink)
                                 }
                                 Text(rateLine(h), fontSize = 13.sp, color = t.ink60)
@@ -870,7 +906,7 @@ fun CashflowScreen(chrome: Chrome) {
                                         Text(r.symbol, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
                                         Text(r.kind, fontSize = 12.sp, color = t.ink55)
                                     }
-                                    var line = r.date + " · " + r.account
+                                    var line = r.date
                                     r.qty?.let { line += " · " + Fmt.qty(it) + " × " + Fmt.perUnit(r.per) }
                                     Text(line, fontSize = 13.sp, color = t.ink60, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
@@ -888,20 +924,22 @@ fun CashflowScreen(chrome: Chrome) {
     }
 }
 
+/** YTD and Yield on cost first, then All time and the past years. */
 @Composable
 private fun CashflowTiles(cf: CashflowView) {
-    val tiles = cf.tiles
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        for (row in tiles.chunked(2)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (tile in row) {
-                    if (tile.label == "Yield on cost") Tile(tile.label, Fmt.pct(tile.yield, 2, false), Fmt.wholeMoney(tile.earned) + " on " + Fmt.wholeMoney(tile.book), modifier = Modifier.weight(1f))
-                    else Tile(tile.label, Fmt.money(tile.total), Fmt.money(tile.perMonth) + " / month", modifier = Modifier.weight(1f))
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
+    val ytd = cf.tiles.firstOrNull { it.label.endsWith("YTD") }
+    val yoc = cf.tiles.firstOrNull { it.label == "Yield on cost" }
+    val all = cf.tiles.firstOrNull { it.label == "All time" }
+    val years = cf.tiles.filter { !it.label.endsWith("YTD") && it.label != "Yield on cost" && it.label != "All time" }.reversed()
+    val ordered = listOfNotNull(ytd, yoc, all) + years
+    val tiles = mutableListOf<@Composable (Modifier) -> Unit>()
+    for (tile in ordered) {
+        tiles.add { m ->
+            if (tile.label == "Yield on cost") Tile(tile.label, Fmt.pct(tile.yield, 2, false), Fmt.wholeMoney(tile.earned) + " on " + Fmt.wholeMoney(tile.book), modifier = m)
+            else Tile(tile.label, Fmt.money(tile.total), Fmt.money(tile.perMonth) + " / month", modifier = m)
         }
     }
+    TilePager(tiles)
 }
 
 @Composable

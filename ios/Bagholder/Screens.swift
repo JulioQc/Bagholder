@@ -228,6 +228,28 @@ struct Tile: View {
     }
 }
 
+/// Two tiles per page, swiped sideways: the phone's version of the tile row.
+struct TilePager: View {
+    @Environment(\.theme) private var t
+    let tiles: [Tile]
+
+    var body: some View {
+        let pages = stride(from: 0, to: tiles.count, by: 2).map { Array(tiles[$0..<min($0 + 2, tiles.count)]) }
+        TabView {
+            ForEach(Array(pages.enumerated()), id: \.offset) { _, page in
+                HStack(spacing: 12) {
+                    ForEach(Array(page.enumerated()), id: \.offset) { _, tile in tile }
+                    if page.count == 1 { Color.clear.frame(maxWidth: .infinity) }
+                }
+                .padding(.bottom, 22)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: pages.count > 1 ? .always : .never))
+        .indexViewStyle(.page(backgroundDisplayMode: .never))
+        .frame(height: 118)
+    }
+}
+
 struct GradeBadge: View {
     @Environment(\.theme) private var t
     let grade: String
@@ -288,6 +310,8 @@ struct DashboardScreen: View {
     @ObservedObject var book: Book
     @Binding var tab: Int
     let chrome: Chrome
+    @State private var symbolSort = "pnl"
+    @State private var symbolDesc = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -297,12 +321,12 @@ struct DashboardScreen: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 12) {
                         tiles(v)
-                        Card(title: "Equity curve", subtitle: v.equity.label) {
+                        Card(title: "Equity curve") {
                             if v.equity.series.count > 1 { EquityCurveChart(series: v.equity.series) }
                             else { Text("No equity history for this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
                         }
                         annualized(v)
-                        Card(title: "Monthly P&L", subtitle: BHFmt.compactMoney(v.monthly.reduce(0.0) { $0 + $1.value }, signed: true)) {
+                        Card(title: "Monthly P&L") {
                             if v.monthly.isEmpty { Text("No closed trades in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
                             else {
                                 MonthlyBarsChart(months: v.monthly) { m in
@@ -315,7 +339,7 @@ struct DashboardScreen: View {
                                 }
                             }
                         }
-                        Card(title: "Grade vs P&L", subtitle: "Realized P&L by the grade you gave the trade") {
+                        Card(title: "Grade vs P&L") {
                             GradeBarsChart(grades: v.grades)
                         }
                         bySymbol(v)
@@ -337,16 +361,17 @@ struct DashboardScreen: View {
         let k = v.kpi
         let dd = v.equity.drawdown
         let ann = v.equity.annualized
-        return LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            Tile(label: "Realized P&L", value: BHFmt.money(k.realized), subtitle: "\(k.count) trades · CAD", color: t.signed(k.realized))
-            Tile(label: "Win rate", value: BHFmt.pct(k.winRate, signed: false), subtitle: "\(k.wins) W · \(k.losses) L" + (k.breakeven > 0 ? " · \(k.breakeven) BE" : ""))
-            Tile(label: "Profit factor", value: BHFmt.profitFactor(k), subtitle: "W " + BHFmt.wholeMoney(k.grossWin) + " · L " + BHFmt.wholeMoney(k.grossLoss))
-            Tile(label: "Expectancy", value: BHFmt.money(k.expectancy), subtitle: "avg W " + BHFmt.wholeMoney(k.avgWin) + " · L " + BHFmt.wholeMoney(abs(k.avgLoss)))
+        let tiles: [Tile] = [
+            Tile(label: "Realized P&L", value: BHFmt.money(k.realized), subtitle: "\(k.count) trade" + (k.count == 1 ? "" : "s"), color: t.signed(k.realized)),
+            Tile(label: "Win rate", value: BHFmt.pct(k.winRate, signed: false), subtitle: "\(k.wins) W · \(k.losses) L" + (k.breakeven > 0 ? " · \(k.breakeven) BE" : "")),
+            Tile(label: "Profit factor", value: BHFmt.profitFactor(k), subtitle: "W " + BHFmt.wholeMoney(k.grossWin) + " · L " + BHFmt.wholeMoney(k.grossLoss)),
+            Tile(label: "Expectancy", value: BHFmt.money(k.expectancy), subtitle: "avg W " + BHFmt.wholeMoney(k.avgWin) + " · L " + BHFmt.wholeMoney(abs(k.avgLoss))),
             Tile(label: "Max drawdown", value: dd.pct.map { BHFmt.pct($0) } ?? BHFmt.dash,
-                 subtitle: dd.abs.map { BHFmt.compactMoney($0) + " · " + BHFmt.monthAxis(dd.at) } ?? BHFmt.dash, color: dd.pct.map { $0 < 0 ? t.neg : t.ink })
+                 subtitle: dd.abs.map { BHFmt.compactMoney($0) + " · " + BHFmt.monthAxis(dd.at) } ?? BHFmt.dash, color: dd.pct.map { $0 < 0 ? t.neg : t.ink }),
             Tile(label: "Avg annualized", value: BHFmt.pct(ann.rate), subtitle: ann.count > 0 ? "over \(ann.count) year" + (ann.count == 1 ? "" : "s") : BHFmt.dash,
-                 color: ann.rate.map { t.signed($0) })
-        }
+                 color: ann.rate.map { t.signed($0) }),
+        ]
+        return TilePager(tiles: tiles)
     }
 
     private func annualized(_ v: BHView) -> some View {
@@ -395,11 +420,39 @@ struct DashboardScreen: View {
         return trades + " · " + BHFmt.pct(r.winRate, signed: false) + " win · " + BHFmt.hold(Int(r.avgHold.rounded())) + " avg"
     }
 
+    static let symbolSorts: [(key: String, label: String)] = [("pnl", "P&L"), ("n", "Trades"), ("winRate", "Win rate"), ("avgHold", "Avg hold")]
+
+    static func symbolValue(_ r: BHSymbolRow, _ key: String) -> Double {
+        switch key {
+        case "n": return Double(r.n)
+        case "winRate": return r.winRate
+        case "avgHold": return r.avgHold
+        default: return r.pnl
+        }
+    }
+
     private func bySymbol(_ v: BHView) -> some View {
-        Card(title: "By symbol", trailing: AnyView(Text("P&L ▼").font(.system(size: 13)).foregroundStyle(t.ink55))) {
-            if v.bySymbol.isEmpty { Text("No closed trades in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
+        let label = (Self.symbolSorts.first { $0.key == symbolSort }?.label ?? "P&L") + (symbolDesc ? " ▼" : " ▲")
+        let rows = v.bySymbol.sorted {
+            let a = Self.symbolValue($0, symbolSort), b = Self.symbolValue($1, symbolSort)
+            if a != b { return symbolDesc ? a > b : a < b }
+            return $0.symbol < $1.symbol
+        }
+        let menu = Menu {
+            ForEach(Self.symbolSorts, id: \.key) { sort in
+                Button {
+                    if symbolSort == sort.key { symbolDesc.toggle() } else { symbolSort = sort.key; symbolDesc = true }
+                } label: {
+                    if symbolSort == sort.key { Label(sort.label, systemImage: symbolDesc ? "arrow.down" : "arrow.up") } else { Text(sort.label) }
+                }
+            }
+        } label: {
+            Text(label).font(.system(size: 13, weight: .medium)).foregroundStyle(t.ink60)
+        }
+        return Card(title: "By symbol", trailing: AnyView(menu)) {
+            if rows.isEmpty { Text("No closed trades in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             VStack(spacing: 0) {
-                ForEach(Array(v.bySymbol.prefix(12).enumerated()), id: \.element.symbol) { i, r in
+                ForEach(Array(rows.prefix(12).enumerated()), id: \.element.symbol) { i, r in
                     Button {
                         var f = book.filters
                         f.lists["symbol"] = [r.symbol]
@@ -417,14 +470,14 @@ struct DashboardScreen: View {
                         .padding(.vertical, 12)
                     }
                     .buttonStyle(.plain)
-                    if i < min(v.bySymbol.count, 12) - 1 { Divider().overlay(t.hair) }
+                    if i < min(rows.count, 12) - 1 { Divider().overlay(t.hair) }
                 }
             }
         }
     }
 
     private func queue(_ v: BHView) -> some View {
-        Card(title: "Review queue", subtitle: "Closed trades with no grade or thesis") {
+        Card(title: "Review queue") {
             if v.queue.isEmpty { Text("Every closed trade has a grade and a thesis.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             VStack(spacing: 8) {
                 ForEach(v.queue.prefix(8), id: \.id) { q in
@@ -883,7 +936,7 @@ struct CashflowScreen: View {
                         tiles(cf)
                         Card(title: "Monthly distributions") {
                             if cf.months.isEmpty { Text("No distributions in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
-                            else { MonthlyBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }) }
+                            else { MonthlyBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }, countLabel: "payment") }
                         }
                         allocation(cf)
                         holdings(cf)
@@ -901,16 +954,19 @@ struct CashflowScreen: View {
     }
 
     private func tiles(_ cf: BHCashflowView) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            ForEach(Array(cf.tiles.enumerated()), id: \.offset) { _, tile in
-                if tile.label == "Yield on cost" {
-                    Tile(label: tile.label, value: BHFmt.pct(tile.yield, digits: 2, signed: false),
-                         subtitle: BHFmt.wholeMoney(tile.earned) + " on " + BHFmt.wholeMoney(tile.book))
-                } else {
-                    Tile(label: tile.label, value: BHFmt.money(tile.total), subtitle: BHFmt.money(tile.perMonth) + " / month")
-                }
+        func tile(_ tile: BHTile) -> Tile {
+            if tile.label == "Yield on cost" {
+                return Tile(label: tile.label, value: BHFmt.pct(tile.yield, digits: 2, signed: false), subtitle: BHFmt.wholeMoney(tile.earned) + " on " + BHFmt.wholeMoney(tile.book))
             }
+            return Tile(label: tile.label, value: BHFmt.money(tile.total), subtitle: BHFmt.money(tile.perMonth) + " / month")
         }
+        // YTD and Yield on cost first, then All time and the past years
+        let ytd = cf.tiles.first { $0.label.hasSuffix("YTD") }
+        let yoc = cf.tiles.first { $0.label == "Yield on cost" }
+        let all = cf.tiles.first { $0.label == "All time" }
+        let years = cf.tiles.filter { !$0.label.hasSuffix("YTD") && $0.label != "Yield on cost" && $0.label != "All time" }.reversed()
+        let ordered = [ytd, yoc, all].compactMap { $0 } + years
+        return TilePager(tiles: ordered.map(tile))
     }
 
     private func allocation(_ cf: BHCashflowView) -> some View {
@@ -947,14 +1003,13 @@ struct CashflowScreen: View {
     }
 
     private func holdings(_ cf: BHCashflowView) -> some View {
-        Card(title: "Positions", subtitle: "Open long positions in dividend payers") {
+        Card(title: "Cashflow Positions") {
             if cf.holdings.isEmpty { Text("No income holdings in scope.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             VStack(spacing: 0) {
                 ForEach(Array(cf.holdings.enumerated()), id: \.element.id) { i, h in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(h.symbol).font(.system(size: 16, weight: .semibold)).foregroundStyle(t.ink)
-                            Text(h.account).font(.system(size: 12)).foregroundStyle(t.ink55)
                             Spacer()
                             Text(h.annual.map { BHFmt.money($0 / 12) + " / mo" } ?? BHFmt.dash).font(.system(size: 15, weight: .medium)).monospacedDigit().foregroundStyle(t.ink)
                         }
@@ -992,7 +1047,7 @@ struct CashflowScreen: View {
     }
 
     static func historyLine(_ r: BHCashRow) -> String {
-        var s = r.date + " · " + r.account
+        var s = r.date
         if let q = r.qty { s += " · " + BHFmt.qty(q) + " × " + BHFmt.perUnit(r.per) }
         return s
     }

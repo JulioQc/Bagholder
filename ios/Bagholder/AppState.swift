@@ -141,6 +141,7 @@ final class Book: ObservableObject {
     private var task: Task<Void, Never>?
     private var marketTask: Task<Void, Never>?
     private var generation = 0
+    private var buildGeneration = 0
     private var noNewShownAt: Date?
     private static let lastSyncKey = "bagholder.lastSync"
 
@@ -364,22 +365,34 @@ final class Book: ObservableObject {
 
     // MARK: the model
 
+    /// The base is built off the main thread; the screens keep the last view
+    /// until the new one is ready, and a build overtaken by a newer one is dropped.
     func rebuild() {
         guard let snap = result else { view = nil; base = nil; return }
-        var market = BHMarket()
-        market.fx = WSPull.loadCachedFx()
-        market.benchmark = WSPull.loadCachedSP500()
-        market.benchmarks = ["SP500": market.benchmark]
-        for (k, v) in MarketData.indexCloses() { market.benchmarks[k] = v }
-        market.quotes = quotes
-        market.distributions = MarketData.distributions()
-        let nav = snap.nav.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) }
-        var navBy: [String: [BHNavPoint]] = [:]
-        for (nick, pts) in snap.navByAccount { navBy[nick] = pts.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) } }
-        let b = BHModel.buildBase(activities: snap.activities.map(BHAct.init), securities: snap.listings.map(WSPull.security), market: market,
-                                  today: BHModel.todayLocal(), navHistory: nav, navByAccount: navBy, journal: journal)
-        base = b
-        view = BHModel.buildView(b, filters)
+        buildGeneration += 1
+        let gen = buildGeneration
+        let quotes = self.quotes, journal = self.journal, filters = self.filters
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var market = BHMarket()
+            market.fx = WSPull.loadCachedFx()
+            market.benchmark = WSPull.loadCachedSP500()
+            market.benchmarks = ["SP500": market.benchmark]
+            for (k, v) in MarketData.indexCloses() { market.benchmarks[k] = v }
+            market.quotes = quotes
+            market.distributions = MarketData.distributions()
+            let nav = snap.nav.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) }
+            var navBy: [String: [BHNavPoint]] = [:]
+            for (nick, pts) in snap.navByAccount { navBy[nick] = pts.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) } }
+            let b = BHModel.buildBase(activities: snap.activities.map(BHAct.init), securities: snap.listings.map(WSPull.security), market: market,
+                                      today: BHModel.todayLocal(), navHistory: nav, navByAccount: navBy, journal: journal)
+            let v = BHModel.buildView(b, filters)
+            await MainActor.run { [weak self] in
+                guard let self, gen == self.buildGeneration else { return }
+                self.base = b
+                self.view = BHModel.buildView(b, self.filters)
+                _ = v
+            }
+        }
     }
 
     func setFilters(_ f: BHFilters) {
@@ -400,15 +413,29 @@ final class Book: ObservableObject {
         setFilters(f)
     }
 
+    /// A journal entry changes only the trade's or position's own fields: no rematching.
     func saveJournal(id: String, _ entry: BHJournalEntry) {
         journal[id] = entry
         JournalStore.save(journal)
-        rebuild()
+        guard var b = base else { return }
+        if let i = b.trades.firstIndex(where: { $0.id == id }) {
+            b.trades[i].grade = entry.grade
+            b.trades[i].thesis = entry.thesis
+            b.trades[i].tags = entry.tags
+        }
+        for i in b.positions.indices where b.positions[i].id == id {
+            b.positions[i].thesis = entry.thesis
+            b.positions[i].tags = entry.tags
+        }
+        base = b
+        view = BHModel.buildView(b, filters)
     }
 
+    /// New quotes rebuild the book only when a price actually moved.
     func setQuotes(_ q: [String: BHQuote]) {
+        let changed = q.contains { sym, quote in quotes[sym]?.price != quote.price || quotes[sym]?.exDividendDate != quote.exDividendDate } || q.count != quotes.count
         quotes = q
-        rebuild()
+        if changed { rebuild() }
     }
 
     func trade(id: String) -> BHTrade? { base?.trades.first { $0.id == id } }
