@@ -1354,17 +1354,21 @@ def fetch_intraday_from(source, key, rec, start_ts, end_ts, ssl_context=None):
     return {}
 
 
-def fetch_intraday(rec, start_ts, end_ts, ssl_context=None):
+ON_DEMAND_ONLY_SOURCES = ("yahoo",)   # rate-limited: asked for a chart someone opens, never by the background sweep
+
+
+def fetch_intraday(rec, start_ts, end_ts, ssl_context=None, on_demand=True):
     """{tf: bars} over [start_ts, end_ts] from the first candidate whose reach
     covers the span and that has bars for it; the remembered winner is tried
     first. A source whose reach stops short of the span is skipped rather than
-    asked for a partial answer."""
+    asked for a partial answer. The background sweep (on_demand=False) leaves
+    the rate-limited sources alone."""
     start_day = datetime.fromtimestamp(start_ts, tz=timezone.utc).date().isoformat()
     span_start = datetime.fromtimestamp(start_ts, tz=timezone.utc).replace(tzinfo=None)
     answers = []
     for source, key in ordered_candidates(rec):
         reach = source_intraday_reach(source)
-        if not reach or start_day < reach:
+        if not reach or start_day < reach or (not on_demand and source in ON_DEMAND_ONLY_SOURCES):
             continue
         try:
             by_tf = fetch_intraday_from(source, key, rec, start_ts, end_ts, ssl_context)
@@ -1379,7 +1383,7 @@ def fetch_intraday(rec, start_ts, end_ts, ssl_context=None):
     return next(a[3] for a in answers if a[0] == source and a[2] is bars), source
 
 
-def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None, max_age_hours=1):
+def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None, max_age_hours=1, on_demand=True):
     """Stored bars of an intraday timeframe for [start, end]. Fetched from `start`
     when that span was never fetched; topped up from the last stored bar when the
     span reaches the present and the copy is older than `max_age_hours`. Bars once
@@ -1409,7 +1413,7 @@ def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None, max_age_hou
         stored = store.price_bars(sym, tf, 0, 2 ** 40)
         fetch_from = max(start_ts, (stored[-1]["time"] if stored else start_ts) - 2 * 86400)
     if fetch_from is not None:
-        by_tf, source = fetch_intraday(rec, fetch_from, int(now.timestamp()), ssl_context)
+        by_tf, source = fetch_intraday(rec, fetch_from, int(now.timestamp()), ssl_context, on_demand=on_demand)
         for k, bars in by_tf.items():
             if bars:
                 store.upsert_price_bars(sym, k, bars, source)
@@ -1446,7 +1450,7 @@ def archive_intraday(recs, ssl_context=None, now=None, limit=ARCHIVE_BATCH):
     todo.sort(key=lambda x: (x[0], x[1]))
     done = []
     for _, sym, rec in todo[:limit]:
-        ensure_intraday(rec, "1h", rec.get("start") or now.date().isoformat(), now.date().isoformat(), ssl_context, now, max_age_hours=ARCHIVE_TOPUP_HOURS)
+        ensure_intraday(rec, "1h", rec.get("start") or now.date().isoformat(), now.date().isoformat(), ssl_context, now, max_age_hours=ARCHIVE_TOPUP_HOURS, on_demand=False)
         done.append(sym)
     return done
 

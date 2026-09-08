@@ -1735,6 +1735,25 @@ class MarketParseTest(unittest.TestCase):
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
+    def test_background_sweep_never_asks_yahoo(self):
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+                old = {"symbol": "TSLA", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares", "start": "2025-01-15"}   # past TMX's year, within Yahoo's two
+                calls = []
+                with mock.patch.object(market, "_get_text", side_effect=lambda url, *a, **k: calls.append(url) or (_ for _ in ()).throw(OSError("no"))), mock.patch.object(market, "_post_json", side_effect=OSError("no")):
+                    self.assertEqual(market.archive_intraday([old], now=now), ["TSLA"])
+                self.assertEqual([u for u in calls if "yahoo" in u], [], "the sweep leaves the rate-limited source alone")
+                with mock.patch.object(market, "_get_text", side_effect=lambda url, *a, **k: calls.append(url) or (_ for _ in ()).throw(OSError("no"))), mock.patch.object(market, "_post_json", side_effect=OSError("no")):
+                    market.ensure_intraday(old, "1h", "2025-01-15", "2025-02-01", now=now)
+                self.assertEqual(len([u for u in calls if "yahoo" in u]), 1, "a chart someone opens does ask it")
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_history_chain_falls_through_to_yahoo_and_remembers_the_winner(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["BAGHOLDER_HOME"] = tmp
