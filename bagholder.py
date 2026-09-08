@@ -3201,7 +3201,7 @@ def history_payload(query):
         return {"ok": False, "error": "symbol, from, to and a known tf are required"}
     inst = market.chart_instrument(rec)
     src = market.history_source(inst)
-    available = market.available_timeframes(inst, start)
+    available = market.offered_timeframes(inst, start)
     # an option contract's own premium, recorded by the app while it was held
     recorded = [x for x in market.TIMEFRAMES if x in store.recorded_timeframes(rec["symbol"])] if rec["kind"] == "Options" else []
     basis = "contract" if (one("basis") == "contract" and recorded) else "underlying"

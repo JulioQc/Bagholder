@@ -1754,6 +1754,27 @@ class MarketParseTest(unittest.TestCase):
             finally:
                 os.environ.pop("BAGHOLDER_HOME", None)
 
+    def test_a_timeframe_a_fetch_could_not_supply_is_not_asked_for_again_for_a_while(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            store.ensure()
+            try:
+                now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+                rec = {"symbol": "TSLA", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"}
+                self.assertFalse(market.intraday_ready(rec, "1h", "2025-01-15", now))
+                with mock.patch.object(market, "fetch_intraday", return_value=({}, "")) as f:
+                    self.assertEqual(market.ensure_intraday(rec, "1h", "2025-01-15", "2025-02-01", now=now), [])
+                    self.assertEqual(f.call_count, 1)
+                self.assertTrue(market.intraday_ready(rec, "1h", "2025-01-15", now), "nothing to wait for after a miss")
+                self.assertEqual(market.offered_timeframes(rec, "2025-01-15", now), ["1d", "1w", "1M"], "the chart falls back to daily instead of an empty hourly view")
+                later = now + timedelta(minutes=market.INTRADAY_RETRY_MINUTES + 1)
+                self.assertFalse(market.intraday_ready(rec, "1h", "2025-01-15", later), "tried again after the retry window")
+                self.assertEqual(market.offered_timeframes(rec, "2025-01-15", later), ["1h", "4h", "1d", "1w", "1M"])
+            finally:
+                os.environ.pop("BAGHOLDER_HOME", None)
+
     def test_history_chain_falls_through_to_yahoo_and_remembers_the_winner(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["BAGHOLDER_HOME"] = tmp

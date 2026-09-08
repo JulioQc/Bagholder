@@ -1238,6 +1238,8 @@ def intraday_ready(rec, tf, start, now=None):
     reach = intraday_reach(rec, now)
     if not sym or not reach or tf not in INTRADAY_SECONDS:
         return True
+    if intraday_missed_recently(sym, tf, now):
+        return True   # nothing to wait for: the last try produced nothing
     start_day = max(str(start)[:10], reach)
     start_ts = int(datetime.strptime(start_day, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
     last = store.bar_fetch(sym, tf)
@@ -1355,6 +1357,38 @@ def fetch_intraday_from(source, key, rec, start_ts, end_ts, ssl_context=None):
 
 
 ON_DEMAND_ONLY_SOURCES = ("yahoo",)   # rate-limited: asked for a chart someone opens, never by the background sweep
+INTRADAY_RETRY_MINUTES = 10
+
+
+def _miss_key(symbol, tf):
+    return "bars_miss:%s|%s" % (tmx_symbol(symbol), tf)
+
+
+def record_intraday_miss(symbol, tf, now=None):
+    """A fetch that produced no bars for this timeframe: remembered so the page
+    stops asking and the sources are left alone until INTRADAY_RETRY_MINUTES pass."""
+    now = now or datetime.now(timezone.utc)
+    store.set_meta(_miss_key(symbol, tf), now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+
+
+def intraday_missed_recently(symbol, tf, now=None):
+    now = now or datetime.now(timezone.utc)
+    v = store.get_meta(_miss_key(symbol, tf))
+    if not v:
+        return False
+    try:
+        return now - datetime.fromisoformat(v.replace("Z", "+00:00")) < timedelta(minutes=INTRADAY_RETRY_MINUTES)
+    except ValueError:
+        return False
+
+
+def offered_timeframes(rec, start, now=None):
+    """available_timeframes less any intraday timeframe a recent fetch could not
+    supply and nothing is stored for: the chart falls back to daily bars instead
+    of waiting on a source that has just said no."""
+    out = available_timeframes(rec, start, now)
+    sym = tmx_symbol(rec.get("symbol"))
+    return [tf for tf in out if tf not in INTRADAY_SECONDS or not intraday_missed_recently(sym, tf, now) or store.price_bars(sym, tf, 0, 2 ** 40)]
 
 
 def fetch_intraday(rec, start_ts, end_ts, ssl_context=None, on_demand=True):
@@ -1414,6 +1448,9 @@ def ensure_intraday(rec, tf, start, end, ssl_context=None, now=None, max_age_hou
         fetch_from = max(start_ts, (stored[-1]["time"] if stored else start_ts) - 2 * 86400)
     if fetch_from is not None:
         by_tf, source = fetch_intraday(rec, fetch_from, int(now.timestamp()), ssl_context, on_demand=on_demand)
+        for k in INTRADAY_SECONDS:   # one fetch fills every intraday timeframe, so a miss covers them all
+            if not by_tf.get(k):
+                record_intraday_miss(sym, k, now)
         for k, bars in by_tf.items():
             if bars:
                 store.upsert_price_bars(sym, k, bars, source)
