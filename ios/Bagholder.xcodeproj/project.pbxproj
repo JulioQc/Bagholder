@@ -11,13 +11,11 @@
 		A10000000000000000000059 /* WSPull.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004B /* WSPull.swift */; };
 		B10000000000000000000004 /* Model.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* Model.swift */; };
 		B10000000000000000000006 /* ModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* ModelView.swift */; };
-		A10000000000000000000051 /* WebShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000041 /* WebShell.swift */; };
-		A10000000000000000000052 /* LocalServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000042 /* LocalServer.swift */; };
-		A10000000000000000000053 /* BookAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000043 /* BookAPI.swift */; };
-		A10000000000000000000054 /* ledger.html in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000046 /* ledger.html */; };
-		A10000000000000000000055 /* favicon.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000047 /* favicon.png */; };
-		A1000000000000000000005A /* SPYSeed.txt in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004C /* SPYSeed.txt */; };
-		A10000000000000000000056 /* SpikeLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000048 /* SpikeLoopbackTests.swift */; };
+		B1000000000000000000000E /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* Screens.swift */; };
+		B10000000000000000000010 /* Market.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* Market.swift */; };
+		B1000000000000000000000C /* Charts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* Charts.swift */; };
+		B1000000000000000000000A /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* AppState.swift */; };
+		B10000000000000000000008 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* Theme.swift */; };
 		B10000000000000000000002 /* ModelCasesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* ModelCasesTests.swift */; };
 		A10000000000000000000057 /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000049 /* Network.framework */; };
 		A10000000000000000000058 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000000000000000000004A /* WebKit.framework */; };
@@ -40,15 +38,13 @@
 		A1000000000000000000004B /* WSPull.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WSPull.swift; sourceTree = "<group>"; };
 		B10000000000000000000003 /* Model.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* ModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelView.swift; sourceTree = "<group>"; };
-		A1000000000000000000004C /* SPYSeed.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = SPYSeed.txt; sourceTree = "<group>"; };
-		A10000000000000000000041 /* WebShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebShell.swift; sourceTree = "<group>"; };
-		A10000000000000000000042 /* LocalServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalServer.swift; sourceTree = "<group>"; };
-		A10000000000000000000043 /* BookAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookAPI.swift; sourceTree = "<group>"; };
+		B1000000000000000000000D /* Screens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screens.swift; sourceTree = "<group>"; };
+		B1000000000000000000000F /* Market.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Market.swift; sourceTree = "<group>"; };
+		B1000000000000000000000B /* Charts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Charts.swift; sourceTree = "<group>"; };
+		B10000000000000000000009 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		B10000000000000000000007 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		A10000000000000000000044 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000045 /* Bagholder.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Bagholder.entitlements; sourceTree = "<group>"; };
-		A10000000000000000000046 /* ledger.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = ledger.html; path = ../ledger.html; sourceTree = SOURCE_ROOT; };
-		A10000000000000000000047 /* favicon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = favicon.png; path = ../favicon.png; sourceTree = SOURCE_ROOT; };
-		A10000000000000000000048 /* SpikeLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpikeLoopbackTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000001 /* ModelCasesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCasesTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000049 /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
 		A1000000000000000000004A /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
@@ -91,10 +87,11 @@
 				A1000000000000000000004B /* WSPull.swift */,
 				B10000000000000000000003 /* Model.swift */,
 				B10000000000000000000005 /* ModelView.swift */,
-				A1000000000000000000004C /* SPYSeed.txt */,
-				A10000000000000000000041 /* WebShell.swift */,
-				A10000000000000000000042 /* LocalServer.swift */,
-				A10000000000000000000043 /* BookAPI.swift */,
+				B1000000000000000000000D /* Screens.swift */,
+				B1000000000000000000000F /* Market.swift */,
+				B1000000000000000000000B /* Charts.swift */,
+				B10000000000000000000009 /* AppState.swift */,
+				B10000000000000000000007 /* Theme.swift */,
 				A10000000000000000000044 /* Info.plist */,
 				A10000000000000000000045 /* Bagholder.entitlements */,
 				A10000000000000000000032 /* Resources */,
@@ -105,8 +102,6 @@
 		A10000000000000000000032 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000046 /* ledger.html */,
-				A10000000000000000000047 /* favicon.png */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -114,7 +109,6 @@
 		A10000000000000000000033 /* BagholderTests */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000048 /* SpikeLoopbackTests.swift */,
 				B10000000000000000000001 /* ModelCasesTests.swift */,
 			);
 			path = BagholderTests;
@@ -218,9 +212,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000054 /* ledger.html in Resources */,
-				A10000000000000000000055 /* favicon.png in Resources */,
-				A1000000000000000000005A /* SPYSeed.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -235,9 +226,11 @@
 				A10000000000000000000059 /* WSPull.swift in Sources */,
 				B10000000000000000000004 /* Model.swift in Sources */,
 				B10000000000000000000006 /* ModelView.swift in Sources */,
-				A10000000000000000000051 /* WebShell.swift in Sources */,
-				A10000000000000000000052 /* LocalServer.swift in Sources */,
-				A10000000000000000000053 /* BookAPI.swift in Sources */,
+				B1000000000000000000000E /* Screens.swift in Sources */,
+				B10000000000000000000010 /* Market.swift in Sources */,
+				B1000000000000000000000C /* Charts.swift in Sources */,
+				B1000000000000000000000A /* AppState.swift in Sources */,
+				B10000000000000000000008 /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -245,7 +238,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000056 /* SpikeLoopbackTests.swift in Sources */,
 				B10000000000000000000002 /* ModelCasesTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

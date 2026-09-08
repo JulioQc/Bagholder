@@ -1,0 +1,474 @@
+// The app's state: the Wealthsimple session in the keychain, the last pull on
+// disk, the journal, the filter set, and the model built from them. Screens
+// read `Book`; the pull runs in the background and writes it back. Nothing
+// leaves the device except the calls to Wealthsimple and the market sources.
+import SwiftUI
+import WebKit
+import Security
+
+// MARK: - the session
+
+enum Keychain {
+    static let service = "ca.bagholder.ios"
+    static let account = "ws_oauth_cookie"
+
+    static func hasSession() -> Bool {
+        guard let raw = load()?["oauth_cookie"] as? String else { return false }
+        return WSPull.jsonWithAccessToken(raw) != nil
+    }
+
+    static func save(oauthCookie: String, wssdi: String?) {
+        guard WSPull.jsonWithAccessToken(oauthCookie) != nil else { return }
+        var body: [String: String] = ["oauth_cookie": oauthCookie]
+        if let wssdi, !wssdi.isEmpty { body["wssdi"] = wssdi }
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else { return }
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+        SecItemDelete(query as CFDictionary)
+        var add = query
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    static func load() -> [String: Any]? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account,
+            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var out: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &out)
+        guard status == errSecSuccess, let data = out as? Data, let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return obj
+    }
+
+    static func clear() {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+        SecItemDelete(query as CFDictionary)
+    }
+}
+
+// MARK: - what is kept on disk
+
+enum AppFiles {
+    static var dir: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let d = base.appendingPathComponent("Bagholder", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+}
+
+/// The last pull, token-free, so the next launch shows the last numbers at once.
+enum LastPullStore {
+    static var url: URL { AppFiles.dir.appendingPathComponent("last-pull.json") }
+
+    static func load() -> WSPullResult? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(WSPullResult.self, from: data)
+    }
+
+    static func save(_ result: WSPullResult) {
+        let snap = result
+        Task.detached {
+            if let data = try? JSONEncoder().encode(snap) { try? data.write(to: url, options: .atomic) }
+        }
+    }
+
+    static func clear() { try? FileManager.default.removeItem(at: url) }
+
+    static func modifiedAt() -> Date? { (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date }
+}
+
+/// Grades, theses and tags, keyed by the round trip that opened the trade.
+enum JournalStore {
+    static var url: URL { AppFiles.dir.appendingPathComponent("journal.json") }
+
+    static func load() -> [String: BHJournalEntry] {
+        guard let data = try? Data(contentsOf: url), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        var out: [String: BHJournalEntry] = [:]
+        for (k, v) in obj {
+            let e = (v as? [String: Any]) ?? [:]
+            out[k] = BHJournalEntry(grade: (e["grade"] as? String) ?? "", thesis: (e["thesis"] as? String) ?? "", tags: (e["tags"] as? [String]) ?? [])
+        }
+        return out
+    }
+
+    static func save(_ journal: [String: BHJournalEntry]) {
+        var obj: [String: Any] = [:]
+        for (k, e) in journal where !(e.grade.isEmpty && e.thesis.isEmpty && e.tags.isEmpty) {
+            obj[k] = ["grade": e.grade, "thesis": e.thesis, "tags": e.tags]
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) { try? data.write(to: url, options: .atomic) }
+    }
+}
+
+extension BHFilters {
+    func toJSON() -> [String: Any] {
+        var r: [String: Any] = [:]
+        for (k, v) in ranges { r[k] = ["op": v.op, "v": v.v.map { $0 as Any } ?? NSNull()] }
+        return ["lists": lists, "ranges": r, "preset": preset, "years": years, "from": from, "to": to, "search": search, "benchmark": benchmark]
+    }
+
+    static func load() -> BHFilters {
+        guard let data = UserDefaults.standard.data(forKey: "bagholder.filters.v2"), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return BHFilters() }
+        return BHFilters(json: obj)
+    }
+
+    func persist() {
+        if let data = try? JSONSerialization.data(withJSONObject: toJSON()) { UserDefaults.standard.set(data, forKey: "bagholder.filters.v2") }
+    }
+}
+
+// MARK: - the book
+
+@MainActor
+final class Book: ObservableObject {
+    enum Phase: Equatable { case idle, pulling, ready, failed(String) }
+
+    static let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
+
+    @Published var connected = false
+    @Published var phase: Phase = .idle
+    @Published var syncStep = ""
+    @Published var lastSync: Date?
+    @Published private(set) var view: BHView?
+    @Published private(set) var filters = BHFilters.load()
+    @Published private(set) var quotes: [String: BHQuote] = [:]
+
+    private(set) var base: BHBase?
+    private(set) var result: WSPullResult?
+    private(set) var journal = JournalStore.load()
+    private var task: Task<Void, Never>?
+    private var generation = 0
+    private var noNewShownAt: Date?
+    private static let lastSyncKey = "bagholder.lastSync"
+
+    init() {
+        connected = Keychain.hasSession()
+        lastSync = UserDefaults.standard.object(forKey: Self.lastSyncKey) as? Date ?? LastPullStore.modifiedAt()
+        if let saved = LastPullStore.load() {
+            result = saved
+            phase = .ready
+            rebuild()
+        }
+    }
+
+    // MARK: status
+
+    /// The header's status: the sync step while pulling, an error once, else when the last sync was.
+    var headerStatus: String {
+        if !syncStep.isEmpty {
+            if syncStep == "No new transactions", let shown = noNewShownAt, Date().timeIntervalSince(shown) >= 45 {
+            } else {
+                return syncStep
+            }
+        }
+        if case .failed(let msg) = phase { return msg }
+        if let lastSync { return BHFmt.syncedLabel(lastSync) }
+        if phase == .pulling { return "Fetching accounts…" }
+        return ""
+    }
+
+    var statusIsError: Bool {
+        if case .failed = phase { return true }
+        return false
+    }
+
+    // MARK: lifecycle
+
+    /// On appear: a saved pull is shown at once; the session pulls when a sync is due.
+    func handleAppear() {
+        guard connected, phase != .pulling else { return }
+        if result == nil || Self.activityPullDue(lastSync: lastSync) { pull() }
+    }
+
+    /// store.py activity_pull_due: America/Edmonton, Mon-Fri, at or after 14:00.
+    static func activityPullDue(lastSync: Date?, now: Date = Date()) -> Bool {
+        guard let tz = TimeZone(identifier: "America/Edmonton") else { return false }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = tz
+        let weekday = cal.component(.weekday, from: now)
+        if weekday == 1 || weekday == 7 { return false }
+        var parts = cal.dateComponents([.year, .month, .day], from: now)
+        parts.hour = 14; parts.minute = 0; parts.second = 0; parts.nanosecond = 0
+        parts.timeZone = tz
+        guard let close = cal.date(from: parts), now >= close else { return false }
+        guard let last = lastSync else { return true }
+        return last < close
+    }
+
+    func connect(cookie: String, wssdi: String?) {
+        Keychain.save(oauthCookie: cookie, wssdi: wssdi)
+        connected = true
+        Task { await WSPull.stampClientId(oauthCookie: cookie, wssdi: wssdi) }
+        pull()
+    }
+
+    func disconnect() {
+        task?.cancel()
+        generation += 1
+        Keychain.clear()
+        let store = WKWebsiteDataStore.default()
+        store.httpCookieStore.getAllCookies { cookies in for c in cookies { store.httpCookieStore.delete(c) } }
+        store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+        connected = false
+        result = nil
+        base = nil
+        view = nil
+        phase = .idle
+        syncStep = ""
+        lastSync = nil
+        UserDefaults.standard.removeObject(forKey: Self.lastSyncKey)
+        LastPullStore.clear()
+    }
+
+    func syncNow() {
+        guard connected else { return }
+        pull()
+    }
+
+    // MARK: the pull
+
+    private func pull() {
+        task?.cancel()
+        generation += 1
+        let gen = generation
+        noNewShownAt = nil
+        phase = .pulling
+        syncStep = "Fetching accounts…"
+        task = Task { [weak self] in
+            guard let self else { return }
+            guard let rec = Keychain.load(), let cookie = rec["oauth_cookie"] as? String else {
+                self.showError(gen, "No Wealthsimple session"); return
+            }
+            let wssdi = rec["wssdi"] as? String
+            let stored = self.result
+            do {
+                var snap = try await WSPull.run(
+                    oauthCookie: cookie, wssdi: wssdi,
+                    storedActivities: stored?.activities ?? [], storedNav: stored?.nav ?? [],
+                    storedNavByAccount: stored?.navByAccount ?? [:], storedListings: stored?.listings ?? []
+                ) { [weak self] step in
+                    Task { @MainActor [weak self] in
+                        guard let self, gen == self.generation else { return }
+                        self.syncStep = step
+                    }
+                }
+                if Task.isCancelled || gen != self.generation { return }
+                if snap.listings.isEmpty, let old = stored?.listings, !old.isEmpty { snap.listings = old }
+                self.result = snap
+                LastPullStore.save(snap)
+                if snap.transferredNew {
+                    self.lastSync = Date()
+                    UserDefaults.standard.set(self.lastSync, forKey: Self.lastSyncKey)
+                    self.syncStep = ""
+                } else {
+                    self.syncStep = "No new transactions"
+                    self.noNewShownAt = Date()
+                }
+                self.phase = .ready
+                self.rebuild()
+                // the listings the trades name, the rates and the index, then the model again
+                if WSPull.needsListingFetch(activities: snap.activities, have: snap.listings) {
+                    self.syncStep = "Fetching listings…"
+                    let recNow = Keychain.load()
+                    let fetched = await WSPull.fetchListings(oauthCookie: (recNow?["oauth_cookie"] as? String) ?? cookie, wssdi: (recNow?["wssdi"] as? String) ?? wssdi,
+                                                            activities: snap.activities, have: snap.listings)
+                    if Task.isCancelled || gen != self.generation { return }
+                    self.mergeListings(fetched)
+                    if self.syncStep == "Fetching listings…" { self.syncStep = "" }
+                }
+                self.syncStep = self.syncStep.isEmpty ? "Fetching exchange rates…" : self.syncStep
+                _ = await WSPull.ensureFxRates(activities: snap.activities)
+                _ = await WSPull.ensureSpyPrices()
+                if Task.isCancelled || gen != self.generation { return }
+                if self.syncStep == "Fetching exchange rates…" { self.syncStep = "" }
+                self.rebuild()
+            } catch is CancellationError {
+            } catch let url as URLError where url.code == .cancelled {
+            } catch WSPullError.graphql(let msg) {
+                self.showError(gen, msg)
+            } catch WSPullError.refresh(let msg) {
+                self.showError(gen, msg)
+            } catch WSPullError.unauthorized {
+                self.showError(gen, "Wealthsimple token refresh failed")
+            } catch WSPullError.noIdentity {
+                self.showError(gen, "Wealthsimple session has no identity")
+            } catch WSPullError.noSession {
+                self.showError(gen, "No Wealthsimple session")
+            } catch {
+                self.showError(gen, error.localizedDescription)
+            }
+        }
+    }
+
+    private func showError(_ gen: Int, _ msg: String) {
+        guard gen == generation else { return }
+        let line = msg.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = line.isEmpty ? "Wealthsimple token refresh failed" : line
+        if result != nil {
+            phase = .ready
+            syncStep = shown
+        } else {
+            phase = .failed(shown)
+            syncStep = ""
+        }
+    }
+
+    private func mergeListings(_ extra: [WSSecurityListing]) {
+        guard var snap = result else { return }
+        var byId: [String: WSSecurityListing] = [:]
+        for s in snap.listings { byId[s.id] = s }
+        for s in extra {
+            if s.name.isEmpty, let old = byId[s.id], !old.name.isEmpty { continue }
+            byId[s.id] = s
+        }
+        snap.listings = Array(byId.values)
+        result = snap
+        LastPullStore.save(snap)
+    }
+
+    // MARK: the model
+
+    func rebuild() {
+        guard let snap = result else { view = nil; base = nil; return }
+        var market = BHMarket()
+        market.fx = WSPull.loadCachedFx()
+        market.benchmark = WSPull.loadCachedSP500()
+        market.benchmarks = ["SP500": market.benchmark]
+        for (k, v) in MarketData.indexCloses() { market.benchmarks[k] = v }
+        market.quotes = quotes
+        market.distributions = MarketData.distributions()
+        let nav = snap.nav.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) }
+        var navBy: [String: [BHNavPoint]] = [:]
+        for (nick, pts) in snap.navByAccount { navBy[nick] = pts.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) } }
+        let b = BHModel.buildBase(activities: snap.activities.map(BHAct.init), securities: snap.listings.map(WSPull.security), market: market,
+                                  today: BHModel.todayLocal(), navHistory: nav, navByAccount: navBy, journal: journal)
+        base = b
+        view = BHModel.buildView(b, filters)
+    }
+
+    func setFilters(_ f: BHFilters) {
+        filters = f
+        f.persist()
+        if let b = base { view = BHModel.buildView(b, f) }
+    }
+
+    func clearFilters() {
+        var f = BHFilters()
+        f.benchmark = filters.benchmark
+        setFilters(f)
+    }
+
+    func setBenchmark(_ key: String) {
+        var f = filters
+        f.benchmark = key
+        setFilters(f)
+    }
+
+    func saveJournal(id: String, _ entry: BHJournalEntry) {
+        journal[id] = entry
+        JournalStore.save(journal)
+        rebuild()
+    }
+
+    func setQuotes(_ q: [String: BHQuote]) {
+        quotes = q
+        rebuild()
+    }
+
+    func trade(id: String) -> BHTrade? { base?.trades.first { $0.id == id } }
+    func position(id: String) -> BHPosition? { base?.positions.first { $0.id == id } }
+}
+
+// MARK: - the Wealthsimple login in a web view
+
+struct ConnectLoginView: View {
+    @Environment(\.theme) private var t
+    @ObservedObject var book: Book
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        NavigationStack {
+            WealthsimpleLoginWebView { oauth, wssdi in
+                book.connect(cookie: oauth, wssdi: wssdi)
+                isPresented = false
+            }
+            .ignoresSafeArea(edges: .bottom)
+            .navigationTitle("Connect Wealthsimple")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Cancel") { isPresented = false } } }
+        }
+    }
+}
+
+struct WealthsimpleLoginWebView: UIViewRepresentable {
+    var onSession: (String, String?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onSession: onSession) }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .default()
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.navigationDelegate = context.coordinator
+        web.uiDelegate = context.coordinator
+        context.coordinator.start()
+        web.load(URLRequest(url: URL(string: "https://my.wealthsimple.com/app/login")!))
+        return web
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) { coordinator.stop() }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKHTTPCookieStoreObserver {
+        let onSession: (String, String?) -> Void
+        private var done = false
+        private var timer: Timer?
+
+        init(onSession: @escaping (String, String?) -> Void) { self.onSession = onSession }
+
+        func start() {
+            WKWebsiteDataStore.default().httpCookieStore.add(self)
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.inspectCookies() }
+        }
+
+        func stop() {
+            timer?.invalidate()
+            timer = nil
+            WKWebsiteDataStore.default().httpCookieStore.remove(self)
+        }
+
+        func cookiesDidChange(in cookieStore: WKHTTPCookieStore) { inspectCookies() }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { inspectCookies() }
+
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
+            return nil
+        }
+
+        private func inspectCookies() {
+            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { [weak self] cookies in
+                guard let self, !self.done else { return }
+                var oauth: String?
+                var wssdi: String?
+                for cookie in cookies {
+                    if cookie.name == "wssdi", !cookie.value.isEmpty { wssdi = cookie.value }
+                    if cookie.name == "_oauth2_access_v2", WSPull.jsonWithAccessToken(cookie.value) != nil {
+                        oauth = cookie.value
+                    } else if oauth == nil, WSPull.jsonWithAccessToken(cookie.value) != nil {
+                        oauth = cookie.value
+                    }
+                }
+                guard let oauth else { return }
+                self.done = true
+                DispatchQueue.main.async {
+                    self.stop()
+                    self.onSession(oauth, wssdi)
+                }
+            }
+        }
+    }
+}

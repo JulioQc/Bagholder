@@ -2747,7 +2747,7 @@ query FetchAccountHistoricalFinancials(
     }
 
     /// Last successful live FRED CSV (device cache, not a bundled price list).
-    private static func loadCachedSP500() -> [String: Double] {
+    static func loadCachedSP500() -> [String: Double] {
         guard let csv = UserDefaults.standard.string(forKey: sp500CacheKey), !csv.isEmpty else { return [:] }
         return parseFredSP500Csv(csv)
     }
@@ -2759,7 +2759,7 @@ query FetchAccountHistoricalFinancials(
     /// Every Home pull: live FRED first. If parse is empty/HTML, keep cache.
     /// If live newest date is older than cache newest date, keep cache (truncated CSV).
     /// Else save live and use it. Never Yahoo. Never bundled ETF seed.
-    private static func ensureSpyPrices() async -> [String: Double] {
+    static func ensureSpyPrices() async -> [String: Double] {
         let cached = loadCachedSP500()
         guard let url = URL(string: sp500FredURL) else { return cached }
         var req = URLRequest(url: url, timeoutInterval: 45)
@@ -2790,7 +2790,7 @@ query FetchAccountHistoricalFinancials(
     }
 
     /// ledger.html spyOn (1914–1923): YYYY-MM-DD lookup, walk back up to 18 calendar days.
-    private static func spyOn(_ spy: [String: Double], date: String) -> Double? {
+    static func spyOn(_ spy: [String: Double], date: String) -> Double? {
         var d = isoDateOnly(date)
         if d.count != 10 { return nil }
         for _ in 0..<18 {
@@ -2801,7 +2801,7 @@ query FetchAccountHistoricalFinancials(
     }
 
     /// ledger.html spyReturn (1925–1930): b/a - 1 if both prices > 0 else null.
-    private static func spyReturn(_ spy: [String: Double], from: String, to: String) -> Double? {
+    static func spyReturn(_ spy: [String: Double], from: String, to: String) -> Double? {
         guard let a = spyOn(spy, date: from), let b = spyOn(spy, date: to), a > 0, b > 0 else { return nil }
         return b / a - 1
     }
@@ -2864,7 +2864,7 @@ query FetchAccountHistoricalFinancials(
         }
     }
 
-    private static func loadCachedFx() -> [String: Double] {
+    static func loadCachedFx() -> [String: Double] {
         guard let obj = UserDefaults.standard.dictionary(forKey: fxCacheKey) else { return [:] }
         var map: [String: Double] = [:]
         for (k, v) in obj {
@@ -2879,7 +2879,7 @@ query FetchAccountHistoricalFinancials(
     }
 
     /// Bank of Canada FXUSDCAD daily. ledger.html ensureFxRates (1767–1786).
-    private static func ensureFxRates(activities: [WSActivity]) async -> [String: Double] {
+    static func ensureFxRates(activities: [WSActivity]) async -> [String: Double] {
         let dates = activities.map(\.transactionDate).filter { !$0.isEmpty }.sorted()
         let start = dates.first ?? "2020-01-01"
         let end = isoDay(Date())
