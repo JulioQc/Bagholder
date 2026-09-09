@@ -4270,10 +4270,13 @@ def main():
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()
     url = "http://127.0.0.1:%s" % port
     print("Bagholder  %s" % url, flush=True)
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+    # A second instance run for verification (BAGHOLDER_NO_BROWSER=1) must not open
+    # anyone's browser: the user's own copy is what they are looking at.
+    if not (os.environ.get("BAGHOLDER_NO_BROWSER") or "").strip():
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
     if _state.get("connected"):
         if store.activity_pull_due(interval_sec=ACTIVITY_PULL_SEC):
             threading.Thread(target=run_sync, name="bagholder-boot-sync", daemon=True).start()

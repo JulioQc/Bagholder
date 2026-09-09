@@ -22,9 +22,9 @@ Read this first, then `SPEC.md`. Bagholder is a local-first trading journal for 
 - The page has no automated tests, so render it. Run a second instance on a copy of the user's data, never on the live database:
   ```
   mkdir -p /tmp/bh-scratch && cp ~/.bagholder/bagholder.db /tmp/bh-scratch/
-  BAGHOLDER_HOME=/tmp/bh-scratch BAGHOLDER_PORT=8799 python3 bagholder.py
+  BAGHOLDER_NO_BROWSER=1 BAGHOLDER_HOME=/tmp/bh-scratch BAGHOLDER_PORT=8799 python3 bagholder.py
   ```
-  Open `http://127.0.0.1:8799/` (`localhost` is refused by design). The user's own instance runs on 8765; do not restart or write to it.
+  `BAGHOLDER_NO_BROWSER=1` is not optional: the app opens a browser tab at start, and without it every scratch start puts the scratch data in the user's own browser, where it reads as their app being disconnected. Open `http://127.0.0.1:8799/` yourself (`localhost` is refused by design). The user's own instance runs on 8765; do not restart or write to it.
 - What to check is listed in `SPEC.md` §7: every displayed figure traced to its model field and meaning; every page at 1200, 1340, 1440 and 1680 px with no table overflowing or clipping at 1340 and above; headers level; lookups by id, exercised with a synthetic duplicate symbol in a second account. Take screenshots; measure with JavaScript rather than eyeballing. Hash-only navigation does not reload the page; use `location.reload()` after editing `ledger.html`.
 - Server-side changes need the user to restart their app; say so. When the page and the server change together, bump `PROTOCOL` in both `bagholder.py` and `ledger.html` (a test keeps them equal) so the page shows "Restart Bagholder to finish the update" rather than degrading quietly.
 
