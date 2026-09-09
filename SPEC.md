@@ -217,13 +217,14 @@ Nothing on the tab is derived beyond these sums: Max buying power, Portfolio val
 
 ### Cashflow
 
-Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
+Six tiles in the style of the dashboard tiles, CAD, dividends in scope:
 
 | Tile | Value | Subtitle |
 |---|---|---|
 | Two years ago, last year, by calendar year, rolling over on January 1 | Sum received that year | Average per paying month |
 | YTD | Sum received this year | Average per paying month |
 | All time | Sum received | `total earned` |
+| Margin used | The Portfolio tab's Margin used over the accounts in scope | Average margin interest per charged month: the Interest charge rows in scope, summed in CAD, ÷ the number of months carrying one, as `$x/mo margin interest` |
 | Yield on cost | Annual income of all rated holdings ÷ their book cost | Projected monthly income, that annual income ÷ 12, as `$x/mo` |
 
 **Monthly distributions.** One bar per month from the first payment to the current month (or to the end of the date filter), CAD, an empty bar for a month with nothing paid yet, six axis labels, hover shows month and amount.
@@ -285,7 +286,7 @@ The iOS and Android apps show the same figures as the web page, computed on the 
 
 **Cards.** 12 pt above and below the content, 16 pt at the sides, a 24 pt header row with a 15 pt semibold title at its top; a control at the right of the header (the index toggle, a sort menu, a figure) sits in that row. Nothing under a title: no captions, subtitles or helper lines, no "All accounts", no "Vs S&P 500" (the toggle itself reads `Vs S&P 500`), no "CAD", no "Outperformed … in N of M years", no "Dividend" beside a history row.
 
-**Tiles.** Two per page in a row that swipes sideways, with the indicator below: 4 pt dots at 24 % ink, a 14 × 4 accent pill for the current page. Dashboard: Realized P&L, Win rate; Profit factor, Expectancy; Max drawdown, Avg annualized. Portfolio: Market value, Net asset value; Cost basis, Margin used; Available margin, Unrealized P&L. Cashflow: the year to date, Yield on cost; All time, then the past years, newest first.
+**Tiles.** Two per page in a row that swipes sideways, with the indicator below: 4 pt dots at 24 % ink, a 14 × 4 accent pill for the current page. Dashboard: Realized P&L, Win rate; Profit factor, Expectancy; Max drawdown, Avg annualized. Portfolio: Market value, Net asset value; Cost basis, Margin used; Available margin, Unrealized P&L. Cashflow: the year to date, Yield on cost; All time, Margin used (its line `$x/mo margin interest` in whole dollars); then the past years, newest first.
 
 **Charts.** No value axis. The card's figure sits at its top right: Equity shows the latest point, P&L the sum in scope, Distributions the projected month. The Equity line runs edge to edge, scaled from its low to its high, 160 pt tall, four date labels below. A long press reads the point under the finger from the first touch: the figure at the top right becomes that day's or month's, the date or month appears at the bottom under the finger, the rest of the chart dims (the equity line and its fill keep their colour up to the finger, the marker is a ring), and the page and any pager hold still until release. Bars fill their month's slot 4 pt apart on the web page's scale (§4); a tap on a P&L bar opens the month.
 

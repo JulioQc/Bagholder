@@ -100,6 +100,7 @@ def row(kind, account, day, symbol, qty, px, cash, **more):
         "cbuy": dict(category="other", activityType="CRYPTO_BUY", activitySubType="MARKET_ORDER", rawType="CRYPTO_BUY", direction="credit"),
         "csell": dict(category="other", activityType="CRYPTO_SELL", activitySubType="MARKET_ORDER", rawType="CRYPTO_SELL", direction="credit"),
         "reward": dict(category="other", activityType="CRYPTO_STAKING_REWARD", activitySubType="other", rawType="CRYPTO_STAKING_REWARD", direction="credit"),
+        "charge": dict(category="other", activityType="INTEREST_CHARGE", activitySubType="MARGIN_INTEREST", rawType="INTEREST_CHARGE", direction="debit"),
     }
     base.update(kinds[kind])
     base["description"] = {"div": "Dividend: " + symbol, "dep": "Deposit", "cbuy": "CRYPTO_BUY: " + symbol, "csell": "CRYPTO_SELL: " + symbol,
@@ -133,6 +134,10 @@ def dividend(account, day, symbol, qty, per):
 
 def deposit(account, day, amount):
     return row("dep", account, day, "", 0, 0, amount)
+
+
+def interest_charge(account, day, amount, currency):
+    return row("charge", account, day, "", 0, 0, -amount, currency=currency)
 
 
 def crypto(kind, day, symbol, qty, px):
@@ -228,6 +233,11 @@ def build():
                 dividend("TFSA", day, "XEQT", qty, per)
             if "2024-01-10" < day <= TODAY:
                 dividend("RRSP", day, "VFV", 250 + (120 if day >= "2025-01-08" else 0), per * 2)
+    # Margin interest on the Trading account, billed on the first of the month in USD
+    for i, amount in enumerate((64.10, 71.85, 88.20, 93.40, 97.15, 102.60, 109.35, 118.90)):
+        day = "2026-%02d-01" % (2 + i)
+        if day <= TODAY:
+            interest_charge("Trading", day, amount, "USD")
     _acts.sort(key=lambda a: (a["transactionDate"], a["id"]))
     return j
 

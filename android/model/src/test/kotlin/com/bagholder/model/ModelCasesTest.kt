@@ -153,6 +153,11 @@ class ModelCasesTest {
             t.total?.let { d["total"] = it }
             t.perMonth?.let { d["perMonth"] = it }
             t.count?.let { d["count"] = it }
+            if (t.label == "Margin used") {
+                d["marginUsed"] = t.marginUsed ?: 0.0
+                d["interestPerMonth"] = t.interestPerMonth ?: 0.0
+                d["interestMonths"] = t.interestMonths ?: 0
+            }
             if (t.label == "Yield on cost") {
                 d["yield"] = opt(t.yield)
                 d["projected"] = t.projected ?: 0.0
