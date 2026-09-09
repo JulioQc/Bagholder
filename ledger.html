@@ -18,7 +18,7 @@ html{color-scheme:dark}
   --shadow-sm:0 1px 2px rgba(0,0,0,.28);--shadow-md:0 10px 28px rgba(0,0,0,.45),0 0 0 1px rgba(233,233,237,.06);
   --font:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--font-num:var(--font);--brand-color:var(--ink);--brand-transform:none;--brand-spacing:.02em;--outline:.1;--field:rgba(22,24,38,.55);
   --chip-bg:var(--accent-900);--chip-fg:var(--accent-300);--chip-hi:rgba(145,132,217,.18);
-  --pie-1:#9184d9;--pie-2:#6fd39b;--pie-3:#5fb0e6;--pie-4:#e8b36a;--pie-5:#e0778a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;
+  --pie-1:#9184d9;--pie-2:#6fd39b;--pie-3:#5fb0e6;--pie-4:#e8b36a;--pie-5:#e0778a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;--pie-9:#e59a6a;--pie-10:#8fb87a;--pie-11:#a0a8b8;
   --pos-rgb:111,211,155;--neg-rgb:224,119,138;--accent-rgb:145,132,217;--accent-bar:var(--accent);--hover:.08;--area:.22;--well:var(--n900);--well-line:.12;
 }
 html[data-theme="midnight"]{
@@ -29,7 +29,7 @@ html[data-theme="midnight"]{
   --font-num:ui-monospace,"JetBrains Mono","SF Mono",Menlo,monospace;--outline:.14;--field:rgba(4,5,9,.6);
   --chip-bg:rgba(230,232,238,.1);--chip-fg:rgba(230,232,238,.82);--chip-hi:rgba(230,232,238,.12);
   --pos-rgb:63,214,138;--neg-rgb:255,107,122;--accent-rgb:63,214,138;
-  --pie-1:#3fd68a;--pie-2:#5fb0e6;--pie-3:#9184d9;--pie-4:#e8b36a;--pie-5:#ff6b7a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;
+  --pie-1:#3fd68a;--pie-2:#5fb0e6;--pie-3:#9184d9;--pie-4:#e8b36a;--pie-5:#ff6b7a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;--pie-9:#f0955f;--pie-10:#a3c96f;--pie-11:#9aa4b5;
 }
 html[data-theme="light"]{color-scheme:light;
   --mat:#e0e2ea;--bg:#eef0f5;--surface:#fafafc;--n900:#f1f2f6;--accent:#6b5cd6;--accent-300:#4a3bb8;--accent-900:#e9e6fa;--accent-bar:#a89ee6;
@@ -37,7 +37,7 @@ html[data-theme="light"]{color-scheme:light;
   --hair:rgba(27,29,39,.12);--grid:rgba(27,29,39,.06);--pos:#2e8a62;--neg:#c0505f;--mixed:#9a95c4;--pos-rgb:46,138,98;--neg-rgb:192,80,95;--accent-rgb:107,92,214;
   --shadow-sm:0 1px 2px rgba(20,22,40,.06);--shadow-md:0 10px 28px rgba(20,22,40,.14),0 0 0 1px rgba(27,29,39,.08);
   --outline:.08;--field:rgba(27,29,39,.04);--hover:.045;--area:.16;--well:transparent;--well-line:.09;
-  --pie-1:#a89ee6;--pie-2:#8fd4b4;--pie-3:#93c4ec;--pie-4:#f0c98c;--pie-5:#eea3ae;--pie-6:#9adbd4;--pie-7:#cfaee6;--pie-8:#e0d48c;
+  --pie-1:#a89ee6;--pie-2:#8fd4b4;--pie-3:#93c4ec;--pie-4:#f0c98c;--pie-5:#eea3ae;--pie-6:#9adbd4;--pie-7:#cfaee6;--pie-8:#e0d48c;--pie-9:#f2b592;--pie-10:#b9d69c;--pie-11:#b6bec9;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--mat);color:var(--ink);color-scheme:dark}
@@ -1210,15 +1210,15 @@ function portfolioTilesHtml(pf) {
 }
 function portfolioSlices(pf) {
   const all = pf.allocation || [];
-  const top = all.slice(0, 7), rest = all.slice(7);
+  const top = all.length > 10 ? all.slice(0, 10) : all, rest = all.slice(top.length);
   const items = top.map((x) => ({ label: x.symbol, v: x.value, share: x.share }));
   if (rest.length) items.push({ label: "Other (" + rest.length + ")", v: rest.reduce((a, x) => a + x.value, 0), share: rest.reduce((a, x) => a + x.share, 0) });
-  items.forEach((x, i) => { x.color = "var(--pie-" + ((i % 8) + 1) + ")"; });
+  items.forEach((x, i) => { x.color = "var(--pie-" + ((i % 11) + 1) + ")"; });
   return { total: pf.marketValue || 0, items };
 }
 function portfolioPieHtml(pf) {
   const p = portfolioSlices(pf);
-  const R = 44, W = 14, C = 60, SIZE = 236;
+  const R = 44, W = 14, C = 60, SIZE = 264;
   let acc = 0;
   const arcs = p.items.map((x, i) => {
     const a0 = acc * 2 * Math.PI - Math.PI / 2, a1 = (acc + x.share) * 2 * Math.PI - Math.PI / 2;
@@ -1230,11 +1230,11 @@ function portfolioPieHtml(pf) {
   }).join("");
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
     '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5></div>' +
-    (p.items.length ? '<div id="ppiePlot" data-hover="ppie" style="display:flex;gap:28px;align-items:center;justify-content:center;flex:1;min-height:0">' +
-      '<div style="position:relative;width:' + SIZE + 'px;height:' + SIZE + 'px;flex:none"><svg viewBox="0 0 120 120" style="width:' + SIZE + 'px;height:' + SIZE + 'px;display:block">' + arcs + "</svg>" +
+    (p.items.length ? '<div id="ppiePlot" data-hover="ppie" style="display:flex;gap:16px;align-items:center;justify-content:center;flex:1;min-height:0">' +
+      '<div style="position:relative;flex:none;width:max(200px, min(' + SIZE + 'px, 100% - 140px));aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
       '<div id="ppieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">Market value</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(p.total) + "</div></div></div>" +
-      '<div id="ppieLegend" class="scroll" style="flex:none;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
-      p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.label) + "</span></span>").join("") +
+      '<div id="ppieLegend" class="scroll" style="flex:0 1 auto;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
+      p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.label) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + pctPlain(x.share) + "</span></span>").join("") +
       "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No open positions in scope.</div>') + "</div>";
 }
 function ppieHover(e) {
@@ -1253,20 +1253,20 @@ function portfolioHtml(m) {
   const p = state.sel ? positionById(state.sel) : null;
   if (p) return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + tradeDetailHtml(holdingAsTrade(p), m) + "</div>";
   const pf = m.portfolio || {};
-  const cols = [{ key: "symbol", label: "Symbol" }, { key: "avg", label: "Avg", align: "right" }, { key: "last", label: "Last", align: "right" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "unreal", label: "Unrealized", align: "right" }, { key: "day", label: "Change ($)", align: "right" }, { key: "dayPct", label: "Change (%)", align: "right", padRight: "0" }];
+  const cols = [{ key: "symbol", label: "Symbol" }, { key: "avg", label: "Avg", align: "right" }, { key: "last", label: "Last", align: "right" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "day", label: "Change ($)", align: "right" }, { key: "dayPct", label: "Change (%)", align: "right" }, { key: "unreal", label: "Unrealized P&L", align: "right", padRight: "0" }];
   const s = state.sort.positions;
   const rows = sortRows(m.positions || [], s.key, s.dir, posSortValue);
   return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + portfolioTilesHtml(pf) +
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:14px;align-items:stretch">' + portfolioPieHtml(pf) +
-    '<div class="card elev-sm" style="padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:640px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Holdings</h5></div>' +
-    '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0"><table class="table" style="min-width:640px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
+    '<div class="card elev-sm" style="padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Holdings</h5></div>' +
+    '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0;max-height:362px"><table class="table" style="min-width:640px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="openHolding" data-arg=\'' + attr({ id: r.id }) + "'>" +
       '<td title="' + esc(r.symbol) + ' · ' + esc(r.account) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
       '<td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right">' + px(r.last) + "</td>" +
       '<td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
-      '<td style="text-align:right;white-space:nowrap;font-weight:500;color:' + color(r.unreal) + '">' + signedMoney(r.unreal, r.currency) + " (" + pct(r.unrealPct) + ")</td>" +
       '<td style="text-align:right;white-space:nowrap;color:' + (r.dayChange == null ? "var(--ink55)" : color(r.dayChange)) + '">' + (r.dayChange == null ? "—" : signedMoney(r.dayChange, r.currency)) + "</td>" +
-      '<td style="text-align:right;padding-right:0;color:' + (r.percentChange == null ? "var(--ink55)" : color(r.percentChange)) + '">' + (r.percentChange == null ? "—" : pct(r.percentChange / 100, 2)) + "</td></tr>").join("") +
+      '<td style="text-align:right;color:' + (r.percentChange == null ? "var(--ink55)" : color(r.percentChange)) + '">' + (r.percentChange == null ? "—" : pct(r.percentChange / 100, 2)) + "</td>" +
+      '<td style="text-align:right;padding-right:0;white-space:nowrap;font-weight:500;color:' + color(r.unreal) + '">' + signedMoney(r.unreal, r.currency) + " (" + pct(r.unrealPct) + ")</td></tr>").join("") +
     "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No open positions match these filters.</div>') + "</div></div></div></div>";
 }
 
