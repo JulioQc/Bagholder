@@ -6,8 +6,7 @@ services:
     # loopback only on the host, as the app itself binds: open http://127.0.0.1:8765/
     ports:
       - "127.0.0.1:8765:8765"
-    # the database and the login; sign in on the host first:
-    #   BAGHOLDER_HOME=./data python3 bagholder.py --connect
+    # the database and the login
     volumes:
       - ./data:/data
     restart: unless-stopped

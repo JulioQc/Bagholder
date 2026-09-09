@@ -1,7 +1,14 @@
-# Bagholder's web app in a container: Python's own slim Debian image, the app's
-# files, no build step. Data lives in /data, mounted from the host; the login is
-# captured on the host once with `python3 bagholder.py --connect` (README, Docker).
+# Bagholder's web app in a container: Python's own slim Debian image, Chromium for
+# the sign-in, the app's files, no build step. Data lives in /data, mounted from the host.
 FROM python:3.12-slim-bookworm
+
+# Chromium for the Wealthsimple sign-in, on a virtual display (Xvfb): the app's page shows
+# its window and passes your clicks and keys to it, so nothing is needed on the host but
+# Docker. Passkeys need a real browser; sign in with the password and 2FA.
+RUN apt-get update && apt-get install -y --no-install-recommends chromium xvfb fonts-liberation ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY docker-entrypoint.sh /usr/local/bin/bagholder-entrypoint
+RUN chmod +x /usr/local/bin/bagholder-entrypoint
 
 WORKDIR /app
 COPY bagholder.py model.py market.py store.py csvimport.py ledger.html lightweight-charts.js favicon.png ./
@@ -17,10 +24,14 @@ ENV BAGHOLDER_HOME=/data \
     BAGHOLDER_BIND=0.0.0.0 \
     BAGHOLDER_NO_BROWSER=1 \
     BAGHOLDER_NO_UPDATE=1 \
+    BAGHOLDER_LOGIN_VIEW=1 \
+    BAGHOLDER_CHROME=/usr/bin/chromium \
+    DISPLAY=:99 \
     PYTHONUNBUFFERED=1
 
 # root inside the container, so a data folder mounted from any host user is writable
 # as it is; the process touches nothing but /data, and the port is loopback-only.
 VOLUME ["/data"]
 EXPOSE 8765
+ENTRYPOINT ["bagholder-entrypoint"]
 CMD ["python3", "bagholder.py"]

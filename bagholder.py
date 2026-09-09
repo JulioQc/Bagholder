@@ -544,6 +544,10 @@ BIND_HOST = (os.environ.get("BAGHOLDER_BIND") or "").strip() or "127.0.0.1"
 UPDATES_OFF = bool((os.environ.get("BAGHOLDER_NO_UPDATE") or "").strip())
 UPDATES_OFF_MESSAGE = "This copy is updated with docker compose pull; a new release is a new image."
 IMAGE_PAGE = REPO_URL + "/pkgs/container/bagholder"   # where a container copy's header sends the user for a new release
+# The sign-in window inside the page (a container, where the user sees no window): Chromium
+# runs on the container's virtual display, the page shows its frames and sends it clicks and keys.
+LOGIN_VIEW = bool((os.environ.get("BAGHOLDER_LOGIN_VIEW") or "").strip())
+LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
@@ -2601,6 +2605,9 @@ def boot_session():
 
 
 def find_chrome():
+    explicit = (os.environ.get("BAGHOLDER_CHROME") or "").strip()
+    if explicit and os.path.isfile(explicit):
+        return explicit
     if sys.platform == "darwin":
         for p in (
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -3148,6 +3155,96 @@ def _login_browser_alive():
         return False
 
 
+_view_lock = threading.Lock()
+_view = {"ws": None, "target": ""}
+
+
+def _login_view_drop():
+    with _view_lock:
+        ws, _view["ws"], _view["target"] = _view["ws"], None, ""
+    if ws is not None:
+        try:
+            ws.close()
+        except Exception:
+            pass
+
+
+def _login_view_ws():
+    """A DevTools socket to the login window's page, kept between calls; None without a window."""
+    pages = _cdp_pages(DEBUG_PORTS[0])
+    if not pages:
+        _login_view_drop()
+        return None
+    page = pages[0]
+    with _view_lock:
+        if _view["ws"] is not None and _view["target"] == page.get("id"):
+            return _view["ws"]
+    _login_view_drop()
+    ws = _ws_connect(page["webSocketDebuggerUrl"], timeout=CAPTURE_CALL_SEC)
+    with _view_lock:
+        _view["ws"], _view["target"] = ws, page.get("id")
+    return ws
+
+
+def login_frame():
+    """The login window as a JPEG, or None when the app is not waiting for a login or has no window."""
+    with _lock:
+        capturing = bool(_state.get("capturing"))
+    if not capturing:
+        return None
+    try:
+        ws = _login_view_ws()
+        if ws is None:
+            return None
+        r = _cdp_call(ws, "Page.captureScreenshot", {"format": "jpeg", "quality": 60}, timeout=CAPTURE_CALL_SEC)
+        data = ((r or {}).get("result") or {}).get("data")
+        return base64.b64decode(data) if data else None
+    except Exception:
+        _login_view_drop()
+        return None
+
+
+_VIEW_KEYS = {"Enter": 13, "Tab": 9, "Backspace": 8, "Delete": 46, "Escape": 27, "ArrowLeft": 37, "ArrowUp": 38,
+              "ArrowRight": 39, "ArrowDown": 40, "Home": 36, "End": 35}
+
+
+def login_input(ev):
+    """One click, typed text, key or scroll from the page, forwarded to the login window."""
+    kind = _s((ev or {}).get("kind"))
+    try:
+        ws = _login_view_ws()
+        if ws is None:
+            return {"ok": False, "error": "No login window."}
+        x, y = float(ev.get("x") or 0), float(ev.get("y") or 0)
+        call = lambda method, params: _cdp_call(ws, method, params, timeout=CAPTURE_CALL_SEC)
+        if kind == "click":
+            call("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y})
+            for typ in ("mousePressed", "mouseReleased"):
+                call("Input.dispatchMouseEvent", {"type": typ, "x": x, "y": y, "button": "left", "clickCount": 1})
+        elif kind == "text":
+            text = _s(ev.get("text"))
+            if text:
+                call("Input.insertText", {"text": text})
+        elif kind == "key":
+            key = _s(ev.get("key"))
+            vk = _VIEW_KEYS.get(key)
+            if vk is None:
+                return {"ok": False, "error": "unknown key"}
+            base = {"key": key, "code": key, "windowsVirtualKeyCode": vk, "nativeVirtualKeyCode": vk}
+            if key == "Enter":
+                base["text"] = "\r"
+            call("Input.dispatchKeyEvent", dict(base, type="keyDown"))
+            call("Input.dispatchKeyEvent", dict(base, type="keyUp"))
+        elif kind == "wheel":
+            call("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": float(ev.get("deltaY") or 0)})
+        else:
+            return {"ok": False, "error": "unknown input"}
+        return {"ok": True}
+    except Exception:
+        _login_view_drop()
+        return {"ok": False, "error": "The login window did not take that."}
+
+
 def cancel_login():
     """Stop waiting for a login and close the window the app opened."""
     with _lock:
@@ -3206,8 +3303,13 @@ def start_login_browser():
         "--no-first-run",
         "--no-default-browser-check",
         "--new-window",
-        LOGIN_URL,
     ]
+    if LOGIN_VIEW:
+        # a container: a real window on its virtual display (headless Chromium is turned
+        # away at Wealthsimple's door), sized for the page, sandbox off since the process is root
+        args += ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--window-position=0,0",
+                 "--window-size=%d,%d" % LOGIN_VIEW_SIZE]
+    args.append(LOGIN_URL)
     try:
         kwargs = {
             "stdin": subprocess.DEVNULL,
@@ -3417,6 +3519,7 @@ def status_payload():
             "updateUrl": IMAGE_PAGE if UPDATES_OFF else str(update_status().get("url") or REPO_URL),
             "canUpdate": can_update(),
             "updateBy": "image" if UPDATES_OFF else "app",
+            "loginView": LOGIN_VIEW,
             "updating": str(_state.get("updating") or ""),
             "updateError": str(_state.get("updateError") or ""),
         }
@@ -3954,6 +4057,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if path == "/api/login/frame":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            data = login_frame()
+            if data:
+                self._send(200, data, "image/jpeg")
+            else:
+                self._send(204, b"")
+            return
         if path in ("/", "/index.html", "/ledger.html", "/v2", "/v2/"):
             if not self._gate():
                 self._send(403, {"ok": False})
@@ -4074,6 +4187,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/login/cancel":
             self._read_json()
             self._send(200, cancel_login())
+            return
+        if path == "/api/login/input":
+            self._send(200, login_input(self._read_json() or {}))
             return
         if path == "/api/update":
             self._read_json()
@@ -4324,52 +4440,8 @@ def main():
         sys.exit(_exit_code[0])
 
 
-def connect_cli():
-    """`bagholder.py --connect`: sign in on this machine for a copy that runs elsewhere
-    (a container). The Chrome window opens here, the login lands in HOME/session.json,
-    and the command exits; that folder is what the container mounts as its data."""
-    _ensure_home()
-    store.ensure()
-    res = start_login_browser()
-    if not res.get("ok"):
-        sys.stderr.write("bagholder: %s\n" % (res.get("error") or "could not open the login"))
-        return 1
-    print("Sign in to Wealthsimple in the Chrome window…", flush=True)
-    deadline = time.time() + CAPTURE_WAIT_SEC + 15
-    try:
-        while time.time() < deadline:
-            with _lock:
-                connected = bool(_state.get("connected"))
-                capturing = bool(_state.get("capturing"))
-                error = str(_state.get("error") or "")
-            if connected:
-                print("Signed in. The login is saved in %s" % SESSION_PATH, flush=True)
-                return 0
-            if not capturing:
-                sys.stderr.write("bagholder: %s\n" % (error or "no session was captured"))
-                return 1
-            time.sleep(1)
-        sys.stderr.write("bagholder: no session yet; run it again and finish the login sooner\n")
-        return 1
-    finally:
-        _close_login_browser()
-
-
-def cli_mode(argv):
-    """'connect' for `--connect`, 'serve' otherwise; anything else is a usage error."""
-    args = [a for a in argv[1:] if a.strip()]
-    if not args:
-        return "serve"
-    if args == ["--connect"]:
-        return "connect"
-    raise SystemExit("usage: python3 bagholder.py [--connect]")
-
-
 if __name__ == "__main__":
-    mode = cli_mode(sys.argv)
-    if mode == "connect":
-        sys.exit(connect_cli())
-    elif os.environ.get("BAGHOLDER_CHILD") == "1" or UPDATES_OFF:
+    if os.environ.get("BAGHOLDER_CHILD") == "1" or UPDATES_OFF:
         # the supervisor exists to restart an updated server; a copy that never updates runs plain
         main()
     else:

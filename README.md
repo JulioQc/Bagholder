@@ -66,21 +66,13 @@ The app opens at `http://127.0.0.1:8765` in your browser. Use that address as wr
 
 ## Docker
 
-For a copy that runs in the background on a machine you keep on. The image is Python's slim Debian image plus the app; the database and the login live in `./data` on the host.
-
-Sign in once on the host, where Chrome can open (this writes `data/session.json` and exits):
-
-```
-BAGHOLDER_HOME=./data python3 bagholder.py --connect
-```
-
-Then:
+For a copy that runs in the background on a machine you keep on. Nothing is needed on the host but Docker: the image carries Chromium for the sign-in, and the database and the login live in `./data` beside the compose file.
 
 ```
 docker compose up -d
 ```
 
-and open `http://127.0.0.1:8765`. The port is published on the host's loopback only. The image is published with every release; the header says when a new one is out and links to it, as on the desktop, and moving to it is a pull rather than the Update button:
+Open `http://127.0.0.1:8765` and choose Connect Wealthsimple: the sign-in page opens inside the page. Sign in with your email, password and 2FA code (a passkey needs a real browser). The port is published on the host's loopback only. The image is published with every release; the header says when a new one is out and links to it, as on the desktop, and moving to it is a pull rather than the Update button:
 
 ```
 docker compose pull && docker compose up -d

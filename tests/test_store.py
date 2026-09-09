@@ -1393,30 +1393,75 @@ class InAppUpdateTest(unittest.TestCase):
             out = bagholder.start_update()
             self.assertEqual((out["ok"], out["error"]), (False, bagholder.UPDATES_OFF_MESSAGE))
         self.assertEqual(bagholder.status_payload()["updateBy"], "app")
-        self.assertEqual(bagholder.cli_mode(["bagholder.py"]), "serve")
-        self.assertEqual(bagholder.cli_mode(["bagholder.py", "--connect"]), "connect")
-        with self.assertRaises(SystemExit):
-            bagholder.cli_mode(["bagholder.py", "--serve-me"])
 
-    def test_connect_cli_waits_for_the_capture_and_reports(self):
+    def test_the_login_window_in_the_page_serves_frames_and_takes_input(self):
         import bagholder
         from unittest import mock
-        with mock.patch.object(bagholder, "start_login_browser", return_value={"ok": False, "error": "Install Chrome."}), \
-             mock.patch.object(bagholder, "_close_login_browser"):
-            self.assertEqual(bagholder.connect_cli(), 1)
-        states = iter([(False, True, ""), (True, False, "")])
-        def tick(_):
-            connected, capturing, error = next(states)
-            bagholder._state["connected"], bagholder._state["capturing"], bagholder._state["error"] = connected, capturing, error
-        bagholder._state["connected"], bagholder._state["capturing"], bagholder._state["error"] = False, True, ""
-        with mock.patch.object(bagholder, "start_login_browser", return_value={"ok": True}), \
-             mock.patch.object(bagholder, "_close_login_browser") as closed, mock.patch.object(bagholder.time, "sleep", side_effect=tick):
-            self.assertEqual(bagholder.connect_cli(), 0, "the capture landed: saved, exit 0")
-        self.assertEqual(closed.call_count, 1, "the login window is closed on the way out")
-        bagholder._state["connected"], bagholder._state["capturing"], bagholder._state["error"] = False, False, "The Chrome window closed before a session showed up."
-        with mock.patch.object(bagholder, "start_login_browser", return_value={"ok": True}), mock.patch.object(bagholder, "_close_login_browser"):
-            self.assertEqual(bagholder.connect_cli(), 1, "the window closed: reported, exit 1")
-        bagholder._state["error"] = ""
+        calls = []
+        class FakeWS:
+            closed = False
+            def close(self): self.closed = True
+        ws = FakeWS()
+        def cdp(sock, method, params=None, timeout=8):
+            calls.append((method, params))
+            return {"result": {"data": "/9j/AAAA"}} if method == "Page.captureScreenshot" else {"result": {}}
+        page = [{"type": "page", "id": "P1", "webSocketDebuggerUrl": "ws://127.0.0.1:18765/devtools/page/P1"}]
+        bagholder._login_view_drop()
+        bagholder._state["capturing"] = True
+        with mock.patch.object(bagholder, "_cdp_pages", return_value=page), mock.patch.object(bagholder, "_ws_connect", return_value=ws) as connect, \
+             mock.patch.object(bagholder, "_cdp_call", side_effect=cdp):
+            self.assertEqual(bagholder.login_frame(), b"\xff\xd8\xff\x00\x00\x00", "the window's screenshot, decoded")
+            self.assertTrue(bagholder.login_input({"kind": "click", "x": 40, "y": 50})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "text", "text": "me@example.com"})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "key", "key": "Enter"})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "wheel", "x": 1, "y": 2, "deltaY": 120})["ok"])
+            self.assertFalse(bagholder.login_input({"kind": "key", "key": "F13"})["ok"])
+            self.assertEqual(connect.call_count, 1, "one socket, kept across calls")
+        methods = [m for m, _ in calls]
+        self.assertEqual(methods[:4], ["Page.captureScreenshot", "Input.dispatchMouseEvent", "Input.dispatchMouseEvent", "Input.dispatchMouseEvent"])
+        self.assertEqual([p["type"] for m, p in calls if m == "Input.dispatchMouseEvent"][:3], ["mouseMoved", "mousePressed", "mouseReleased"])
+        self.assertIn(("Input.insertText", {"text": "me@example.com"}), calls)
+        enter = [p for m, p in calls if m == "Input.dispatchKeyEvent"]
+        self.assertEqual([(p["type"], p["key"], p["windowsVirtualKeyCode"]) for p in enter], [("keyDown", "Enter", 13), ("keyUp", "Enter", 13)])
+        self.assertEqual([p for m, p in calls if m == "Input.dispatchMouseEvent" and p["type"] == "mouseWheel"][0]["deltaY"], 120.0)
+        # no window: no frame, and input says so
+        with mock.patch.object(bagholder, "_cdp_pages", return_value=[]):
+            self.assertIsNone(bagholder.login_frame())
+            self.assertFalse(bagholder.login_input({"kind": "click", "x": 1, "y": 1})["ok"])
+        self.assertTrue(ws.closed, "the socket is dropped with the window")
+        bagholder._state["capturing"] = False
+        self.assertIsNone(bagholder.login_frame(), "not waiting for a login: nothing to show")
+
+    def test_the_container_launches_chromium_on_its_display_at_the_view_size(self):
+        import bagholder
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            bagholder.set_home(tmp) if hasattr(bagholder, "set_home") else None
+            seen = {}
+            class P:
+                pid = 4242
+                def poll(self): return None
+            def popen(args, **kw):
+                seen["args"] = args
+                return P()
+            bagholder._state["capturing"] = False
+            bagholder._state["chrome_proc"] = None
+            with mock.patch.object(bagholder, "LOGIN_VIEW", True), mock.patch.object(bagholder, "find_chrome", return_value="/usr/bin/chromium"), \
+                 mock.patch.object(bagholder, "_login_browser_alive", return_value=False), mock.patch.object(bagholder, "_close_login_browser"), \
+                 mock.patch.object(bagholder.subprocess, "Popen", side_effect=popen), mock.patch.object(bagholder.threading, "Thread"):
+                self.assertTrue(bagholder.start_login_browser()["ok"])
+            args = seen["args"]
+            self.assertEqual(args[0], "/usr/bin/chromium")
+            for flag in ("--no-sandbox", "--window-size=960,1000"):
+                self.assertIn(flag, args)
+            self.assertNotIn("--headless=new", args, "a real window on the virtual display: headless is turned away by Wealthsimple")
+            self.assertEqual(args[-1], bagholder.LOGIN_URL, "the login page last, after the flags")
+            bagholder._state["capturing"] = False
+            bagholder._state["chrome_proc"] = None
+        with mock.patch.dict(os.environ, {"BAGHOLDER_CHROME": "/definitely/not/there"}):
+            self.assertNotEqual(bagholder.find_chrome(), "/definitely/not/there", "an explicit path is used only when it exists")
 
     def test_update_button_refuses_during_a_sync(self):
         import bagholder
