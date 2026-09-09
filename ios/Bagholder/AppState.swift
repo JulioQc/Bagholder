@@ -213,21 +213,30 @@ final class Book: ObservableObject {
     private func startPortfolioLoop() {
         if portfolioTask != nil { return }
         portfolioTask = Task { [weak self] in
+            // the first read as soon as the app is ready, then every five minutes; a
+            // failed read is said on the console, not swallowed
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 300_000_000_000)
                 guard let self, !Task.isCancelled else { return }
-                guard self.result != nil, self.phase == .ready, let rec = Keychain.load(), let cookie = rec["oauth_cookie"] as? String else { continue }
-                guard let snap = try? await WSPull.refreshPortfolio(oauthCookie: cookie, wssdi: rec["wssdi"] as? String) else { continue }
-                if Task.isCancelled { return }
-                await MainActor.run { [weak self] in
-                    guard let self, var result = self.result else { return }
-                    result.accounts = snap.accounts
-                    result.balances = snap.balances
-                    result.margin = snap.margin
-                    self.result = result
-                    LastPullStore.save(result)
-                    self.rebuild()
+                guard self.result != nil, self.phase == .ready, let rec = Keychain.load(), let cookie = rec["oauth_cookie"] as? String else {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    continue
                 }
+                do {
+                    let snap = try await WSPull.refreshPortfolio(oauthCookie: cookie, wssdi: rec["wssdi"] as? String)
+                    if Task.isCancelled { return }
+                    await MainActor.run { [weak self] in
+                        guard let self, var result = self.result else { return }
+                        result.accounts = snap.accounts
+                        result.balances = snap.balances
+                        result.margin = snap.margin
+                        self.result = result
+                        LastPullStore.save(result)
+                        self.rebuild()
+                    }
+                } catch {
+                    print("bagholder portfolio: refresh failed: \(error)")
+                }
+                try? await Task.sleep(nanoseconds: 300_000_000_000)
             }
         }
     }
