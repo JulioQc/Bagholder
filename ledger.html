@@ -1300,7 +1300,7 @@ function cashflowHtml(m) {
   const rows = sortRows(c.rows || [], cs.key, cs.dir, (r, k) => r[k]);
   const other = c.other || [];
   const otherLine = "";
-  return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px;min-height:380px"><div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px">' + tiles + "</div>" +
+  return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px;min-height:380px"><div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px">' + tiles + "</div>" +
     (note ? '<div class="dim" style="font-size:11px;line-height:1.5">' + esc(note) + "</div>" : "") +
     '<div class="card elev-sm" style="padding:16px 18px 12px"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><h5>Cashflow</h5>' +
     '<div style="display:flex;align-items:center;gap:14px;font-size:11px;color:var(--ink60)"><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--accent-bar)"></span>Distributions</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--neg)"></span>Margin interest</span></div></div>' +
