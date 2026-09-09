@@ -227,7 +227,7 @@ Six tiles in the style of the dashboard tiles, CAD, dividends in scope:
 | Margin used | The Portfolio tab's Margin used over the accounts in scope | Average margin interest per charged month: the Interest charge rows in scope, summed in CAD, ÷ the number of months carrying one, as `$x/mo margin interest` |
 | Yield on cost | Annual income of all rated holdings ÷ their book cost | Projected monthly income, that annual income ÷ 12, as `$x/mo` |
 
-**Monthly distributions.** One bar per month from the first payment to the current month (or to the end of the date filter), CAD, an empty bar for a month with nothing paid yet, six axis labels, hover shows month and amount.
+**Cashflow.** One bar per month from the first payment to the current month (or to the end of the date filter), CAD, an empty bar for a month with nothing paid yet, six axis labels. The month's distributions in the accent colour, with the month's margin interest (the Interest charge rows in scope, CAD) drawn over it from the same baseline at the same width in the negative colour, so the accent left showing above it is the net; in a month where the interest exceeds the distributions the negative colour rises above the accent. The scale fits the taller of the two. The title row carries the legend at the right. Hover shows the month, Distributions, Margin interest (with a minus sign) and Net cashflow (signed, coloured).
 
 **Cashflow Positions.** One row per open long position in a dividend-paying symbol, per account:
 
