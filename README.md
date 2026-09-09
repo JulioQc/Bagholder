@@ -80,7 +80,7 @@ Then:
 docker compose up -d
 ```
 
-and open `http://127.0.0.1:8765`. The port is published on the host's loopback only. The image is published with every release; the header says when a new one is out, as on the desktop, and moving to it is a pull rather than the Update button:
+and open `http://127.0.0.1:8765`. The port is published on the host's loopback only. The image is published with every release; the header says when a new one is out and links to it, as on the desktop, and moving to it is a pull rather than the Update button:
 
 ```
 docker compose pull && docker compose up -d

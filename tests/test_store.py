@@ -1389,7 +1389,7 @@ class InAppUpdateTest(unittest.TestCase):
             rec = bagholder.check_for_update(datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc))
             self.assertEqual((rec["ok"], rec["updateAvailable"], rec["latest"]), (True, True, newer))
             self.assertFalse(bagholder.can_update(rec), "seen, not installable")
-            self.assertEqual(bagholder.status_payload()["updateBy"], "image")
+            self.assertEqual((bagholder.status_payload()["updateBy"], bagholder.status_payload()["updateUrl"]), ("image", bagholder.IMAGE_PAGE), "told of the release, sent to the image")
             out = bagholder.start_update()
             self.assertEqual((out["ok"], out["error"]), (False, bagholder.UPDATES_OFF_MESSAGE))
         self.assertEqual(bagholder.status_payload()["updateBy"], "app")

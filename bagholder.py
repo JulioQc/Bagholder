@@ -543,6 +543,7 @@ UPDATE_CHECK_HOURS = 1   # a release is a click away now, so the check is hourly
 BIND_HOST = (os.environ.get("BAGHOLDER_BIND") or "").strip() or "127.0.0.1"
 UPDATES_OFF = bool((os.environ.get("BAGHOLDER_NO_UPDATE") or "").strip())
 UPDATES_OFF_MESSAGE = "This copy is updated with docker compose pull; a new release is a new image."
+IMAGE_PAGE = REPO_URL + "/pkgs/container/bagholder"   # where a container copy's header sends the user for a new release
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
@@ -3413,7 +3414,7 @@ def status_payload():
             "version": APP_VERSION,
             "latestVersion": str(update_status().get("latest") or ""),
             "updateAvailable": bool(update_status().get("updateAvailable")),
-            "updateUrl": str(update_status().get("url") or REPO_URL),
+            "updateUrl": IMAGE_PAGE if UPDATES_OFF else str(update_status().get("url") or REPO_URL),
             "canUpdate": can_update(),
             "updateBy": "image" if UPDATES_OFF else "app",
             "updating": str(_state.get("updating") or ""),
