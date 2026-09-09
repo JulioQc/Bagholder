@@ -1329,7 +1329,7 @@ function pieSlices(rows) {
 function pieCardHtml(rows) {
   const p = pieSlices(rows);
   const fmt = (v) => money0(v) + "/mo";
-  const R = 44, W = 14, C = 60, SIZE = 264;
+  const R = 44, W = 14, C = 60, SIZE = 322;
   let acc = 0;
   const arcs = p.items.map((x, i) => {
     const a0 = acc * 2 * Math.PI - Math.PI / 2, a1 = (acc + x.share) * 2 * Math.PI - Math.PI / 2;
@@ -1341,10 +1341,10 @@ function pieCardHtml(rows) {
   }).join("");
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
     '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5></div>' +
-    (p.items.length ? '<div id="piePlot" data-hover="pie" style="display:flex;gap:28px;align-items:center;justify-content:center;flex:1;min-height:0">' +
-      '<div style="position:relative;width:' + SIZE + 'px;height:' + SIZE + 'px;flex:none"><svg viewBox="0 0 120 120" style="width:' + SIZE + 'px;height:' + SIZE + 'px;display:block">' + arcs + "</svg>" +
+    (p.items.length ? '<div id="piePlot" data-hover="pie" style="display:flex;gap:28px;align-items:center;flex:1;min-height:0">' +
+      '<div style="position:relative;flex:none;width:max(200px, min(' + SIZE + 'px, 100% - 198px));aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
       '<div id="pieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">Projected</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(p.total) + "</div></div></div>" +
-      '<div id="pieLegend" class="scroll" style="flex:0 1 auto;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
+      '<div id="pieLegend" class="scroll" style="flex:1 1 auto;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;column-gap:12px;row-gap:12px;align-content:center;align-items:center;font-size:12.5px">' +
       p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.symbol) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + fmt(x.v) + '</span><span class="tab muted" style="text-align:right;white-space:nowrap;min-width:44px">' + pctPlain(x.share) + "</span></span>").join("") +
       "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No income holdings in scope.</div>') + "</div>";
 }
