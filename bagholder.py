@@ -2062,15 +2062,21 @@ def parse_margin(data):
 
 
 def fetch_margin(sess, account_ids):
-    """One buying-power request per account; only accounts that answer are rows."""
+    """One buying-power request per account; only accounts that answer are rows.
+    A request that fails is reported once on the terminal, not hidden."""
     rows = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    failed = 0
+    first_error = ""
     for aid in account_ids or []:
         if not aid:
             continue
         try:
             data = graphql(sess, "FetchAccountCurrentMarginBuyingPowerV2", {"accountId": aid, "currency": "CAD"})
-        except Exception:
+        except Exception as e:
+            failed += 1
+            if not first_error:
+                first_error = e.__class__.__name__ + (": " + str(e) if str(e) else "")
             continue
         parsed = parse_margin(data)
         if parsed is None:
@@ -2078,6 +2084,8 @@ def fetch_margin(sess, account_ids):
         parsed["accountId"] = aid
         parsed["fetchedAt"] = now
         rows.append(parsed)
+    if failed:
+        sys.stderr.write("bagholder portfolio: buying power request failed for %d of %d accounts (%s)\n" % (failed, len([a for a in account_ids or [] if a]), first_error))
     return rows
 
 
@@ -2086,32 +2094,43 @@ PORTFOLIO_REFRESH_MINUTES = 5
 
 def refresh_portfolio():
     """Net liquidation values, cash balances and buying power, read again between
-    syncs so the Portfolio tiles move with the day. Never raises."""
+    syncs so the Portfolio tiles move with the day. Never raises; says what it
+    did on the terminal, since a tile showing a dash must be explainable."""
     with _lock:
-        if _state["syncing"] or not _state["connected"]:
-            return {"ok": False, "skipped": True}
+        if _state["syncing"]:
+            return {"ok": False, "skipped": "sync running"}
+        if not _state["connected"]:
+            return {"ok": False, "skipped": "not connected"}
     try:
         sess = load_session()
         identity = _identity_from(sess or {})
         if not sess or not sess.get("access_token") or not identity:
-            return {"ok": False, "skipped": True}
+            sys.stderr.write("bagholder portfolio: no session to read with\n")
+            return {"ok": False, "skipped": "no session"}
         accounts = fetch_all_accounts(sess, identity)
         ids = [a.get("id") for a in accounts if a.get("id")]
         if not ids:
-            return {"ok": False, "skipped": True}
+            sys.stderr.write("bagholder portfolio: Wealthsimple returned no accounts\n")
+            return {"ok": False, "skipped": "no accounts"}
         balances = fetch_balances(sess, ids)
         margin = fetch_margin(sess, ids)
         store.replace_accounts([slim_account(a) for a in accounts])
         store.replace_balances(balances)
         store.replace_margin(margin)
         model.invalidate()
+        available = sum(1 for m in margin if m.get("buyingPower") is not None)
+        sys.stderr.write("bagholder portfolio: %d accounts, %d balances, buying power for %d of %d margin accounts\n" % (len(ids), len(balances), available, len(margin)))
         return {"ok": True, "accounts": len(ids), "balances": len(balances), "margin": len(margin)}
-    except Exception:
-        return {"ok": False, "skipped": True}
+    except Exception as e:
+        sys.stderr.write("bagholder portfolio: failed: %s\n" % (e.__class__.__name__ + (": " + str(e) if str(e) else "")))
+        return {"ok": False, "skipped": "error"}
 
 
 def portfolio_loop():
-    """The Portfolio figures Wealthsimple states, every PORTFOLIO_REFRESH_MINUTES while connected."""
+    """The Portfolio figures Wealthsimple states: once at start, then every
+    PORTFOLIO_REFRESH_MINUTES while connected. The first read does not wait,
+    so the tiles are filled by the time the page is up."""
+    refresh_portfolio()
     while not _stop.wait(60 * PORTFOLIO_REFRESH_MINUTES):
         refresh_portfolio()
 
