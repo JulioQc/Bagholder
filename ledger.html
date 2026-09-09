@@ -196,7 +196,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-09.2"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-09.3"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -461,7 +461,8 @@ function headerHtml() {
   return '<div id="hdr" style="display:flex;align-items:center;gap:22px;padding:12px 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
     '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span>' + (state.status.version ? '<span class="muted" style="font-size:11px;margin-left:8px">v' + esc(state.status.version) + "</span>" : "") + (state.status.updateAvailable && !state.status.updating ? (state.status.canUpdate
       ? '<button class="pill" data-act="update" style="font-size:11px;margin-left:8px;padding:1px 8px;width:auto;color:var(--accent-300)">Update to ' + esc(state.status.latestVersion) + "</button>"
-      : '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="font-size:11px;margin-left:8px;color:var(--accent-300);text-decoration:none">Update available</a>') : "") + "</div>" +
+      : '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="font-size:11px;margin-left:8px;color:var(--accent-300);text-decoration:none">' +
+        (state.status.updateBy === "image" ? esc(state.status.latestVersion) + " available · docker compose pull" : "Update available") + "</a>") : "") + "</div>" +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
     '<span style="font-size:12px;color:var(--ink55)">' + (state.notice ? '<span class="' + (state.noticeKind === "err" ? "status-err" : "") + '">' + esc(state.notice) + "</span>" : syncLine()) + "</span>" +
     '<div style="position:relative" data-pop="filter">' +

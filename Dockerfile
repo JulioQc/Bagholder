@@ -10,7 +10,8 @@ RUN mkdir -p /data
 
 # /data holds the database and the login; the server answers every interface of
 # the container (compose publishes it on the host's loopback only); no browser
-# opens at start and no update is downloaded: a new release is a new image.
+# opens at start, and a release is announced in the header but never installed
+# into the container: a new release is a new image, pulled.
 ENV BAGHOLDER_HOME=/data \
     BAGHOLDER_PORT=8765 \
     BAGHOLDER_BIND=0.0.0.0 \

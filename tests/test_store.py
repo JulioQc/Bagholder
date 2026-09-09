@@ -1381,11 +1381,18 @@ class InAppUpdateTest(unittest.TestCase):
             self.assertTrue(host_ok(Peer("172.18.0.1", "127.0.0.1:8798")))
             self.assertFalse(host_ok(Peer("172.18.0.1", "localhost:8765")))
             self.assertFalse(host_ok(Peer("172.18.0.1", "bagholder.example:8765")))
-        with mock.patch.object(bagholder, "UPDATES_OFF", True), mock.patch.object(bagholder, "_http_json", side_effect=AssertionError("asked GitHub")):
+        # the container still hears of a release; it is told to pull, never installs into itself
+        mine = bagholder.parse_version(bagholder.APP_VERSION)
+        newer = "v%d.%d.%d" % (mine[0], mine[1], mine[2] + 1)
+        with mock.patch.object(bagholder, "UPDATES_OFF", True), \
+             mock.patch.object(bagholder, "_http_json", return_value={"tag_name": newer, "html_url": "https://github.com/x/y/releases/tag/" + newer, "assets": [{"name": "bagholder-%s-web.zip" % newer, "browser_download_url": "u"}]}):
             rec = bagholder.check_for_update(datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc))
-            self.assertEqual((rec["ok"], rec["updateAvailable"]), (False, False))
+            self.assertEqual((rec["ok"], rec["updateAvailable"], rec["latest"]), (True, True, newer))
+            self.assertFalse(bagholder.can_update(rec), "seen, not installable")
+            self.assertEqual(bagholder.status_payload()["updateBy"], "image")
             out = bagholder.start_update()
             self.assertEqual((out["ok"], out["error"]), (False, bagholder.UPDATES_OFF_MESSAGE))
+        self.assertEqual(bagholder.status_payload()["updateBy"], "app")
         self.assertEqual(bagholder.cli_mode(["bagholder.py"]), "serve")
         self.assertEqual(bagholder.cli_mode(["bagholder.py", "--connect"]), "connect")
         with self.assertRaises(SystemExit):

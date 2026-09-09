@@ -537,15 +537,16 @@ UPDATE_HEALTHY_SEC = 20          # a restarted server alive this long is a good 
 UPDATE_MAX_BYTES = 50 * 1024 * 1024
 UPDATE_CHECK_HOURS = 1   # a release is a click away now, so the check is hourly and at every start
 # A copy in a container (the Dockerfile): bound to every interface of the container while
-# compose publishes it on the host's loopback only, and never updating itself, since a new
-# release is a new image. Both empty for the app on a desktop.
+# compose publishes it on the host's loopback only, and never installing a release into
+# itself, since a new release is a new image; it still checks for one and says so in the
+# header, where the pull command stands in for the Update button. Both empty on a desktop.
 BIND_HOST = (os.environ.get("BAGHOLDER_BIND") or "").strip() or "127.0.0.1"
 UPDATES_OFF = bool((os.environ.get("BAGHOLDER_NO_UPDATE") or "").strip())
-UPDATES_OFF_MESSAGE = "Updates are off in this copy; a new release is a new image."
+UPDATES_OFF_MESSAGE = "This copy is updated with docker compose pull; a new release is a new image."
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-09.2"
+PROTOCOL = "2026-09-09.3"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -3414,6 +3415,7 @@ def status_payload():
             "updateAvailable": bool(update_status().get("updateAvailable")),
             "updateUrl": str(update_status().get("url") or REPO_URL),
             "canUpdate": can_update(),
+            "updateBy": "image" if UPDATES_OFF else "app",
             "updating": str(_state.get("updating") or ""),
             "updateError": str(_state.get("updateError") or ""),
         }
@@ -3534,11 +3536,8 @@ def parse_version(tag):
 
 def check_for_update(now=None):
     """Ask GitHub for the latest release and compare its tag with APP_VERSION.
-    Returns the record stored in meta: {checkedAt, ok, latest, url, updateAvailable}. Never raises.
-    With updates off nothing is asked and nothing is stored."""
+    Returns the record stored in meta: {checkedAt, ok, latest, url, updateAvailable}. Never raises."""
     now = now or datetime.now(timezone.utc)
-    if UPDATES_OFF:
-        return {"checkedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "ok": False, "latest": "", "url": REPO_URL + "/releases/latest", "updateAvailable": False}
     record = {"checkedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "ok": False, "latest": "", "url": REPO_URL + "/releases/latest", "updateAvailable": False}
     try:
         rel = _http_json("GET", RELEASE_URL, headers={"Accept": "application/vnd.github+json", "User-Agent": "Bagholder/" + APP_VERSION}, timeout=30)
@@ -3610,7 +3609,7 @@ def git_update_ready():
 
 def can_update(rec=None):
     rec = rec if rec is not None else update_status()
-    if not rec.get("updateAvailable"):
+    if not rec.get("updateAvailable") or UPDATES_OFF:
         return False
     if update_mode() == "git":
         return git_update_ready()[0]
@@ -4274,8 +4273,7 @@ def main():
     t = threading.Thread(target=auto_sync_loop, name="bagholder-auto-sync", daemon=True)
     t.start()
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
-    if not UPDATES_OFF:
-        threading.Thread(target=check_for_update, name="bagholder-update-check", daemon=True).start()
+    threading.Thread(target=check_for_update, name="bagholder-update-check", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
     threading.Thread(target=portfolio_loop, name="bagholder-portfolio-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
