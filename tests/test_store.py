@@ -1426,7 +1426,7 @@ class InAppUpdateTest(unittest.TestCase):
         typed = [(p["type"], p["key"], p.get("windowsVirtualKeyCode")) for m, p in calls if m == "Input.dispatchKeyEvent" and p["key"] in "1234567"]
         self.assertEqual(typed[:2], [("keyDown", "7", 55), ("keyUp", "7", 55)], "a keystroke is a real key event")
         self.assertEqual(len(typed), 2 + 12, "a pasted six-digit code is six keystrokes")
-        enter = [p for m, p in calls if m == "Input.dispatchKeyEvent"]
+        enter = [p for m, p in calls if m == "Input.dispatchKeyEvent" and p["key"] == "Enter"]
         self.assertEqual([(p["type"], p["key"], p["windowsVirtualKeyCode"]) for p in enter], [("keyDown", "Enter", 13), ("keyUp", "Enter", 13)])
         self.assertEqual([p for m, p in calls if m == "Input.dispatchMouseEvent" and p["type"] == "mouseWheel"][0]["deltaY"], 120.0)
         # no window: no frame, and input says so

@@ -3204,6 +3204,77 @@ def login_frame():
         return None
 
 
+_cast = {"frame": None, "seq": 0, "cond": threading.Condition()}
+
+
+def _screencast_loop(attempt):
+    """Chromium pushes the login window's frames as they change (Page.startScreencast)
+    on a socket of its own; the latest frame waits for the page's stream. Runs while
+    the attempt is live, reconnecting when the window's socket drops."""
+    while _attempt_is(attempt):
+        with _lock:
+            if not _state.get("capturing"):
+                return
+        pages = _cdp_pages(DEBUG_PORTS[0])
+        if not pages:
+            time.sleep(0.5)
+            continue
+        ws = None
+        try:
+            ws = _ws_connect(pages[0]["webSocketDebuggerUrl"], timeout=CAPTURE_CALL_SEC)
+            _cdp_call(ws, "Page.startScreencast", {"format": "jpeg", "quality": 60, "maxWidth": LOGIN_VIEW_SIZE[0], "maxHeight": LOGIN_VIEW_SIZE[1], "everyNthFrame": 1}, timeout=CAPTURE_CALL_SEC)
+            while _attempt_is(attempt):
+                with _lock:
+                    if not _state.get("capturing"):
+                        return
+                try:
+                    opcode, data = ws.recv_message(timeout=2)
+                except TimeoutError:
+                    continue
+                if opcode not in (0x1, 0x2):
+                    continue
+                msg = json.loads(data.decode("utf-8"))
+                if msg.get("method") != "Page.screencastFrame":
+                    continue
+                p = msg.get("params") or {}
+                frame = base64.b64decode(p.get("data") or "")
+                if frame:
+                    with _cast["cond"]:
+                        _cast["frame"] = frame
+                        _cast["seq"] += 1
+                        _cast["cond"].notify_all()
+                # acknowledged without waiting for the answer: waiting would eat the next frames
+                ws.send_text(json.dumps({"id": ws._next_id, "method": "Page.screencastFrameAck", "params": {"sessionId": p.get("sessionId")}}))
+                ws._next_id += 1
+        except Exception:
+            time.sleep(0.5)
+        finally:
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+
+
+def login_stream(write, alive):
+    """The login window as a multipart JPEG stream: each frame as Chromium pushes it,
+    until the app stops waiting for a login or the reader goes away."""
+    last = -1
+    while True:
+        with _lock:
+            if not _state.get("capturing"):
+                return
+        with _cast["cond"]:
+            if _cast["seq"] == last:
+                _cast["cond"].wait(1.0)
+            if _cast["seq"] == last or _cast["frame"] is None:
+                continue
+            frame, last = _cast["frame"], _cast["seq"]
+        if not alive():
+            return
+        write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(frame) + frame + b"\r\n")
+
+
 _VIEW_KEYS = {"Enter": 13, "Tab": 9, "Backspace": 8, "Delete": 46, "Escape": 27, "ArrowLeft": 37, "ArrowUp": 38,
               "ArrowRight": 39, "ArrowDown": 40, "Home": 36, "End": 35}
 
@@ -3357,6 +3428,10 @@ def start_login_browser():
             daemon=True,
         )
         t.start()
+        if LOGIN_VIEW:
+            with _cast["cond"]:
+                _cast["frame"], _cast["seq"] = None, 0
+            threading.Thread(target=_screencast_loop, args=(attempt,), name="bagholder-screencast", daemon=True).start()
         return {"ok": True}
     except Exception:
         return {
@@ -4081,6 +4156,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if path == "/api/login/stream":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            try:
+                login_stream(lambda chunk: (self.wfile.write(chunk), self.wfile.flush()), lambda: not self.wfile.closed)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            return
         if path == "/api/login/frame":
             if not self._gate():
                 self._send(403, {"ok": False})

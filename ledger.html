@@ -528,18 +528,10 @@ function loginViewHtml() {
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><h5>Sign in to Wealthsimple</h5><button class="btn btn-secondary" data-act="cancelConnect">Cancel</button></div>' +
     '<img id="loginFrame" data-act="loginClick" alt="" draggable="false" style="display:block;width:auto;height:auto;max-width:100%;max-height:calc(100vh - 120px);min-width:320px;min-height:200px;background:#fff;border-radius:6px;cursor:default;user-select:none"></div></div>';
 }
-let _loginFrameTimer = 0, _loginFrameUrl = "";
+// the window is a live stream: Chromium pushes a frame whenever it changes
 function loginFrameLoop() {
-  clearTimeout(_loginFrameTimer);
-  if (!state.loginView) return;
-  fetch("/api/login/frame?t=" + Date.now(), { cache: "no-store" }).then((r) => (r.status === 200 ? r.blob() : null)).then((blob) => {
-    const img = document.getElementById("loginFrame");
-    if (blob && img) {
-      const url = URL.createObjectURL(blob);
-      img.onload = () => { if (_loginFrameUrl) URL.revokeObjectURL(_loginFrameUrl); _loginFrameUrl = url; };
-      img.src = url;
-    }
-  }).catch(() => {}).finally(() => { if (state.loginView) _loginFrameTimer = setTimeout(loginFrameLoop, 250); });
+  const img = document.getElementById("loginFrame");
+  if (img && state.loginView && !img.src) img.src = "/api/login/stream?t=" + Date.now();
 }
 function loginSend(ev) { return api("POST", "/api/login/input", ev); }
 function loginFramePoint(e) {
@@ -553,7 +545,7 @@ function loginKey(e) {
   if (e.key.length === 1) { e.preventDefault(); loginSend({ kind: "text", text: e.key }); }
   else if (named.indexOf(e.key) >= 0) { e.preventDefault(); loginSend({ kind: "key", key: e.key }); }
 }
-function closeLoginView() { state.loginView = false; clearTimeout(_loginFrameTimer); if (_loginFrameUrl) { URL.revokeObjectURL(_loginFrameUrl); _loginFrameUrl = ""; } }
+function closeLoginView() { state.loginView = false; const img = document.getElementById("loginFrame"); if (img) img.src = ""; }
 function modalShell(title, body, width) {
   return '<div id="modalDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="modal"><div class="card elev-md" style="width:' + (width || 440) + 'px;max-width:100%;padding:18px 20px;max-height:90vh;overflow:auto"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><h5>' + title + '</h5><button class="btn btn-icon btn-secondary" data-act="closeModal" aria-label="Close" style="margin-left:auto;width:28px;height:28px">×</button></div>' + body + "</div></div>";
 }
@@ -1470,6 +1462,7 @@ function render() {
   const focusId = document.activeElement ? document.activeElement.id : "";
   const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
   root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
+  if (state.loginView) loginFrameLoop();   // a redraw makes a new image element: reattach the stream
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
   if (focusId === "valueQuery" || focusId === "searchInput") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
