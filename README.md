@@ -80,7 +80,13 @@ Then:
 docker compose up -d
 ```
 
-and open `http://127.0.0.1:8765`. The port is published on the host's loopback only, and the copy in the container never updates itself: on a new release, `git pull` and `docker compose up -d --build`.
+and open `http://127.0.0.1:8765`. The port is published on the host's loopback only. The image is published with every release, so the copy in the container never updates itself; to move to a new release:
+
+```
+docker compose pull && docker compose up -d
+```
+
+To build the image yourself instead, `docker build -t bagholder .` and point the compose file's `image` at `bagholder`.
 
 ## First use
 
