@@ -1583,13 +1583,13 @@ function syncNow() {
   render();
   api("POST", "/api/sync").then((r) => {
     if (!r || !r.ok) { state.status.syncing = false; state.status.error = (r && r.error) || "Sync failed."; render(); return; }
-    const t0 = Date.now();
+    // the page waits as long as the server says it is syncing: a first pull of a large
+    // book runs well past five minutes, and only the server knows when it is done
     const tick = () => api("GET", "/api/status").then((st) => {
       const wasSyncing = state.status.syncing;
       state.status = Object.assign({}, state.status, st);
       renderHeaderOnly();
       if (st && !st.syncing) { if (wasSyncing || st.lastSync) loadModel(); return; }
-      if (Date.now() - t0 > 300000) { state.status.syncing = false; state.status.error = state.status.error || "Sync timed out."; render(); return; }
       setTimeout(tick, 1500);
     });
     setTimeout(tick, 1000);
