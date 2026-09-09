@@ -874,6 +874,31 @@ fun PortfolioScreen(chrome: Chrome, onHolding: (String) -> Unit) {
 }
 
 @Composable
+private fun Readout(label: String, value: String, color: Color) {
+    val t = LocalTheme.current
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 11.sp, color = t.ink55)
+        Text(value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = color)
+    }
+}
+
+@Composable
+private fun Legend(color: Color, label: String) {
+    val t = LocalTheme.current
+    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).background(color))
+        Text(label, fontSize = 11.sp, color = t.ink60)
+    }
+}
+
+/** The month's margin interest, CAD, from the Interest charge rows in scope. */
+private fun interestByMonth(cf: com.bagholder.model.CashflowView): Map<String, Double> {
+    val out = LinkedHashMap<String, Double>()
+    for (r in cf.other) if (r.kind == "Interest charge") out[r.date.take(7)] = (out[r.date.take(7)] ?: 0.0) - r.amountCad
+    return out
+}
+
+@Composable
 fun HoldingRow(p: Position, onClick: () -> Unit) {
     val t = LocalTheme.current
     val dc = p.dayChange
@@ -991,7 +1016,6 @@ fun rateLine(h: Holding): String {
 fun CashflowScreen(chrome: Chrome) {
     val t = LocalTheme.current
     val v = Book.view
-    var allocBy by remember { mutableStateOf(Store.allocationBy) }
     var picked by remember { mutableStateOf<Int?>(null) }
     var distPick by remember { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxSize()) {
@@ -1003,27 +1027,38 @@ fun CashflowScreen(chrome: Chrome) {
             if (cf.skippedFilters.isNotEmpty()) item { Text("Ignoring " + cf.skippedFilters.joinToString(", ") + ".", fontSize = 13.sp, color = t.ink55) }
             item { CashflowTiles(cf) }
             item {
-                // the projected month at the card's top right; the pressed month's payout while the chart is pressed
+                // the projected month at the card's top right; the pressed month's distributions,
+                // margin interest and net while the chart is pressed
                 val projected = cf.holdings.sumOf { (it.annual ?: 0.0) / 12 }
-                val shown = distPick?.let { cf.months.getOrNull(it)?.value } ?: projected
-                Card("Distributions", trailing = { Text(Fmt.money(shown), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink) }) {
+                val interest = interestByMonth(cf)
+                val picked = distPick?.let { cf.months.getOrNull(it) }
+                Card("Cashflow", trailing = {
+                    if (picked != null) {
+                        val intr = interest[picked.key] ?: 0.0
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Readout("Distributions", Fmt.money(picked.value), t.ink)
+                            Readout("Margin interest", Fmt.money(if (intr > 0) -intr else 0.0), t.neg)
+                            Readout("Net", Fmt.signedMoney(picked.value - intr), t.signed(picked.value - intr))
+                        }
+                    } else Text(Fmt.money(projected), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
+                }) {
                     if (cf.months.isEmpty()) Muted("No distributions in this span.")
-                    else PnlBarsChart(cf.months.map { m -> com.bagholder.model.MonthBucket(m.key, m.label).apply { value = m.value; count = m.count } }, distPick, { distPick = it }, color = t.accent)
+                    else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                            Legend(t.accent, "Distributions")
+                            Legend(t.neg, "Margin interest")
+                        }
+                        PnlBarsChart(cf.months.map { m -> com.bagholder.model.MonthBucket(m.key, m.label).apply { value = m.value; count = m.count } }, distPick, { distPick = it }, color = t.accent,
+                            overlay = cf.months.map { interest[it.key] ?: 0.0 })
+                    }
                 }
             }
             item {
                 val items = cf.holdings.map { h ->
-                    Pair(h.symbol + if (cf.holdings.count { it.symbol == h.symbol } > 1) " · " + h.account else "", if (allocBy == "projected") (h.annual ?: 0.0) / 12 else h.qty * h.last)
+                    Pair(h.symbol + if (cf.holdings.count { it.symbol == h.symbol } > 1) " · " + h.account else "", (h.annual ?: 0.0) / 12)
                 }.filter { it.second > 0 }.sortedByDescending { it.second }
                 val total = items.sumOf { it.second }
-                Card("Allocation", trailing = {
-                    Row {
-                        for (k in listOf("market", "projected")) {
-                            Text(if (k == "market") "Market" else "Projected", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (allocBy == k) t.ink else t.ink55,
-                                modifier = Modifier.clip(RoundedCornerShape(7.dp)).background(if (allocBy == k) t.well else Color.Transparent).clickable { allocBy = k; Store.allocationBy = k; picked = null }.padding(horizontal = 10.dp, vertical = 4.dp))
-                        }
-                    }
-                }) {
+                Card("Allocation") {
                     if (items.isEmpty()) Muted("No income holdings in scope.")
                     else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         DonutChart(items, picked, { picked = it })
@@ -1092,19 +1127,22 @@ fun CashflowScreen(chrome: Chrome) {
     }
 }
 
-/** YTD and Yield on cost first, then All time and the past years. */
+/** YTD and Yield on cost first, then All time with Margin used (or Last 12 months), then the past years. */
 @Composable
 private fun CashflowTiles(cf: CashflowView) {
     val ytd = cf.tiles.firstOrNull { it.label.endsWith("YTD") }
     val yoc = cf.tiles.firstOrNull { it.label == "Yield on cost" }
     val all = cf.tiles.firstOrNull { it.label == "All time" }
-    val years = cf.tiles.filter { !it.label.endsWith("YTD") && it.label != "Yield on cost" && it.label != "All time" && it.label != "Margin used" && it.label != "Last 12 months" }.reversed()
-    val ordered = listOfNotNull(ytd, yoc, all) + years
+    val margin = cf.tiles.firstOrNull { it.label == "Margin used" || it.label == "Last 12 months" }
+    val fixed = setOf("Yield on cost", "All time", "Margin used", "Last 12 months")
+    val years = cf.tiles.filter { !it.label.endsWith("YTD") && it.label !in fixed }.reversed()
+    val ordered = listOfNotNull(ytd, yoc, all, margin) + years
     val tiles = mutableListOf<@Composable (Modifier) -> Unit>()
     for (tile in ordered) {
         tiles.add { m ->
-            if (tile.label == "Yield on cost") Tile(tile.label, Fmt.pct(tile.yield, 2, false), Fmt.wholeMoney(tile.earned) + " on " + Fmt.wholeMoney(tile.book), modifier = m)
-            else Tile(tile.label, Fmt.money(tile.total), Fmt.money(tile.perMonth) + " / month", modifier = m)
+            if (tile.label == "Yield on cost") Tile(tile.label, Fmt.pct(tile.yield, 2, false), Fmt.money(tile.projected) + " / mo", modifier = m)
+            else if (tile.label == "Margin used") Tile(tile.label, Fmt.wholeMoney(tile.marginUsed ?: 0.0), Fmt.wholeMoney(tile.interestPerMonth ?: 0.0) + "/mo margin interest", modifier = m)
+            else Tile(tile.label, Fmt.money(tile.total), if (tile.label == "All time") "total earned" else Fmt.money(tile.perMonth) + " / month", modifier = m)
         }
     }
     TilePager(tiles)
