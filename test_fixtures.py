@@ -10,7 +10,6 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures"))
-import model  # noqa: E402
 import make_fixtures  # noqa: E402
 
 
@@ -21,16 +20,7 @@ class FixtureTest(unittest.TestCase):
         for path in paths:
             with open(path) as f:
                 doc = json.load(f)
-            base = model.build_base(doc["snapshot"], doc["market"], {}, today=doc["today"])
-            view = model.build_view(base, doc["filters"])
-            got = make_fixtures.rounded({
-                "kpi": make_fixtures.pick(view["kpi"], make_fixtures.KPI_KEYS),
-                "trades": [dict(make_fixtures.pick(t, make_fixtures.TRADE_KEYS), fills=[x["sub"] for x in sorted(t["fills"], key=lambda x: x["when"])])
-                           for t in sorted(view["trades"], key=lambda t: (t["entryDate"], t["exitDate"], t["symbol"]))],
-                "positions": [make_fixtures.pick(p, make_fixtures.POSITION_KEYS) for p in sorted(view["positions"], key=lambda p: p["symbol"])],
-            })
-            if "cashflowHoldings" in doc["expect"]:
-                got["cashflowHoldings"] = make_fixtures.rounded([make_fixtures.pick(h, make_fixtures.HOLDING_KEYS) for h in sorted(view["cashflow"]["holdings"], key=lambda h: h["symbol"])])
+            got = make_fixtures.expect_from(doc["snapshot"], doc["market"], doc["today"], doc["filters"], doc.get("journal"))
             self.assertEqual(got, doc["expect"], os.path.basename(path))
 
     def test_cases_are_current(self):

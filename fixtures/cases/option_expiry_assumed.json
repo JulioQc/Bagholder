@@ -4,7 +4,16 @@
       "key": "SP500",
       "label": "S&P 500"
     },
-    "bySymbol": [],
+    "bySymbol": [
+      {
+        "avgHold": 28.0,
+        "legs": 1,
+        "n": 1,
+        "pnl": 81.0,
+        "symbol": "BBAI",
+        "winRate": 1.0
+      }
+    ],
     "cashflowCount": 0,
     "cashflowHoldings": [],
     "cashflowMonths": [],
@@ -83,62 +92,108 @@
         }
       ],
       "graded": 0,
-      "ungraded": 0
+      "ungraded": 1
     },
     "kpi": {
-      "avgHold": null,
+      "avgHold": 28.0,
       "avgLoss": 0.0,
-      "avgWin": 0.0,
+      "avgWin": 81.0,
       "breakeven": 0,
-      "count": 0,
-      "expectancy": null,
+      "count": 1,
+      "expectancy": 81.0,
       "grossLoss": 0,
-      "grossWin": 0,
+      "grossWin": 81.0,
       "losses": 0,
-      "profitFactor": 0.0,
-      "realized": 0,
-      "winRate": null,
-      "wins": 0
+      "profitFactor": null,
+      "realized": 81.0,
+      "winRate": 1.0,
+      "wins": 1
     },
-    "monthly": [],
+    "monthly": [
+      {
+        "count": 1,
+        "key": "2026-01",
+        "label": "Jan '26",
+        "value": 81.0
+      }
+    ],
     "options": {
       "accounts": [
         "Trading"
       ],
       "exchanges": [],
       "kinds": [
-        "Shares"
+        "Options"
       ],
       "symbols": [
-        "BBB"
+        "BBAI 02JAN26 5.50 PUT",
+        "ZZZ 17JUL26 10.00 CALL"
       ],
       "tags": [],
-      "years": []
+      "years": [
+        "2026"
+      ]
     },
     "positions": [
       {
         "account": "Trading",
         "alloc": 1.0,
-        "avg": 6.0,
-        "cost": 1200.0,
-        "currency": "CAD",
+        "avg": 1.0,
+        "cost": 100.0,
+        "currency": "USD",
         "exchange": "",
-        "held": 40,
-        "id": "rt:b1",
-        "kind": "Shares",
-        "qty": 200.0,
+        "held": 55,
+        "id": "rt:bto",
+        "kind": "Options",
+        "qty": 1.0,
         "short": false,
-        "symbol": "BBB"
+        "symbol": "ZZZ 17JUL26 10.00 CALL"
       }
     ],
     "positionsSummary": {
-      "book": 1200.0,
+      "book": 100.0,
       "count": 1,
-      "mv": 1400.0,
-      "unreal": 200.0
+      "mv": 100.0,
+      "unreal": 0.0
     },
-    "queue": [],
-    "trades": [],
+    "queue": [
+      {
+        "date": "2026-01-02",
+        "id": "rt:sto",
+        "missing": "no grade or thesis",
+        "pnl": 81.0,
+        "symbol": "BBAI 02JAN26 5.50 PUT"
+      }
+    ],
+    "trades": [
+      {
+        "account": "Trading",
+        "currency": "USD",
+        "entry": 0.3,
+        "entryDate": "2025-12-05",
+        "exchange": "",
+        "exit": 0.0,
+        "exitDate": "2026-01-02",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "grade": "",
+        "holdDays": 28,
+        "id": "rt:sto",
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 60.0,
+        "pnlCad": 81.0,
+        "pnlPct": 1.0,
+        "qty": 2.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "BBAI 02JAN26 5.50 PUT",
+        "tags": []
+      }
+    ],
     "years": []
   },
   "filters": {},
@@ -153,40 +208,40 @@
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "BUY",
-        "activityType": "Trade",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
         "category": "trade",
         "commission": 0,
-        "currency": "CAD",
-        "id": "b1",
+        "currency": "USD",
+        "id": "sto",
         "name": "LUNR",
-        "netCashAmount": -500.0,
-        "occurredAt": "2026-01-05T15:00:00+00:00",
-        "quantity": 100,
-        "rawType": "DIY_BUY",
+        "netCashAmount": 60.0,
+        "occurredAt": "2025-12-05T15:00:00+00:00",
+        "quantity": -2,
+        "rawType": "OPTIONS_SELL",
         "securityId": "",
-        "symbol": "BBB",
-        "transactionDate": "2026-01-05",
-        "unitPrice": 5.0
+        "symbol": "BBAI 02JAN26 5.50 PUT",
+        "transactionDate": "2025-12-05",
+        "unitPrice": 0.3
       },
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "BUY",
-        "activityType": "Trade",
+        "activitySubType": "BUYTOOPEN",
+        "activityType": "OPTIONS_BUY",
         "category": "trade",
         "commission": 0,
-        "currency": "CAD",
-        "id": "b2",
+        "currency": "USD",
+        "id": "bto",
         "name": "LUNR",
-        "netCashAmount": -700.0,
-        "occurredAt": "2026-02-05T15:00:00+00:00",
-        "quantity": 100,
-        "rawType": "DIY_BUY",
+        "netCashAmount": -100.0,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": 1,
+        "rawType": "OPTIONS_BUY",
         "securityId": "",
-        "symbol": "BBB",
-        "transactionDate": "2026-02-05",
-        "unitPrice": 7.0
+        "symbol": "ZZZ 17JUL26 10.00 CALL",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 1.0
       }
     ],
     "balances": [],

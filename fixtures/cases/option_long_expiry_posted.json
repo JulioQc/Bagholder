@@ -4,12 +4,27 @@
       "key": "SP500",
       "label": "S&P 500"
     },
-    "bySymbol": [],
+    "bySymbol": [
+      {
+        "avgHold": 52.0,
+        "legs": 1,
+        "n": 1,
+        "pnl": -108.0,
+        "symbol": "LUNR",
+        "winRate": 0.0
+      }
+    ],
     "cashflowCount": 0,
     "cashflowHoldings": [],
     "cashflowMonths": [],
     "cashflowSkipped": [],
     "cashflowTiles": [
+      {
+        "count": 0,
+        "label": "2023",
+        "perMonth": 0.0,
+        "total": 0
+      },
       {
         "count": 0,
         "label": "2024",
@@ -18,13 +33,7 @@
       },
       {
         "count": 0,
-        "label": "2025",
-        "perMonth": 0.0,
-        "total": 0
-      },
-      {
-        "count": 0,
-        "label": "2026 YTD",
+        "label": "2025 YTD",
         "perMonth": 0.0,
         "total": 0
       },
@@ -83,62 +92,92 @@
         }
       ],
       "graded": 0,
-      "ungraded": 0
+      "ungraded": 1
     },
     "kpi": {
-      "avgHold": null,
-      "avgLoss": 0.0,
+      "avgHold": 52.0,
+      "avgLoss": -108.0,
       "avgWin": 0.0,
       "breakeven": 0,
-      "count": 0,
-      "expectancy": null,
-      "grossLoss": 0,
+      "count": 1,
+      "expectancy": -108.0,
+      "grossLoss": 108.0,
       "grossWin": 0,
-      "losses": 0,
+      "losses": 1,
       "profitFactor": 0.0,
-      "realized": 0,
-      "winRate": null,
+      "realized": -108.0,
+      "winRate": 0.0,
       "wins": 0
     },
-    "monthly": [],
+    "monthly": [
+      {
+        "count": 1,
+        "key": "2025-08",
+        "label": "Aug '25",
+        "value": -108.0
+      }
+    ],
     "options": {
       "accounts": [
         "Trading"
       ],
       "exchanges": [],
       "kinds": [
-        "Shares"
+        "Options"
       ],
       "symbols": [
-        "BBB"
+        "LUNR 22AUG25 8.00 CALL"
       ],
       "tags": [],
-      "years": []
+      "years": [
+        "2025"
+      ]
     },
-    "positions": [
+    "positions": [],
+    "positionsSummary": {
+      "book": 0,
+      "count": 0,
+      "mv": 0,
+      "unreal": 0
+    },
+    "queue": [
       {
-        "account": "Trading",
-        "alloc": 1.0,
-        "avg": 6.0,
-        "cost": 1200.0,
-        "currency": "CAD",
-        "exchange": "",
-        "held": 40,
-        "id": "rt:b1",
-        "kind": "Shares",
-        "qty": 200.0,
-        "short": false,
-        "symbol": "BBB"
+        "date": "2025-08-22",
+        "id": "rt:bto",
+        "missing": "no grade or thesis",
+        "pnl": -108.0,
+        "symbol": "LUNR 22AUG25 8.00 CALL"
       }
     ],
-    "positionsSummary": {
-      "book": 1200.0,
-      "count": 1,
-      "mv": 1400.0,
-      "unreal": 200.0
-    },
-    "queue": [],
-    "trades": [],
+    "trades": [
+      {
+        "account": "Trading",
+        "currency": "USD",
+        "entry": 0.4,
+        "entryDate": "2025-07-01",
+        "exchange": "",
+        "exit": 0.0,
+        "exitDate": "2025-08-22",
+        "fees": 0.0,
+        "fills": [
+          "BUY TO OPEN",
+          "SELL TO CLOSE"
+        ],
+        "grade": "",
+        "holdDays": 52,
+        "id": "rt:bto",
+        "kind": "Options",
+        "mult": 100,
+        "pnl": -80.0,
+        "pnlCad": -108.0,
+        "pnlPct": -1.0,
+        "qty": 2.0,
+        "side": "SELL",
+        "status": "closed",
+        "symbol": "LUNR 22AUG25 8.00 CALL",
+        "tags": []
+      }
+    ],
     "years": []
   },
   "filters": {},
@@ -153,40 +192,40 @@
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "BUY",
-        "activityType": "Trade",
+        "activitySubType": "BUYTOOPEN",
+        "activityType": "OPTIONS_BUY",
         "category": "trade",
         "commission": 0,
-        "currency": "CAD",
-        "id": "b1",
+        "currency": "USD",
+        "id": "bto",
         "name": "LUNR",
-        "netCashAmount": -500.0,
-        "occurredAt": "2026-01-05T15:00:00+00:00",
-        "quantity": 100,
-        "rawType": "DIY_BUY",
+        "netCashAmount": -80.0,
+        "occurredAt": "2025-07-01T15:00:00+00:00",
+        "quantity": 2,
+        "rawType": "OPTIONS_BUY",
         "securityId": "",
-        "symbol": "BBB",
-        "transactionDate": "2026-01-05",
-        "unitPrice": 5.0
+        "symbol": "LUNR 22AUG25 8.00 CALL",
+        "transactionDate": "2025-07-01",
+        "unitPrice": 0.4
       },
       {
         "accountId": "acct-1",
         "accountType": "Trading",
         "activitySubType": "BUY",
-        "activityType": "Trade",
-        "category": "trade",
+        "activityType": "EXPIR",
+        "category": "option_event",
         "commission": 0,
-        "currency": "CAD",
-        "id": "b2",
+        "currency": "USD",
+        "id": "exp",
         "name": "LUNR",
-        "netCashAmount": -700.0,
-        "occurredAt": "2026-02-05T15:00:00+00:00",
-        "quantity": 100,
-        "rawType": "DIY_BUY",
+        "netCashAmount": 0,
+        "occurredAt": "2025-08-22T15:00:00+00:00",
+        "quantity": 2,
+        "rawType": "OPTIONS_EXPIRY",
         "securityId": "",
-        "symbol": "BBB",
-        "transactionDate": "2026-02-05",
-        "unitPrice": 7.0
+        "symbol": "LUNR 22AUG25 8.00 CALL",
+        "transactionDate": "2025-08-22",
+        "unitPrice": 0
       }
     ],
     "balances": [],
@@ -197,5 +236,5 @@
     "syncedAt": "",
     "tradeGroups": []
   },
-  "today": "2026-03-01"
+  "today": "2025-09-01"
 }

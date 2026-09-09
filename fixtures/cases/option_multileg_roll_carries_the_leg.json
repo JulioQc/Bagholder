@@ -6,12 +6,12 @@
     },
     "bySymbol": [
       {
-        "avgHold": 11.5,
+        "avgHold": 224.0,
         "legs": 2,
-        "n": 2,
-        "pnl": 150.0,
-        "symbol": "AAA",
-        "winRate": 0.5
+        "n": 1,
+        "pnl": -23508.9,
+        "symbol": "LUNR",
+        "winRate": 0.0
       }
     ],
     "cashflowCount": 0,
@@ -92,35 +92,29 @@
         }
       ],
       "graded": 0,
-      "ungraded": 2
+      "ungraded": 1
     },
     "kpi": {
-      "avgHold": 11.5,
-      "avgLoss": -50.0,
-      "avgWin": 200.0,
+      "avgHold": 224.0,
+      "avgLoss": -23508.9,
+      "avgWin": 0.0,
       "breakeven": 0,
-      "count": 2,
-      "expectancy": 75.0,
-      "grossLoss": 50.0,
-      "grossWin": 200.0,
+      "count": 1,
+      "expectancy": -23508.9,
+      "grossLoss": 23508.9,
+      "grossWin": 0,
       "losses": 1,
-      "profitFactor": 4.0,
-      "realized": 150.0,
-      "winRate": 0.5,
-      "wins": 1
+      "profitFactor": 0.0,
+      "realized": -23508.9,
+      "winRate": 0.0,
+      "wins": 0
     },
     "monthly": [
       {
         "count": 1,
-        "key": "2026-01",
-        "label": "Jan '26",
-        "value": 200.0
-      },
-      {
-        "count": 1,
-        "key": "2026-02",
-        "label": "Feb '26",
-        "value": -50.0
+        "key": "2026-06",
+        "label": "Jun '26",
+        "value": -23508.9
       }
     ],
     "options": {
@@ -129,10 +123,10 @@
       ],
       "exchanges": [],
       "kinds": [
-        "Shares"
+        "Options"
       ],
       "symbols": [
-        "AAA"
+        "LUNR 21JAN28 12.00 CALL"
       ],
       "tags": [],
       "years": [
@@ -148,73 +142,40 @@
     },
     "queue": [
       {
-        "date": "2026-02-10",
-        "id": "rt:b2",
+        "date": "2026-06-26",
+        "id": "rt:sto2",
         "missing": "no grade or thesis",
-        "pnl": -50.0,
-        "symbol": "AAA"
-      },
-      {
-        "date": "2026-01-20",
-        "id": "rt:b1",
-        "missing": "no grade or thesis",
-        "pnl": 200.0,
-        "symbol": "AAA"
+        "pnl": -23508.9,
+        "symbol": "LUNR 21JAN28 12.00 CALL"
       }
     ],
     "trades": [
       {
         "account": "Trading",
-        "currency": "CAD",
-        "entry": 10.0,
-        "entryDate": "2026-01-05",
+        "currency": "USD",
+        "entry": 5.384545,
+        "entryDate": "2025-11-14",
         "exchange": "",
-        "exit": 12.0,
-        "exitDate": "2026-01-20",
+        "exit": 13.3,
+        "exitDate": "2026-06-26",
         "fees": 0.0,
         "fills": [
-          "BUY",
-          "SELL"
+          "BUY TO OPEN",
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
         ],
         "grade": "",
-        "holdDays": 15,
-        "id": "rt:b1",
-        "kind": "Shares",
-        "mult": 1,
-        "pnl": 200.0,
-        "pnlCad": 200.0,
-        "pnlPct": 0.2,
-        "qty": 100.0,
-        "side": "SELL",
+        "holdDays": 224,
+        "id": "rt:sto2",
+        "kind": "Options",
+        "mult": 100,
+        "pnl": -17414.0,
+        "pnlCad": -23508.9,
+        "pnlPct": -1.470032,
+        "qty": 22.0,
+        "side": "COVER",
         "status": "closed",
-        "symbol": "AAA",
-        "tags": []
-      },
-      {
-        "account": "Trading",
-        "currency": "CAD",
-        "entry": 12.0,
-        "entryDate": "2026-02-02",
-        "exchange": "",
-        "exit": 11.0,
-        "exitDate": "2026-02-10",
-        "fees": 0.0,
-        "fills": [
-          "BUY",
-          "SELL"
-        ],
-        "grade": "",
-        "holdDays": 8,
-        "id": "rt:b2",
-        "kind": "Shares",
-        "mult": 1,
-        "pnl": -50.0,
-        "pnlCad": -50.0,
-        "pnlPct": -0.083333,
-        "qty": 50.0,
-        "side": "SELL",
-        "status": "closed",
-        "symbol": "AAA",
+        "symbol": "LUNR 21JAN28 12.00 CALL",
         "tags": []
       }
     ],
@@ -232,78 +193,78 @@
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "BUY",
-        "activityType": "Trade",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
         "category": "trade",
         "commission": 0,
-        "currency": "CAD",
-        "id": "b1",
+        "currency": "USD",
+        "id": "sto",
         "name": "LUNR",
-        "netCashAmount": -1000.0,
-        "occurredAt": "2026-01-05T15:00:00+00:00",
-        "quantity": 100,
-        "rawType": "DIY_BUY",
+        "netCashAmount": 9956.0,
+        "occurredAt": "2025-10-01T15:00:00+00:00",
+        "quantity": -16,
+        "rawType": "OPTIONS_SELL",
         "securityId": "",
-        "symbol": "AAA",
-        "transactionDate": "2026-01-05",
-        "unitPrice": 10.0
+        "symbol": "LUNR 15JAN27 12.00 CALL",
+        "transactionDate": "2025-10-01",
+        "unitPrice": 6.2225
       },
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "SELL",
-        "activityType": "Trade",
-        "category": "trade",
+        "activitySubType": "FILLED",
+        "activityType": "OPTIONS_MULTILEG",
+        "category": "other",
         "commission": 0,
-        "currency": "CAD",
-        "id": "s1",
+        "currency": "USD",
+        "id": "ml",
         "name": "LUNR",
-        "netCashAmount": 1200.0,
-        "occurredAt": "2026-01-20T15:00:00+00:00",
-        "quantity": -100,
-        "rawType": "DIY_SELL",
+        "netCashAmount": -2160,
+        "occurredAt": "2025-11-14T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "OPTIONS_MULTILEG",
         "securityId": "",
-        "symbol": "AAA",
-        "transactionDate": "2026-01-20",
-        "unitPrice": 12.0
+        "symbol": "LUNR 15JAN27 12.00 CALL",
+        "transactionDate": "2025-11-14",
+        "unitPrice": 0
       },
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "BUY",
-        "activityType": "Trade",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
         "category": "trade",
         "commission": 0,
-        "currency": "CAD",
-        "id": "b2",
+        "currency": "USD",
+        "id": "sto2",
         "name": "LUNR",
-        "netCashAmount": -600.0,
-        "occurredAt": "2026-02-02T15:00:00+00:00",
-        "quantity": 50,
-        "rawType": "DIY_BUY",
+        "netCashAmount": 4050.0,
+        "occurredAt": "2025-12-10T15:00:00+00:00",
+        "quantity": -6,
+        "rawType": "OPTIONS_SELL",
         "securityId": "",
-        "symbol": "AAA",
-        "transactionDate": "2026-02-02",
-        "unitPrice": 12.0
+        "symbol": "LUNR 21JAN28 12.00 CALL",
+        "transactionDate": "2025-12-10",
+        "unitPrice": 6.75
       },
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "SELL",
-        "activityType": "Trade",
+        "activitySubType": "BUYTOOPEN",
+        "activityType": "OPTIONS_BUY",
         "category": "trade",
         "commission": 0,
-        "currency": "CAD",
-        "id": "s2",
+        "currency": "USD",
+        "id": "btc",
         "name": "LUNR",
-        "netCashAmount": 550.0,
-        "occurredAt": "2026-02-10T15:00:00+00:00",
-        "quantity": -50,
-        "rawType": "DIY_SELL",
+        "netCashAmount": -29260.000000000004,
+        "occurredAt": "2026-06-26T15:00:00+00:00",
+        "quantity": 22,
+        "rawType": "OPTIONS_BUY",
         "securityId": "",
-        "symbol": "AAA",
-        "transactionDate": "2026-02-10",
-        "unitPrice": 11.0
+        "symbol": "LUNR 21JAN28 12.00 CALL",
+        "transactionDate": "2026-06-26",
+        "unitPrice": 13.3
       }
     ],
     "balances": [],
@@ -314,5 +275,5 @@
     "syncedAt": "",
     "tradeGroups": []
   },
-  "today": "2026-03-01"
+  "today": "2026-09-01"
 }

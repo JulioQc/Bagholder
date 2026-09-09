@@ -6,11 +6,11 @@
     },
     "bySymbol": [
       {
-        "avgHold": 31.0,
-        "legs": 1,
+        "avgHold": 27.0,
+        "legs": 4,
         "n": 1,
-        "pnl": 570.0,
-        "symbol": "ZZZ",
+        "pnl": 580.5,
+        "symbol": "BBAI",
         "winRate": 1.0
       }
     ],
@@ -95,17 +95,17 @@
       "ungraded": 1
     },
     "kpi": {
-      "avgHold": 31.0,
+      "avgHold": 27.0,
       "avgLoss": 0.0,
-      "avgWin": 570.0,
+      "avgWin": 580.5,
       "breakeven": 0,
       "count": 1,
-      "expectancy": 570.0,
+      "expectancy": 580.5,
       "grossLoss": 0,
-      "grossWin": 570.0,
+      "grossWin": 580.5,
       "losses": 0,
       "profitFactor": null,
-      "realized": 570.0,
+      "realized": 580.5,
       "winRate": 1.0,
       "wins": 1
     },
@@ -114,7 +114,7 @@
         "count": 1,
         "key": "2026-02",
         "label": "Feb '26",
-        "value": 570.0
+        "value": 580.5
       }
     ],
     "options": {
@@ -126,7 +126,7 @@
         "Options"
       ],
       "symbols": [
-        "ZZZ 21AUG26 10.00 CALL"
+        "BBAI 21JAN28 10.00 CALL"
       ],
       "tags": [],
       "years": [
@@ -145,36 +145,37 @@
         "date": "2026-02-01",
         "id": "rt:sto",
         "missing": "no grade or thesis",
-        "pnl": 570.0,
-        "symbol": "ZZZ 21AUG26 10.00 CALL"
+        "pnl": 580.5,
+        "symbol": "BBAI 21JAN28 10.00 CALL"
       }
     ],
     "trades": [
       {
         "account": "Trading",
         "currency": "USD",
-        "entry": 3.0,
-        "entryDate": "2026-01-01",
+        "entry": 0.716667,
+        "entryDate": "2026-01-05",
         "exchange": "",
-        "exit": 1.0,
+        "exit": 0.0,
         "exitDate": "2026-02-01",
         "fees": 0.0,
         "fills": [
           "SELL TO OPEN",
-          "BUY TO CLOSE"
+          "BUY (close + open)",
+          "BUY (close + open)"
         ],
         "grade": "",
-        "holdDays": 31,
+        "holdDays": 27,
         "id": "rt:sto",
         "kind": "Options",
         "mult": 100,
-        "pnl": 400.0,
-        "pnlCad": 570.0,
-        "pnlPct": 0.666667,
-        "qty": 2.0,
+        "pnl": 430.0,
+        "pnlCad": 580.5,
+        "pnlPct": 1.0,
+        "qty": 6.0,
         "side": "COVER",
         "status": "closed",
-        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "symbol": "BBAI 21JAN28 10.00 CALL",
         "tags": []
       }
     ],
@@ -184,10 +185,7 @@
   "journal": {},
   "market": {
     "benchmark": {},
-    "fx": {
-      "2026-01-01": 1.4,
-      "2026-02-01": 1.35
-    }
+    "fx": {}
   },
   "snapshot": {
     "accounts": [],
@@ -202,33 +200,52 @@
         "currency": "USD",
         "id": "sto",
         "name": "LUNR",
-        "netCashAmount": 600,
-        "occurredAt": "2026-01-01T15:00:00+00:00",
-        "quantity": -2,
+        "netCashAmount": 359.99999999999994,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": -3,
         "rawType": "OPTIONS_SELL",
         "securityId": "",
-        "symbol": "ZZZ 21AUG26 10.00 CALL",
-        "transactionDate": "2026-01-01",
-        "unitPrice": 3
+        "symbol": "BBAI 21JAN28 10.00 CALL",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 1.2
       },
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "BUYTOCLOSE",
-        "activityType": "OPTIONS_BUY",
+        "activitySubType": "SELLTOCLOSE",
+        "activityType": "OPTIONS_SELL",
         "category": "trade",
         "commission": 0,
         "currency": "USD",
-        "id": "btc",
+        "id": "cr1",
         "name": "LUNR",
-        "netCashAmount": -200,
+        "netCashAmount": 14,
         "occurredAt": "2026-02-01T15:00:00+00:00",
-        "quantity": 2,
-        "rawType": "OPTIONS_BUY",
+        "quantity": 0,
+        "rawType": "OPTIONS_MULTILEG",
         "securityId": "",
-        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "symbol": "BBAI 21JAN28 10.00 CALL",
         "transactionDate": "2026-02-01",
-        "unitPrice": 1
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "FILLED",
+        "activityType": "OPTIONS_MULTILEG",
+        "category": "other",
+        "commission": 0,
+        "currency": "USD",
+        "id": "cr2",
+        "name": "LUNR",
+        "netCashAmount": 56,
+        "occurredAt": "2026-02-01T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "OPTIONS_MULTILEG",
+        "securityId": "",
+        "symbol": "BBAI 21JAN28 10.00 CALL",
+        "transactionDate": "2026-02-01",
+        "unitPrice": 0
       }
     ],
     "balances": [],
@@ -239,5 +256,5 @@
     "syncedAt": "",
     "tradeGroups": []
   },
-  "today": "2026-03-01"
+  "today": "2026-09-08"
 }

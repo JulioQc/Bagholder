@@ -6,12 +6,12 @@
     },
     "bySymbol": [
       {
-        "avgHold": 11.5,
+        "avgHold": 40.5,
         "legs": 2,
         "n": 2,
-        "pnl": 150.0,
-        "symbol": "AAA",
-        "winRate": 0.5
+        "pnl": 3142.5,
+        "symbol": "ASTS",
+        "winRate": 1.0
       }
     ],
     "cashflowCount": 0,
@@ -95,48 +95,46 @@
       "ungraded": 2
     },
     "kpi": {
-      "avgHold": 11.5,
-      "avgLoss": -50.0,
-      "avgWin": 200.0,
+      "avgHold": 40.5,
+      "avgLoss": 0.0,
+      "avgWin": 1571.25,
       "breakeven": 0,
       "count": 2,
-      "expectancy": 75.0,
-      "grossLoss": 50.0,
-      "grossWin": 200.0,
-      "losses": 1,
-      "profitFactor": 4.0,
-      "realized": 150.0,
-      "winRate": 0.5,
-      "wins": 1
+      "expectancy": 1571.25,
+      "grossLoss": 0,
+      "grossWin": 3142.5,
+      "losses": 0,
+      "profitFactor": null,
+      "realized": 3142.5,
+      "winRate": 1.0,
+      "wins": 2
     },
     "monthly": [
       {
-        "count": 1,
-        "key": "2026-01",
-        "label": "Jan '26",
-        "value": 200.0
-      },
-      {
-        "count": 1,
-        "key": "2026-02",
-        "label": "Feb '26",
-        "value": -50.0
+        "count": 2,
+        "key": "2025-03",
+        "label": "Mar '25",
+        "value": 3142.5
       }
     ],
     "options": {
       "accounts": [
         "Trading"
       ],
-      "exchanges": [],
+      "exchanges": [
+        "NASDAQ"
+      ],
       "kinds": [
-        "Shares"
+        "Shares",
+        "Options"
       ],
       "symbols": [
-        "AAA"
+        "ASTS",
+        "ASTS 07MAR25 31.00 CALL"
       ],
       "tags": [],
       "years": [
-        "2026"
+        "2025"
       ]
     },
     "positions": [],
@@ -148,73 +146,73 @@
     },
     "queue": [
       {
-        "date": "2026-02-10",
-        "id": "rt:b2",
+        "date": "2025-03-07",
+        "id": "rt:sto",
         "missing": "no grade or thesis",
-        "pnl": -50.0,
-        "symbol": "AAA"
+        "pnl": 643.5,
+        "symbol": "ASTS 07MAR25 31.00 CALL"
       },
       {
-        "date": "2026-01-20",
+        "date": "2025-03-07",
         "id": "rt:b1",
         "missing": "no grade or thesis",
-        "pnl": 200.0,
-        "symbol": "AAA"
+        "pnl": 2499.0,
+        "symbol": "ASTS"
       }
     ],
     "trades": [
       {
         "account": "Trading",
-        "currency": "CAD",
-        "entry": 10.0,
-        "entryDate": "2026-01-05",
-        "exchange": "",
-        "exit": 12.0,
-        "exitDate": "2026-01-20",
+        "currency": "USD",
+        "entry": 25.0,
+        "entryDate": "2025-01-10",
+        "exchange": "NASDAQ",
+        "exit": 31.0,
+        "exitDate": "2025-03-07",
         "fees": 0.0,
         "fills": [
           "BUY",
           "SELL"
         ],
         "grade": "",
-        "holdDays": 15,
+        "holdDays": 56,
         "id": "rt:b1",
         "kind": "Shares",
         "mult": 1,
-        "pnl": 200.0,
-        "pnlCad": 200.0,
-        "pnlPct": 0.2,
-        "qty": 100.0,
+        "pnl": 1800.0,
+        "pnlCad": 2499.0,
+        "pnlPct": 0.24,
+        "qty": 300.0,
         "side": "SELL",
         "status": "closed",
-        "symbol": "AAA",
+        "symbol": "ASTS",
         "tags": []
       },
       {
         "account": "Trading",
-        "currency": "CAD",
-        "entry": 12.0,
-        "entryDate": "2026-02-02",
-        "exchange": "",
-        "exit": 11.0,
-        "exitDate": "2026-02-10",
+        "currency": "USD",
+        "entry": 1.5,
+        "entryDate": "2025-02-10",
+        "exchange": "NASDAQ",
+        "exit": 0.0,
+        "exitDate": "2025-03-07",
         "fees": 0.0,
         "fills": [
-          "BUY",
-          "SELL"
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
         ],
         "grade": "",
-        "holdDays": 8,
-        "id": "rt:b2",
-        "kind": "Shares",
-        "mult": 1,
-        "pnl": -50.0,
-        "pnlCad": -50.0,
-        "pnlPct": -0.083333,
-        "qty": 50.0,
-        "side": "SELL",
+        "holdDays": 25,
+        "id": "rt:sto",
+        "kind": "Options",
+        "mult": 100,
+        "pnl": 450.0,
+        "pnlCad": 643.5,
+        "pnlPct": 1.0,
+        "qty": 3.0,
+        "side": "COVER",
         "status": "closed",
-        "symbol": "AAA",
+        "symbol": "ASTS 07MAR25 31.00 CALL",
         "tags": []
       }
     ],
@@ -224,7 +222,11 @@
   "journal": {},
   "market": {
     "benchmark": {},
-    "fx": {}
+    "fx": {
+      "2025-01-10": 1.44,
+      "2025-02-10": 1.43,
+      "2025-03-07": 1.43
+    }
   },
   "snapshot": {
     "accounts": [],
@@ -236,83 +238,76 @@
         "activityType": "Trade",
         "category": "trade",
         "commission": 0,
-        "currency": "CAD",
+        "currency": "USD",
         "id": "b1",
         "name": "LUNR",
-        "netCashAmount": -1000.0,
-        "occurredAt": "2026-01-05T15:00:00+00:00",
-        "quantity": 100,
+        "netCashAmount": -7500.0,
+        "occurredAt": "2025-01-10T15:00:00+00:00",
+        "quantity": 300,
         "rawType": "DIY_BUY",
-        "securityId": "",
-        "symbol": "AAA",
-        "transactionDate": "2026-01-05",
-        "unitPrice": 10.0
+        "securityId": "sec-s-asts",
+        "symbol": "ASTS",
+        "transactionDate": "2025-01-10",
+        "unitPrice": 25.0
       },
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "SELL",
-        "activityType": "Trade",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
         "category": "trade",
         "commission": 0,
-        "currency": "CAD",
-        "id": "s1",
+        "currency": "USD",
+        "id": "sto",
         "name": "LUNR",
-        "netCashAmount": 1200.0,
-        "occurredAt": "2026-01-20T15:00:00+00:00",
-        "quantity": -100,
-        "rawType": "DIY_SELL",
-        "securityId": "",
-        "symbol": "AAA",
-        "transactionDate": "2026-01-20",
-        "unitPrice": 12.0
+        "netCashAmount": 450.0,
+        "occurredAt": "2025-02-10T15:00:00+00:00",
+        "quantity": -3,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "sec-o-asts",
+        "symbol": "ASTS 07MAR25 31.00 CALL",
+        "transactionDate": "2025-02-10",
+        "unitPrice": 1.5
       },
       {
         "accountId": "acct-1",
         "accountType": "Trading",
-        "activitySubType": "BUY",
-        "activityType": "Trade",
-        "category": "trade",
+        "activitySubType": "BUYTOCLOSE",
+        "activityType": "ASSIGN",
+        "category": "option_event",
         "commission": 0,
-        "currency": "CAD",
-        "id": "b2",
+        "currency": "USD",
+        "id": "asg",
         "name": "LUNR",
-        "netCashAmount": -600.0,
-        "occurredAt": "2026-02-02T15:00:00+00:00",
-        "quantity": 50,
-        "rawType": "DIY_BUY",
-        "securityId": "",
-        "symbol": "AAA",
-        "transactionDate": "2026-02-02",
-        "unitPrice": 12.0
-      },
-      {
-        "accountId": "acct-1",
-        "accountType": "Trading",
-        "activitySubType": "SELL",
-        "activityType": "Trade",
-        "category": "trade",
-        "commission": 0,
-        "currency": "CAD",
-        "id": "s2",
-        "name": "LUNR",
-        "netCashAmount": 550.0,
-        "occurredAt": "2026-02-10T15:00:00+00:00",
-        "quantity": -50,
-        "rawType": "DIY_SELL",
-        "securityId": "",
-        "symbol": "AAA",
-        "transactionDate": "2026-02-10",
-        "unitPrice": 11.0
+        "netCashAmount": 9300,
+        "occurredAt": "2025-03-07T15:00:00+00:00",
+        "quantity": 3,
+        "rawType": "OPTIONS_ASSIGN",
+        "securityId": "sec-o-asts",
+        "symbol": "ASTS 07MAR25 31.00 CALL",
+        "transactionDate": "2025-03-07",
+        "unitPrice": 0
       }
     ],
     "balances": [],
     "navByAccount": {},
     "navHistory": [],
     "notes": {},
-    "securities": [],
+    "securities": [
+      {
+        "id": "sec-o-asts",
+        "symbol": "ASTS",
+        "underlyingId": "sec-s-asts"
+      },
+      {
+        "id": "sec-s-asts",
+        "name": "AST SpaceMobile",
+        "primaryExchange": "NASDAQ",
+        "symbol": "ASTS"
+      }
+    ],
     "syncedAt": "",
     "tradeGroups": []
   },
-  "today": "2026-03-01"
+  "today": "2026-09-06"
 }

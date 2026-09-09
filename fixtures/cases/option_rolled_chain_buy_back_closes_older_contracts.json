@@ -1,0 +1,359 @@
+{
+  "expect": {
+    "benchmark": {
+      "key": "SP500",
+      "label": "S&P 500"
+    },
+    "bySymbol": [
+      {
+        "avgHold": 206.0,
+        "legs": 6,
+        "n": 1,
+        "pnl": -8148.6,
+        "symbol": "BBAI",
+        "winRate": 0.0
+      }
+    ],
+    "cashflowCount": 0,
+    "cashflowHoldings": [],
+    "cashflowMonths": [],
+    "cashflowSkipped": [],
+    "cashflowTiles": [
+      {
+        "count": 0,
+        "label": "2024",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2025",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2026 YTD",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "All time",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "book": 0,
+        "earned": 0,
+        "label": "Yield on cost",
+        "yield": null
+      }
+    ],
+    "cashflowTotal": 0,
+    "equity": {
+      "annualized": {
+        "count": 0,
+        "first": "",
+        "last": "",
+        "rate": null,
+        "years": 0.0
+      },
+      "drawdown": {
+        "abs": null,
+        "at": "",
+        "pct": null,
+        "peakAt": ""
+      },
+      "label": "All accounts",
+      "series": []
+    },
+    "grades": {
+      "buckets": [
+        {
+          "grade": "A",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "B",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "C",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "F",
+          "n": 0,
+          "pnl": 0
+        }
+      ],
+      "graded": 0,
+      "ungraded": 1
+    },
+    "kpi": {
+      "avgHold": 206.0,
+      "avgLoss": -8148.6,
+      "avgWin": 0.0,
+      "breakeven": 0,
+      "count": 1,
+      "expectancy": -8148.6,
+      "grossLoss": 8148.6,
+      "grossWin": 0,
+      "losses": 1,
+      "profitFactor": 0.0,
+      "realized": -8148.6,
+      "winRate": 0.0,
+      "wins": 0
+    },
+    "monthly": [
+      {
+        "count": 1,
+        "key": "2026-06",
+        "label": "Jun '26",
+        "value": -8148.6
+      }
+    ],
+    "options": {
+      "accounts": [
+        "Trading"
+      ],
+      "exchanges": [],
+      "kinds": [
+        "Options"
+      ],
+      "symbols": [
+        "BBAI 21JAN28 5.00 PUT"
+      ],
+      "tags": [],
+      "years": [
+        "2026"
+      ]
+    },
+    "positions": [],
+    "positionsSummary": {
+      "book": 0,
+      "count": 0,
+      "mv": 0,
+      "unreal": 0
+    },
+    "queue": [
+      {
+        "date": "2026-06-29",
+        "id": "rt:s5",
+        "missing": "no grade or thesis",
+        "pnl": -8148.6,
+        "symbol": "BBAI 21JAN28 5.00 PUT"
+      }
+    ],
+    "trades": [
+      {
+        "account": "Trading",
+        "currency": "USD",
+        "entry": 0.418462,
+        "entryDate": "2025-12-05",
+        "exchange": "",
+        "exit": 2.74,
+        "exitDate": "2026-06-29",
+        "fees": 0.0,
+        "fills": [
+          "SELL TO OPEN",
+          "SELL TO OPEN",
+          "BUY TO OPEN",
+          "SELL TO OPEN",
+          "BUY TO OPEN",
+          "SELL TO OPEN",
+          "BUY TO CLOSE"
+        ],
+        "grade": "",
+        "holdDays": 206,
+        "id": "rt:s5",
+        "kind": "Options",
+        "mult": 100,
+        "pnl": -6036.0,
+        "pnlCad": -8148.6,
+        "pnlPct": -5.547794,
+        "qty": 26.0,
+        "side": "COVER",
+        "status": "closed",
+        "symbol": "BBAI 21JAN28 5.00 PUT",
+        "tags": []
+      }
+    ],
+    "years": []
+  },
+  "filters": {},
+  "journal": {},
+  "market": {
+    "benchmark": {},
+    "fx": {}
+  },
+  "snapshot": {
+    "accounts": [],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "s1",
+        "name": "LUNR",
+        "netCashAmount": 36.0,
+        "occurredAt": "2025-12-05T15:00:00+00:00",
+        "quantity": -3,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "BBAI 26DEC25 5.50 PUT",
+        "transactionDate": "2025-12-05",
+        "unitPrice": 0.12
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "s2",
+        "name": "LUNR",
+        "netCashAmount": 100.0,
+        "occurredAt": "2025-12-11T15:00:00+00:00",
+        "quantity": -5,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "BBAI 02JAN26 5.50 PUT",
+        "transactionDate": "2025-12-11",
+        "unitPrice": 0.2
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "s4",
+        "name": "LUNR",
+        "netCashAmount": 120.00000000000001,
+        "occurredAt": "2025-12-12T15:00:00+00:00",
+        "quantity": -6,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "BBAI 19DEC25 6.00 PUT",
+        "transactionDate": "2025-12-12",
+        "unitPrice": 0.2
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "s3",
+        "name": "LUNR",
+        "netCashAmount": 40.0,
+        "occurredAt": "2025-12-15T15:00:00+00:00",
+        "quantity": -1,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "BBAI 26DEC25 6.00 PUT",
+        "transactionDate": "2025-12-15",
+        "unitPrice": 0.4
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "FILLED",
+        "activityType": "OPTIONS_MULTILEG",
+        "category": "other",
+        "commission": 0,
+        "currency": "USD",
+        "id": "ml1",
+        "name": "LUNR",
+        "netCashAmount": -18,
+        "occurredAt": "2025-12-15T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "OPTIONS_MULTILEG",
+        "securityId": "",
+        "symbol": "BBAI 19DEC25 6.00 PUT",
+        "transactionDate": "2025-12-15",
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "FILLED",
+        "activityType": "OPTIONS_MULTILEG",
+        "category": "other",
+        "commission": 0,
+        "currency": "USD",
+        "id": "ml2",
+        "name": "LUNR",
+        "netCashAmount": -1830,
+        "occurredAt": "2025-12-18T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "OPTIONS_MULTILEG",
+        "securityId": "",
+        "symbol": "BBAI 18JUN26 5.00 PUT",
+        "transactionDate": "2025-12-18",
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "s5",
+        "name": "LUNR",
+        "netCashAmount": 2640.0,
+        "occurredAt": "2026-02-27T15:00:00+00:00",
+        "quantity": -11,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "BBAI 21JAN28 5.00 PUT",
+        "transactionDate": "2026-02-27",
+        "unitPrice": 2.4
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOOPEN",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "btc",
+        "name": "LUNR",
+        "netCashAmount": -7124.000000000001,
+        "occurredAt": "2026-06-29T15:00:00+00:00",
+        "quantity": 26,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "BBAI 21JAN28 5.00 PUT",
+        "transactionDate": "2026-06-29",
+        "unitPrice": 2.74
+      }
+    ],
+    "balances": [],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-09-08"
+}

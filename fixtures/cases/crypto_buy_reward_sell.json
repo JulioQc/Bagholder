@@ -7,10 +7,10 @@
     "bySymbol": [
       {
         "avgHold": 31.0,
-        "legs": 1,
+        "legs": 2,
         "n": 1,
-        "pnl": 570.0,
-        "symbol": "ZZZ",
+        "pnl": 250.0,
+        "symbol": "ETH",
         "winRate": 1.0
       }
     ],
@@ -97,15 +97,15 @@
     "kpi": {
       "avgHold": 31.0,
       "avgLoss": 0.0,
-      "avgWin": 570.0,
+      "avgWin": 250.0,
       "breakeven": 0,
       "count": 1,
-      "expectancy": 570.0,
+      "expectancy": 250.0,
       "grossLoss": 0,
-      "grossWin": 570.0,
+      "grossWin": 250.0,
       "losses": 0,
       "profitFactor": null,
-      "realized": 570.0,
+      "realized": 250.0,
       "winRate": 1.0,
       "wins": 1
     },
@@ -114,19 +114,21 @@
         "count": 1,
         "key": "2026-02",
         "label": "Feb '26",
-        "value": 570.0
+        "value": 250.0
       }
     ],
     "options": {
       "accounts": [
-        "Trading"
+        "Crypto"
       ],
-      "exchanges": [],
+      "exchanges": [
+        "Crypto"
+      ],
       "kinds": [
-        "Options"
+        "Crypto"
       ],
       "symbols": [
-        "ZZZ 21AUG26 10.00 CALL"
+        "ETH"
       ],
       "tags": [],
       "years": [
@@ -143,38 +145,39 @@
     "queue": [
       {
         "date": "2026-02-01",
-        "id": "rt:sto",
+        "id": "rt:cb",
         "missing": "no grade or thesis",
-        "pnl": 570.0,
-        "symbol": "ZZZ 21AUG26 10.00 CALL"
+        "pnl": 250.0,
+        "symbol": "ETH"
       }
     ],
     "trades": [
       {
-        "account": "Trading",
-        "currency": "USD",
-        "entry": 3.0,
+        "account": "Crypto",
+        "currency": "CAD",
+        "entry": 66.666667,
         "entryDate": "2026-01-01",
-        "exchange": "",
-        "exit": 1.0,
+        "exchange": "Crypto",
+        "exit": 150.0,
         "exitDate": "2026-02-01",
         "fees": 0.0,
         "fills": [
-          "SELL TO OPEN",
-          "BUY TO CLOSE"
+          "BUY",
+          "BUY",
+          "SELL"
         ],
         "grade": "",
         "holdDays": 31,
-        "id": "rt:sto",
-        "kind": "Options",
-        "mult": 100,
-        "pnl": 400.0,
-        "pnlCad": 570.0,
-        "pnlPct": 0.666667,
-        "qty": 2.0,
-        "side": "COVER",
+        "id": "rt:cb",
+        "kind": "Crypto",
+        "mult": 1,
+        "pnl": 250.0,
+        "pnlCad": 250.0,
+        "pnlPct": 1.25,
+        "qty": 3.0,
+        "side": "SELL",
         "status": "closed",
-        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "symbol": "ETH",
         "tags": []
       }
     ],
@@ -184,51 +187,67 @@
   "journal": {},
   "market": {
     "benchmark": {},
-    "fx": {
-      "2026-01-01": 1.4,
-      "2026-02-01": 1.35
-    }
+    "fx": {}
   },
   "snapshot": {
     "accounts": [],
     "activities": [
       {
         "accountId": "acct-1",
-        "accountType": "Trading",
-        "activitySubType": "SELLTOOPEN",
-        "activityType": "OPTIONS_SELL",
-        "category": "trade",
+        "accountType": "Crypto",
+        "activitySubType": "MARKET_ORDER",
+        "activityType": "CRYPTO_BUY",
+        "category": "other",
         "commission": 0,
-        "currency": "USD",
-        "id": "sto",
+        "currency": "CAD",
+        "id": "cb",
         "name": "LUNR",
-        "netCashAmount": 600,
+        "netCashAmount": 200,
         "occurredAt": "2026-01-01T15:00:00+00:00",
-        "quantity": -2,
-        "rawType": "OPTIONS_SELL",
+        "quantity": 2,
+        "rawType": "CRYPTO_BUY",
         "securityId": "",
-        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "symbol": "ETH",
         "transactionDate": "2026-01-01",
-        "unitPrice": 3
+        "unitPrice": 100
       },
       {
         "accountId": "acct-1",
-        "accountType": "Trading",
-        "activitySubType": "BUYTOCLOSE",
-        "activityType": "OPTIONS_BUY",
-        "category": "trade",
+        "accountType": "Crypto",
+        "activitySubType": "other",
+        "activityType": "CRYPTO_STAKING_REWARD",
+        "category": "other",
         "commission": 0,
-        "currency": "USD",
-        "id": "btc",
+        "currency": "CAD",
+        "id": "rw",
         "name": "LUNR",
-        "netCashAmount": -200,
-        "occurredAt": "2026-02-01T15:00:00+00:00",
-        "quantity": 2,
-        "rawType": "OPTIONS_BUY",
+        "netCashAmount": 0,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": 1,
+        "rawType": "CRYPTO_STAKING_REWARD",
         "securityId": "",
-        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "symbol": "ETH",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Crypto",
+        "activitySubType": "MARKET_ORDER",
+        "activityType": "CRYPTO_SELL",
+        "category": "other",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "cs",
+        "name": "LUNR",
+        "netCashAmount": 450,
+        "occurredAt": "2026-02-01T15:00:00+00:00",
+        "quantity": 3,
+        "rawType": "CRYPTO_SELL",
+        "securityId": "",
+        "symbol": "ETH",
         "transactionDate": "2026-02-01",
-        "unitPrice": 1
+        "unitPrice": 150
       }
     ],
     "balances": [],

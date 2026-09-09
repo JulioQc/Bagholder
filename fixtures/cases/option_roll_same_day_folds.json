@@ -6,10 +6,10 @@
     },
     "bySymbol": [
       {
-        "avgHold": 31.0,
+        "avgHold": 108.0,
         "legs": 1,
         "n": 1,
-        "pnl": 570.0,
+        "pnl": 484.0,
         "symbol": "ZZZ",
         "winRate": 1.0
       }
@@ -21,19 +21,19 @@
     "cashflowTiles": [
       {
         "count": 0,
-        "label": "2024",
-        "perMonth": 0.0,
-        "total": 0
-      },
-      {
-        "count": 0,
         "label": "2025",
         "perMonth": 0.0,
         "total": 0
       },
       {
         "count": 0,
-        "label": "2026 YTD",
+        "label": "2026",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2027 YTD",
         "perMonth": 0.0,
         "total": 0
       },
@@ -95,26 +95,26 @@
       "ungraded": 1
     },
     "kpi": {
-      "avgHold": 31.0,
+      "avgHold": 108.0,
       "avgLoss": 0.0,
-      "avgWin": 570.0,
+      "avgWin": 484.0,
       "breakeven": 0,
       "count": 1,
-      "expectancy": 570.0,
+      "expectancy": 484.0,
       "grossLoss": 0,
-      "grossWin": 570.0,
+      "grossWin": 484.0,
       "losses": 0,
       "profitFactor": null,
-      "realized": 570.0,
+      "realized": 484.0,
       "winRate": 1.0,
       "wins": 1
     },
     "monthly": [
       {
         "count": 1,
-        "key": "2026-02",
-        "label": "Feb '26",
-        "value": 570.0
+        "key": "2026-12",
+        "label": "Dec '26",
+        "value": 484.0
       }
     ],
     "options": {
@@ -126,7 +126,7 @@
         "Options"
       ],
       "symbols": [
-        "ZZZ 21AUG26 10.00 CALL"
+        "ZZZ 15JAN27 12.00 CALL"
       ],
       "tags": [],
       "years": [
@@ -142,39 +142,39 @@
     },
     "queue": [
       {
-        "date": "2026-02-01",
-        "id": "rt:sto",
+        "date": "2026-12-01",
+        "id": "rt:jan-sto",
         "missing": "no grade or thesis",
-        "pnl": 570.0,
-        "symbol": "ZZZ 21AUG26 10.00 CALL"
+        "pnl": 484.0,
+        "symbol": "ZZZ 15JAN27 12.00 CALL"
       }
     ],
     "trades": [
       {
         "account": "Trading",
         "currency": "USD",
-        "entry": 3.0,
-        "entryDate": "2026-01-01",
+        "entry": 4.0,
+        "entryDate": "2026-08-15",
         "exchange": "",
-        "exit": 1.0,
-        "exitDate": "2026-02-01",
+        "exit": 0.5,
+        "exitDate": "2026-12-01",
         "fees": 0.0,
         "fills": [
           "SELL TO OPEN",
           "BUY TO CLOSE"
         ],
         "grade": "",
-        "holdDays": 31,
-        "id": "rt:sto",
+        "holdDays": 108,
+        "id": "rt:jan-sto",
         "kind": "Options",
         "mult": 100,
-        "pnl": 400.0,
-        "pnlCad": 570.0,
-        "pnlPct": 0.666667,
-        "qty": 2.0,
+        "pnl": 350.0,
+        "pnlCad": 484.0,
+        "pnlPct": 0.875,
+        "qty": 1.0,
         "side": "COVER",
         "status": "closed",
-        "symbol": "ZZZ 21AUG26 10.00 CALL",
+        "symbol": "ZZZ 15JAN27 12.00 CALL",
         "tags": []
       }
     ],
@@ -186,7 +186,8 @@
     "benchmark": {},
     "fx": {
       "2026-01-01": 1.4,
-      "2026-02-01": 1.35
+      "2026-08-15": 1.38,
+      "2026-12-01": 1.36
     }
   },
   "snapshot": {
@@ -200,11 +201,11 @@
         "category": "trade",
         "commission": 0,
         "currency": "USD",
-        "id": "sto",
+        "id": "aug-sto",
         "name": "LUNR",
-        "netCashAmount": 600,
+        "netCashAmount": 300,
         "occurredAt": "2026-01-01T15:00:00+00:00",
-        "quantity": -2,
+        "quantity": -1,
         "rawType": "OPTIONS_SELL",
         "securityId": "",
         "symbol": "ZZZ 21AUG26 10.00 CALL",
@@ -219,16 +220,54 @@
         "category": "trade",
         "commission": 0,
         "currency": "USD",
-        "id": "btc",
+        "id": "aug-cover",
         "name": "LUNR",
-        "netCashAmount": -200,
-        "occurredAt": "2026-02-01T15:00:00+00:00",
-        "quantity": 2,
+        "netCashAmount": -100,
+        "occurredAt": "2026-08-15T15:00:00+00:00",
+        "quantity": 1,
         "rawType": "OPTIONS_BUY",
         "securityId": "",
         "symbol": "ZZZ 21AUG26 10.00 CALL",
-        "transactionDate": "2026-02-01",
+        "transactionDate": "2026-08-15",
         "unitPrice": 1
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "SELLTOOPEN",
+        "activityType": "OPTIONS_SELL",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "jan-sto",
+        "name": "LUNR",
+        "netCashAmount": 200,
+        "occurredAt": "2026-08-15T15:00:00+00:00",
+        "quantity": -1,
+        "rawType": "OPTIONS_SELL",
+        "securityId": "",
+        "symbol": "ZZZ 15JAN27 12.00 CALL",
+        "transactionDate": "2026-08-15",
+        "unitPrice": 2
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUYTOCLOSE",
+        "activityType": "OPTIONS_BUY",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "jan-cover",
+        "name": "LUNR",
+        "netCashAmount": -50.0,
+        "occurredAt": "2026-12-01T15:00:00+00:00",
+        "quantity": 1,
+        "rawType": "OPTIONS_BUY",
+        "securityId": "",
+        "symbol": "ZZZ 15JAN27 12.00 CALL",
+        "transactionDate": "2026-12-01",
+        "unitPrice": 0.5
       }
     ],
     "balances": [],
@@ -239,5 +278,5 @@
     "syncedAt": "",
     "tradeGroups": []
   },
-  "today": "2026-03-01"
+  "today": "2027-01-01"
 }
