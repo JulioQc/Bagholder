@@ -991,7 +991,6 @@ fun rateLine(h: Holding): String {
 fun CashflowScreen(chrome: Chrome) {
     val t = LocalTheme.current
     val v = Book.view
-    var allocBy by remember { mutableStateOf(Store.allocationBy) }
     var picked by remember { mutableStateOf<Int?>(null) }
     var distPick by remember { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxSize()) {
@@ -1013,17 +1012,10 @@ fun CashflowScreen(chrome: Chrome) {
             }
             item {
                 val items = cf.holdings.map { h ->
-                    Pair(h.symbol + if (cf.holdings.count { it.symbol == h.symbol } > 1) " · " + h.account else "", if (allocBy == "projected") (h.annual ?: 0.0) / 12 else h.qty * h.last)
+                    Pair(h.symbol + if (cf.holdings.count { it.symbol == h.symbol } > 1) " · " + h.account else "", (h.annual ?: 0.0) / 12)
                 }.filter { it.second > 0 }.sortedByDescending { it.second }
                 val total = items.sumOf { it.second }
-                Card("Allocation", trailing = {
-                    Row {
-                        for (k in listOf("market", "projected")) {
-                            Text(if (k == "market") "Market" else "Projected", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (allocBy == k) t.ink else t.ink55,
-                                modifier = Modifier.clip(RoundedCornerShape(7.dp)).background(if (allocBy == k) t.well else Color.Transparent).clickable { allocBy = k; Store.allocationBy = k; picked = null }.padding(horizontal = 10.dp, vertical = 4.dp))
-                        }
-                    }
-                }) {
+                Card("Allocation") {
                     if (items.isEmpty()) Muted("No income holdings in scope.")
                     else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         DonutChart(items, picked, { picked = it })
