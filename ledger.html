@@ -192,7 +192,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
-const PROTOCOL = "2026-09-08.5"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-08.6"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -497,7 +497,7 @@ function menuHtml() {
 }
 function dataDialogHtml() {
   return '<div id="dataDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="data"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Clear data</h5>' +
-    '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">Deletes everything synced from Wealthsimple, your journal, and the saved login from this machine. You will need to connect and sync again.</div>' +
+    '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">Deletes everything synced from Wealthsimple, your journal and the downloaded market data from this machine. Your Wealthsimple login stays.</div>' +
     '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeData">Cancel</button><button class="btn" data-act="clearData" style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (state.busy === "clearing" ? "disabled" : "") + ">" + (state.busy === "clearing" ? "Clearing…" : "Clear data") + "</button></div></div></div>";
 }
 function openData() { state.menuOpen = false; state.dataOpen = true; render(); }
@@ -621,11 +621,11 @@ function stopWatch() {
 }
 function clearData() {
   state.busy = "clearing"; render();
-  api("POST", "/api/data/clear", { session: true, journal: true }).then((r) => {
+  api("POST", "/api/data/clear", { journal: true, market: true }).then((r) => {
     state.busy = "";
     if (!r || !r.ok) { state.notice = (r && r.error) || "Could not clear data."; state.noticeKind = "err"; render(); return; }
     state.dataOpen = false; state.sel = null; state.posSel = null; state.filters = EMPTY_FILTERS();
-    state.status.lastSync = ""; state.status.connected = false;
+    state.status.lastSync = "";
     loadModel(); pollStatus();
   });
 }

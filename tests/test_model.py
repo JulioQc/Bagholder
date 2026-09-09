@@ -1326,9 +1326,20 @@ class StoreTablesTest(unittest.TestCase):
         self.assertEqual(after["fxDays"], 1)
         self.assertEqual(store.activity_count(), 0)
         self.assertEqual(bagholder.activity_sync_bounds(), {"start_date": None, "full_history": True})
+        store.upsert_price_history("AAA", [{"date": "2026-01-05", "close": 2}], source="yahoo")
+        store.upsert_price_bars("AAA", "1h", [{"time": 1767600000, "close": 2}], source="yahoo")
+        store.set_meta("market_attempt_at", "2026-01-05T00:00:00Z")
+        store.set_meta("tmx_form:AAA", "AAA")
+        store.set_meta("yahoo_miss:AAA.V", "1")
         after = store.clear_synced_data(keep_journal=False, keep_market=False)
         self.assertEqual(after["journal"], 0)
         self.assertEqual(after["fxDays"], 0)
+        self.assertEqual(store.price_history("AAA"), [])
+        self.assertEqual(store.price_bars("AAA", "1h"), [])
+        self.assertEqual(store.get_meta("market_attempt_at"), "")
+        self.assertEqual(store.get_meta("tmx_form:AAA"), "")
+        self.assertEqual(store.get_meta("yahoo_miss:AAA.V"), "")
+        self.assertEqual(store.get_meta("schema_version"), str(store.SCHEMA_VERSION))
 
     def test_model_view_from_store_and_cache(self):
         store.merge_local_rows([
@@ -2226,6 +2237,26 @@ class ServerTest(unittest.TestCase):
         html = bagholder.ledger_path().read_text(encoding="utf-8")
         self.assertIn("/api/data/clear", html)
         self.assertIn("Clear data", html)
+
+    def test_clear_data_from_the_page_keeps_the_login(self):
+        store.merge_local_rows([
+            buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
+            sell("s1", "AAA", 10, 2, "2026-01-05", source="csv"),
+        ])
+        store.upsert_fx_rates({"2026-01-05": 1.4})
+        store.save_journal_entry("rt:b1", {"grade": "A"})
+        bagholder.save_session({"access_token": "x", "refresh_token": "y"})
+        status, out = self._post("/api/data/clear", {"journal": True, "market": True})
+        self.assertEqual(status, 200)
+        self.assertEqual(out["activities"], 0)
+        self.assertEqual(out["journal"], 0)
+        self.assertEqual(out["fxDays"], 0)
+        self.assertTrue(out["sessionPresent"])
+        self.assertIsNotNone(bagholder.load_session())
+        html = bagholder.ledger_path().read_text(encoding="utf-8")
+        self.assertIn('{ journal: true, market: true }', html)
+        self.assertNotIn("session: true", html)
+        self.assertIn("Your Wealthsimple login stays.", html)
 
     def test_import_watch_and_manual_trade_routes(self):
         status, out = self._post("/api/import", {"name": "activities.csv", "text": CANONICAL_CSV})

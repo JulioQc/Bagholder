@@ -538,7 +538,7 @@ UPDATE_CHECK_HOURS = 1   # a release is a click away now, so the check is hourly
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-08.5"
+PROTOCOL = "2026-09-08.6"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 QUERIES = {
