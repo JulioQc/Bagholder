@@ -1,7 +1,7 @@
 // The derived model, a port of model.py (the reference), function for
 // function. Everything a screen shows comes from here so that one list of
 // trades feeds every tile, table and chart, and so the numbers can be tested:
-// ModelCasesTests runs fixtures/cases through it and compares with the Python.
+// ModelCasesTests runs tests/cases through it and compares with the Python.
 //
 // Pipeline
 //     activities  -> normalizeActivities  (crypto, options, stock-dividend notices)

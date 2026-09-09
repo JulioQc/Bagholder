@@ -1,9 +1,9 @@
 """Write the shared model cases: activity rows in, the figures the spec says
 they produce out, as JSON every implementation (Python, Swift, Kotlin) runs
 through its own model. The Python model is the reference: run this after an
-intended model change, review the diff of fixtures/cases, commit both.
+intended model change, review the diff of tests/cases, commit both.
 
-    python3 fixtures/make_fixtures.py
+    python3 tests/make_cases.py
 """
 import json
 import os
