@@ -453,6 +453,8 @@ function syncLine() {
   if (state.busy === "refresh") return '<span class="spin"></span>Refreshing session…';
   if (s.syncing) return '<span class="spin"></span>' + esc(s.syncStep || "Syncing…");
   if (s.error && !showingEmpty()) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
+  // nothing heard from the server yet (a page loaded while Bagholder starts): claim no state
+  if (!s.protocol) return '<span class="spin"></span>';
   if (!s.connected) return "Not connected";
   return "Synced " + esc(relTime(s.lastSync) || "—");
 }
