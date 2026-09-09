@@ -1,8 +1,8 @@
 # Bagholder specification
 
-This file is the authority on what the app shows and how each figure is computed. Any change to the page, whether it comes from a design handoff or from code, is checked against this file before it is committed. If a change needs a definition here to be different, this file changes first and the reason is recorded in the commit.
+This file is the authority on what the app shows and how each figure is computed, on every platform. Any change to a screen, whether it comes from a design handoff or from code, is checked against this file before it is committed. If a change needs a definition here to be different, this file changes first and the reason is recorded in the commit.
 
-The model lives in `model.py` and is served as JSON by `GET /api/model`. The page, `ledger.html`, only renders that JSON. It performs no matching, no aggregation and no currency conversion of its own. The one exception is dividing an annual figure by twelve to show it per month.
+The model is defined by `model.py`, the reference implementation; the iOS and Android apps carry their own implementations of it (`ios/Bagholder/Model.swift` + `ModelView.swift`, `android/model`), and the shared cases in `tests/cases` hold all three to the same answers. On the desktop the model is served as JSON by `GET /api/model` and the page, `ledger.html`, only renders that JSON: no matching, no aggregation and no currency conversion of its own, the one exception being dividing an annual figure by twelve to show it per month. On a phone the same figures are computed on the device from the same rows. Sections 2 and 3 define the figures for every platform; sections 4 to 7 describe the web page; section 8 describes the phone.
 
 ## 1. Principles
 
@@ -101,9 +101,9 @@ A USD transaction is converted at the Bank of Canada rate for its own date, look
 
 ### Versions and the update check
 
-A version is a GitHub release tagged `vMAJOR.MINOR.PATCH`; commits alone are not versions. `APP_VERSION` in `bagholder.py` is bumped in the commit a release is cut from, and the running version is shown in the header as small muted text to the right of the Bagholder wordmark; nothing about versions appears in the menu. At every start, and every hour while running, the app asks GitHub for the latest release; when its tag is newer than the running version the header shows, beside the version at the top left, an "Update to vX.Y.Z" button when the app can install it itself, else an "Update available" link to that release.
+A version is a GitHub release tagged `vMAJOR.MINOR.PATCH`; commits alone are not versions, and the desktop and the phone apps carry one number (how a release is cut is in `CLAUDE.md`). The running version is shown in the header as small muted text to the right of the Bagholder wordmark; on the web nothing about versions appears in the menu. At every start, and every hour while running, the app asks GitHub for the latest release; when its tag is newer than the running version the header shows, beside the version at the top left, an "Update to vX.Y.Z" button when the app can install it itself, else an "Update available" link to that release.
 
-**Updating from the page.** `python3 bagholder.py` runs a small supervisor whose only job is to run the server as a child in the same console and start it again when it exits asking to be restarted. Pressing the update button: a git checkout on a clean master does `git pull --ff-only`; any other copy downloads the release's `bagholder-vX.Y.Z.zip` and its `.sha256` from GitHub, checks the checksum, compiles every Python file in it, keeps the current files under the home folder's `previous`, and puts the new ones in place. The header reads `Downloading…`, `Installing…`, `Restarting…`; the server then stops, the supervisor starts the new one on the same port, and the page reloads itself when it sees a new version answering. If the new server dies within twenty seconds the supervisor puts the previous files back and starts that version again, and the header says the update failed. The button refuses while a sync is running, and a git checkout with local changes or on another branch is asked to pull by hand. Only a press of the button starts any of this. A release carries the archive and checksum as assets, so the process needs nothing but the GitHub release. The request carries nothing but the app's version in its user agent; a failed check, or no release yet, is silent.
+**Updating from the page.** `python3 bagholder.py` runs a small supervisor whose only job is to run the server as a child in the same console and start it again when it exits asking to be restarted. Pressing the update button: a git checkout on a clean master does `git pull --ff-only`; any other copy downloads the release's web archive (`bagholder-vX.Y.Z-web.zip`) and its `.sha256` from GitHub, checks the checksum, compiles every Python file in it, keeps the current files under the home folder's `previous`, and puts the new ones in place. The header reads `Downloading…`, `Installing…`, `Restarting…`; the server then stops, the supervisor starts the new one on the same port, and the page reloads itself when it sees a new version answering. If the new server dies within twenty seconds the supervisor puts the previous files back and starts that version again, and the header says the update failed. The button refuses while a sync is running, and a git checkout with local changes or on another branch is asked to pull by hand. Only a press of the button starts any of this. A release carries the archive and checksum as assets, so the process needs nothing but the GitHub release. The request carries nothing but the app's version in its user agent; a failed check, or no release yet, is silent.
 
 ### Freshness of what is on the page
 
@@ -244,7 +244,7 @@ One filter set applies to every page: Date (presets 1D 1W 1M 3M 6M YTD 1Y 5Y, ye
 - Scrollbars appear only while scrolling and only inside tables.
 - Colours come from theme tokens only.
 
-## 7. Verification before a UI commit
+## 7. Verification before a web-page commit
 
 1. Every displayed figure is traced to the model field this file names for it, and the meaning matches, not just the field's existence.
 2. The page is rendered against a copy of real data at 1200, 1340, 1440 and 1680 px. On every page, including a trade detail, no table overflows its container and no cell content is clipped at 1340 px and above.
@@ -252,3 +252,25 @@ One filter set applies to every page: Date (presets 1D 1W 1M 3M 6M YTD 1Y 5Y, ye
 4. Any lookup between tables uses ids, and is exercised with a synthetic duplicate symbol in a second account.
 5. `python3 -m unittest discover tests` passes.
 6. If any step fails, nothing is committed and the finding is reported first.
+
+For the phone apps the equivalent is in `CLAUDE.md` ("How changes land", step 6) and `MOBILE.md`: both platforms in the same PR, every screen captured on both from the same seeded rows and compared.
+
+## 8. The phone
+
+The iOS and Android apps show the same figures as the web page, computed on the device by their own model implementations; §2 and §3 apply unchanged. A phone screen is a layout of those figures, not a new definition of them, and both apps lay them out the same way. Where the phone departs from §4 to §6 it is listed here; anything not listed is as on the web.
+
+**Shell.** A header with the mark, the wordmark, the version, the sync status, a funnel button for the filters and a three-line button for the menu; four tabs along the bottom (Dashboard, Trades, Positions, Cashflow), each with its symbol over its label and a 2 pt accent line over the current one. A trade or position detail sits over its tab with the tab bar still below it and a round back button. The menu is a sheet: Connect Wealthsimple or Sync now and Disconnect, then the activity count and the version. The filters are a sheet whose search field takes focus as it opens.
+
+**Cards.** 12 pt above and below the content, 16 pt at the sides, a 24 pt header row with a 15 pt semibold title at its top; a control at the right of the header (the index toggle, a sort menu, a figure) sits in that row. Nothing under a title: no captions, subtitles or helper lines, no "All accounts", no "Vs S&P 500" (the toggle itself reads `Vs S&P 500`), no "CAD", no "Outperformed … in N of M years", no "Dividend" beside a history row.
+
+**Tiles.** Two per page in a row that swipes sideways, with the indicator below: 4 pt dots at 24 % ink, a 14 × 4 accent pill for the current page. Dashboard: Realized P&L, Win rate; Profit factor, Expectancy; Max drawdown, Avg annualized. Cashflow: the year to date, Yield on cost; All time, then the past years, newest first.
+
+**Charts.** No value axis. The card's figure sits at its top right: Equity shows the latest point, P&L the sum in scope, Distributions the projected month. The Equity line runs edge to edge, scaled from its low to its high, 160 pt tall, four date labels below. A long press reads the point under the finger from the first touch: the figure at the top right becomes that day's or month's, the date or month appears at the bottom under the finger, the rest of the chart dims (the equity line and its fill keep their colour up to the finger, the marker is a ring), and the page and any pager hold still until release. Bars fill their month's slot 4 pt apart on the web page's scale (§4); a tap on a P&L bar opens the month.
+
+**Dashboard.** Tiles; Equity; then one swiping row of three equal cards, Annual returns (the years scrolling inside the card, three visible, no footer), P&L (the monthly bars, titled `P&L`) and Grade vs P&L; By symbol, whose header is a sort menu (P&L, Trades, Win rate, Avg hold; the current column again flips the order); Review queue.
+
+**Cashflow.** Tiles; Distributions (the monthly bars in the accent colour); Allocation with its Market/Projected toggle; Positions, each row the symbol with `shares · avg · dist × freq` under it on the left, the month's payout over the yield on cost on the right, then Ex-Div and Pay Day; History, each row the symbol, `date · qty × per`, the amount and its currency, without the payment kind.
+
+**Connecting.** Connect opens Wealthsimple's sign-in page in the app's own web view, kept loaded ahead of the tap, and captures the session from its cookies once signed in; sign in with email, password and the two-factor code. A passkey does not work inside an app's web view on either platform: iOS refuses the request unless the app is a browser or the site lists the app, and Android's web view hides the button; that is the platforms' rule, not a fault to fix.
+
+**Verification.** Both platforms in the same PR; every screen and state captured on the iOS simulator and the Android emulator from the same seeded rows and compared side by side; speed judged on a phone launched from the home screen.
