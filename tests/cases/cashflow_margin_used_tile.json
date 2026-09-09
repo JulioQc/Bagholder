@@ -166,7 +166,12 @@
       ],
       "availableMargin": null,
       "availableMarginUnavailable": [],
+      "cash": 0,
+      "cashPct": 0.0,
       "costBasis": 100.0,
+      "dayChange": null,
+      "dayChangePct": null,
+      "hasMargin": true,
       "marginUsed": 300.0,
       "marginUsedBy": {
         "CAD": 300.0

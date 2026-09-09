@@ -123,6 +123,7 @@ class ModelCasesTest {
             "positionCount" to pf.positionCount, "accountCount" to pf.accountCount, "nav" to opt(pf.nav), "navAccounts" to pf.navAccounts,
             "marginUsed" to pf.marginUsed, "marginUsedBy" to pf.marginUsedBy, "marginUsedPct" to opt(pf.marginUsedPct),
             "availableMargin" to opt(pf.availableMargin), "availableMarginUnavailable" to pf.availableMarginUnavailable,
+            "hasMargin" to pf.hasMargin, "cash" to pf.cash, "cashPct" to opt(pf.cashPct), "dayChange" to opt(pf.dayChange), "dayChangePct" to opt(pf.dayChangePct),
             "allocation" to pf.allocation.map { mapOf("id" to it.id, "symbol" to it.symbol, "account" to it.account, "value" to it.value, "share" to it.share) },
         )
         out["equity"] = mapOf(

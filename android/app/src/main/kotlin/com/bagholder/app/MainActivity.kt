@@ -1098,7 +1098,7 @@ private fun CashflowTiles(cf: CashflowView) {
     val ytd = cf.tiles.firstOrNull { it.label.endsWith("YTD") }
     val yoc = cf.tiles.firstOrNull { it.label == "Yield on cost" }
     val all = cf.tiles.firstOrNull { it.label == "All time" }
-    val years = cf.tiles.filter { !it.label.endsWith("YTD") && it.label != "Yield on cost" && it.label != "All time" && it.label != "Margin used" }.reversed()
+    val years = cf.tiles.filter { !it.label.endsWith("YTD") && it.label != "Yield on cost" && it.label != "All time" && it.label != "Margin used" && it.label != "Last 12 months" }.reversed()
     val ordered = listOfNotNull(ytd, yoc, all) + years
     val tiles = mutableListOf<@Composable (Modifier) -> Unit>()
     for (tile in ordered) {

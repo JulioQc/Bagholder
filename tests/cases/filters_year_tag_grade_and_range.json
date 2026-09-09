@@ -78,10 +78,10 @@
         "total": 15.0
       },
       {
-        "interestMonths": 0,
-        "interestPerMonth": 0.0,
-        "label": "Margin used",
-        "marginUsed": 0
+        "count": 1,
+        "label": "Last 12 months",
+        "perMonth": 15.0,
+        "total": 15.0
       },
       {
         "book": 600.0,
@@ -221,7 +221,12 @@
       ],
       "availableMargin": null,
       "availableMarginUnavailable": [],
+      "cash": 0,
+      "cashPct": null,
       "costBasis": 1600.0,
+      "dayChange": null,
+      "dayChangePct": null,
+      "hasMargin": false,
       "marginUsed": 0,
       "marginUsedBy": {},
       "marginUsedPct": 0.0,

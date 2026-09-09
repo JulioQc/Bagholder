@@ -109,6 +109,7 @@ final class ModelCasesTests: XCTestCase {
                 "positionCount": v.portfolio.positionCount, "accountCount": v.portfolio.accountCount, "nav": opt(v.portfolio.nav), "navAccounts": v.portfolio.navAccounts,
                 "marginUsed": v.portfolio.marginUsed, "marginUsedBy": v.portfolio.marginUsedBy, "marginUsedPct": opt(v.portfolio.marginUsedPct),
                 "availableMargin": opt(v.portfolio.availableMargin), "availableMarginUnavailable": v.portfolio.availableMarginUnavailable,
+                "hasMargin": v.portfolio.hasMargin, "cash": v.portfolio.cash, "cashPct": opt(v.portfolio.cashPct), "dayChange": opt(v.portfolio.dayChange), "dayChangePct": opt(v.portfolio.dayChangePct),
                 "allocation": v.portfolio.allocation.map { ["id": $0.id, "symbol": $0.symbol, "account": $0.account, "value": $0.value, "share": $0.share] as [String: Any] },
             ] as [String: Any],
             "equity": [

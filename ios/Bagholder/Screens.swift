@@ -1154,7 +1154,7 @@ struct CashflowScreen: View {
         let ytd = cf.tiles.first { $0.label.hasSuffix("YTD") }
         let yoc = cf.tiles.first { $0.label == "Yield on cost" }
         let all = cf.tiles.first { $0.label == "All time" }
-        let years = cf.tiles.filter { !$0.label.hasSuffix("YTD") && $0.label != "Yield on cost" && $0.label != "All time" && $0.label != "Margin used" }.reversed()
+        let years = cf.tiles.filter { !$0.label.hasSuffix("YTD") && $0.label != "Yield on cost" && $0.label != "All time" && $0.label != "Margin used" && $0.label != "Last 12 months" }.reversed()
         let ordered = [ytd, yoc, all].compactMap { $0 } + years
         return TilePager(tiles: ordered.map(tile))
     }
