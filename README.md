@@ -2,6 +2,8 @@
 
 A local-first trading journal for Wealthsimple users. It runs on your own computer, syncs your activity from Wealthsimple, and keeps everything in a local SQLite file. Nothing is uploaded anywhere.
 
+![Bagholder on the desktop](docs/screenshots/desktop-tour.gif)
+
 Use at your own risk. The app has you sign in to the real Wealthsimple website in order to sync. The author is not responsible for your use or misuse of the app or any consequences thereof.
 
 ## Screenshots
