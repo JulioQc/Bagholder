@@ -185,6 +185,7 @@ const state = {
   valueHi: 0,
   fieldQuery: null,
   status: { connected: false, syncing: false, capturing: false, lastSync: "", error: "", syncStep: "", email: "", activityCount: 0 },
+  loginView: false,
   busy: "",
   notice: "",
   confirmOpen: "",
@@ -196,7 +197,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-09.2"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-09.3"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -461,7 +462,8 @@ function headerHtml() {
   return '<div id="hdr" style="display:flex;align-items:center;gap:22px;padding:12px 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
     '<div style="display:flex;align-items:center;gap:9px;margin-right:8px"><img src="favicon.png" alt="" style="width:24px;height:24px;border-radius:6px"><span style="font-size:15px;font-weight:600;letter-spacing:var(--brand-spacing);color:var(--brand-color);text-transform:var(--brand-transform)">Bagholder</span>' + (state.status.version ? '<span class="muted" style="font-size:11px;margin-left:8px">v' + esc(state.status.version) + "</span>" : "") + (state.status.updateAvailable && !state.status.updating ? (state.status.canUpdate
       ? '<button class="pill" data-act="update" style="font-size:11px;margin-left:8px;padding:1px 8px;width:auto;color:var(--accent-300)">Update to ' + esc(state.status.latestVersion) + "</button>"
-      : '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="font-size:11px;margin-left:8px;color:var(--accent-300);text-decoration:none">Update available</a>') : "") + "</div>" +
+      : '<a href="' + esc(state.status.updateUrl || "#") + '" target="_blank" rel="noopener" style="font-size:11px;margin-left:8px;color:var(--accent-300);text-decoration:none">' +
+        (state.status.updateBy === "image" ? esc(state.status.latestVersion) + " image available" : "Update available") + "</a>") : "") + "</div>" +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
     '<span style="font-size:12px;color:var(--ink55)">' + (state.notice ? '<span class="' + (state.noticeKind === "err" ? "status-err" : "") + '">' + esc(state.notice) + "</span>" : syncLine()) + "</span>" +
     '<div style="position:relative" data-pop="filter">' +
@@ -518,6 +520,32 @@ function confirmDialogHtml() {
     '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Cancel</button><button class="btn" data-act="' + (clear ? "clearData" : "disconnectNow") + '" style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (clear ? (busy ? "Clearing…" : "Clear data") : "Disconnect") + "</button></div></div></div>";
 }
 function openData() { state.menuOpen = false; state.confirmOpen = "clear"; render(); }
+// The sign-in window inside the page (a container copy): Wealthsimple's page as frames from
+// the app's headless Chromium, clicks and keys sent back to it.
+function loginViewHtml() {
+  return '<div id="loginDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="login">' +
+    '<div class="card elev-md" style="max-width:100%;padding:14px 16px 12px;display:flex;flex-direction:column;gap:10px">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><h5>Sign in to Wealthsimple</h5><button class="btn btn-secondary" data-act="cancelConnect">Cancel</button></div>' +
+    '<img id="loginFrame" data-act="loginClick" alt="" draggable="false" style="display:block;width:auto;height:auto;max-width:100%;max-height:calc(100vh - 120px);min-width:320px;min-height:200px;background:#fff;border-radius:6px;cursor:default;user-select:none"></div></div>';
+}
+// the window is a live stream: Chromium pushes a frame whenever it changes
+function loginFrameLoop() {
+  const img = document.getElementById("loginFrame");
+  if (img && state.loginView && !img.src) img.src = "/api/login/stream?t=" + Date.now();
+}
+function loginSend(ev) { return api("POST", "/api/login/input", ev); }
+function loginFramePoint(e) {
+  const img = document.getElementById("loginFrame"); if (!img || !img.naturalWidth) return null;
+  const r = img.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * img.naturalWidth / r.width, y: (e.clientY - r.top) * img.naturalHeight / r.height };
+}
+function loginKey(e) {
+  if (e.metaKey || e.ctrlKey) return;   // paste arrives as its own event
+  const named = ["Enter", "Tab", "Backspace", "Delete", "Escape", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "Home", "End"];
+  if (e.key.length === 1) { e.preventDefault(); loginSend({ kind: "text", text: e.key }); }
+  else if (named.indexOf(e.key) >= 0) { e.preventDefault(); loginSend({ kind: "key", key: e.key }); }
+}
+function closeLoginView() { state.loginView = false; const img = document.getElementById("loginFrame"); if (img) img.src = ""; }
 function modalShell(title, body, width) {
   return '<div id="modalDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="modal"><div class="card elev-md" style="width:' + (width || 440) + 'px;max-width:100%;padding:18px 20px;max-height:90vh;overflow:auto"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><h5>' + title + '</h5><button class="btn btn-icon btn-secondary" data-act="closeModal" aria-label="Close" style="margin-left:auto;width:28px;height:28px">×</button></div>' + body + "</div></div>";
 }
@@ -1433,7 +1461,8 @@ function render() {
   const boxes = [...root.querySelectorAll(".scroll, .scroll-xy")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
   const focusId = document.activeElement ? document.activeElement.id : "";
   const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
-  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
+  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
+  if (state.loginView) loginFrameLoop();   // a redraw makes a new image element: reattach the stream
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
   if (focusId === "valueQuery" || focusId === "searchInput") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
@@ -1522,6 +1551,7 @@ function connect() {
   render();
   api("POST", "/api/login/start").then((res) => {
     if (!res || !res.ok) { state.busy = ""; state.status.error = (res && res.error) || "Install Chrome. Passkey login has to happen on Wealthsimple’s site."; render(); return; }
+    if (state.status.loginView) { state.loginView = true; render(); loginFrameLoop(); }
     const t0 = Date.now();
     const tick = () => api("GET", "/api/status").then((st) => {
       if (state.busy !== "connecting") return;   // cancelled meanwhile
@@ -1529,10 +1559,10 @@ function connect() {
       applyStatus(st);
       // redraw the header only on a change: a redraw restarts the spinner's animation
       if (JSON.stringify([state.status.connected, state.status.capturing, state.status.error, state.status.syncing]) !== before) renderHeaderOnly();
-      if (st && st.connected) { state.busy = ""; return syncNow(); }
+      if (st && st.connected) { state.busy = ""; closeLoginView(); return syncNow(); }
       // the server stopped waiting: the window closed, or nothing showed up in time
-      if (st && !st.capturing) { state.busy = ""; state.status.error = st.error || "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
-      if (Date.now() - t0 > 180000) { state.busy = ""; state.status.error = "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
+      if (st && !st.capturing) { state.busy = ""; closeLoginView(); state.status.error = st.error || "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
+      if (Date.now() - t0 > 180000) { state.busy = ""; closeLoginView(); state.status.error = "No session yet. Finish login in the Chrome window, then try Sync now."; render(); return; }
       setTimeout(tick, 500);
     });
     tick();
@@ -1572,6 +1602,7 @@ function popoverBoxKeys(e, rows) {
 function cancelConnect() {
   state.busy = "";
   state.status.error = "";
+  closeLoginView();
   render();
   api("POST", "/api/login/cancel").then(() => pollStatus());
 }
@@ -1641,6 +1672,7 @@ function act(name, arg, ev) {
     case "themeMenu": state.themeOpen = !state.themeOpen; render(); break;
     case "sync": syncNow(); break;
     case "connect": connect(); break;
+    case "loginClick": { const p = loginFramePoint(ev); if (p) loginSend({ kind: "click", x: p.x, y: p.y }); break; }
     case "cancelConnect": cancelConnect(); break;
     case "update": api("POST", "/api/update").then((r) => { if (!r || !r.ok) { state.notice = (r && r.error) || "Update failed."; state.noticeKind = "err"; } pollStatus(); renderHeaderOnly(); }); break;
     case "refreshSession": refreshSession(); break;
@@ -1704,7 +1736,20 @@ function bind() {
     const el = e.target.closest("[data-act][data-mousedown]");
     if (el) { e.preventDefault(); let arg = {}; try { arg = JSON.parse(el.dataset.arg || "{}"); } catch (err) {} act(el.dataset.act, arg, e); }
   });
+  document.addEventListener("paste", (e) => {
+    if (!state.loginView) return;
+    const text = (e.clipboardData && e.clipboardData.getData("text")) || "";
+    if (text) loginSend({ kind: "text", text });
+    e.preventDefault();
+  });
+  document.addEventListener("wheel", (e) => {
+    if (!state.loginView || !(e.target && e.target.id === "loginFrame")) return;
+    const p = loginFramePoint(e); if (!p) return;
+    e.preventDefault();
+    loginSend({ kind: "wheel", x: p.x, y: p.y, deltaY: e.deltaY });
+  }, { passive: false });
   document.addEventListener("keydown", (e) => {
+    if (state.loginView) { loginKey(e); return; }
     // ⌘K (Ctrl+K elsewhere): the filter popover on Symbol, search box focused
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
       e.preventDefault();

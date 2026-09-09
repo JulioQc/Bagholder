@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import ssl
 import struct
@@ -535,10 +536,22 @@ APP_DIR = Path(__file__).resolve().parent
 UPDATE_HEALTHY_SEC = 20          # a restarted server alive this long is a good update
 UPDATE_MAX_BYTES = 50 * 1024 * 1024
 UPDATE_CHECK_HOURS = 1   # a release is a click away now, so the check is hourly and at every start
+# A copy in a container (the Dockerfile): bound to every interface of the container while
+# compose publishes it on the host's loopback only, and never installing a release into
+# itself, since a new release is a new image; it still checks for one and says so in the
+# header, where the pull command stands in for the Update button. Both empty on a desktop.
+BIND_HOST = (os.environ.get("BAGHOLDER_BIND") or "").strip() or "127.0.0.1"
+UPDATES_OFF = bool((os.environ.get("BAGHOLDER_NO_UPDATE") or "").strip())
+UPDATES_OFF_MESSAGE = "This copy is updated with docker compose pull; a new release is a new image."
+IMAGE_PAGE = REPO_URL + "/pkgs/container/bagholder"   # where a container copy's header sends the user for a new release
+# The sign-in window inside the page (a container, where the user sees no window): Chromium
+# runs on the container's virtual display, the page shows its frames and sends it clicks and keys.
+LOGIN_VIEW = bool((os.environ.get("BAGHOLDER_LOGIN_VIEW") or "").strip())
+LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-09.2"
+PROTOCOL = "2026-09-09.3"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -2592,6 +2605,9 @@ def boot_session():
 
 
 def find_chrome():
+    explicit = (os.environ.get("BAGHOLDER_CHROME") or "").strip()
+    if explicit and os.path.isfile(explicit):
+        return explicit
     if sys.platform == "darwin":
         for p in (
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -3139,6 +3155,191 @@ def _login_browser_alive():
         return False
 
 
+_view_lock = threading.Lock()
+_view = {"ws": None, "target": ""}
+
+
+def _login_view_drop():
+    with _view_lock:
+        ws, _view["ws"], _view["target"] = _view["ws"], None, ""
+    if ws is not None:
+        try:
+            ws.close()
+        except Exception:
+            pass
+
+
+def _login_view_ws():
+    """A DevTools socket to the login window's page, kept between calls; None without a window."""
+    pages = _cdp_pages(DEBUG_PORTS[0])
+    if not pages:
+        _login_view_drop()
+        return None
+    page = pages[0]
+    with _view_lock:
+        if _view["ws"] is not None and _view["target"] == page.get("id"):
+            return _view["ws"]
+    _login_view_drop()
+    ws = _ws_connect(page["webSocketDebuggerUrl"], timeout=CAPTURE_CALL_SEC)
+    with _view_lock:
+        _view["ws"], _view["target"] = ws, page.get("id")
+    return ws
+
+
+def login_frame():
+    """The login window as a JPEG, or None when the app is not waiting for a login or has no window."""
+    with _lock:
+        capturing = bool(_state.get("capturing"))
+    if not capturing:
+        return None
+    try:
+        ws = _login_view_ws()
+        if ws is None:
+            return None
+        r = _cdp_call(ws, "Page.captureScreenshot", {"format": "jpeg", "quality": 60}, timeout=CAPTURE_CALL_SEC)
+        data = ((r or {}).get("result") or {}).get("data")
+        return base64.b64decode(data) if data else None
+    except Exception:
+        _login_view_drop()
+        return None
+
+
+_cast = {"frame": None, "seq": 0, "cond": threading.Condition()}
+
+
+def _screencast_loop(attempt):
+    """Chromium pushes the login window's frames as they change (Page.startScreencast)
+    on a socket of its own; the latest frame waits for the page's stream. Runs while
+    the attempt is live, reconnecting when the window's socket drops."""
+    while _attempt_is(attempt):
+        with _lock:
+            if not _state.get("capturing"):
+                return
+        pages = _cdp_pages(DEBUG_PORTS[0])
+        if not pages:
+            time.sleep(0.5)
+            continue
+        ws = None
+        try:
+            ws = _ws_connect(pages[0]["webSocketDebuggerUrl"], timeout=CAPTURE_CALL_SEC)
+            _cdp_call(ws, "Page.startScreencast", {"format": "jpeg", "quality": 60, "maxWidth": LOGIN_VIEW_SIZE[0], "maxHeight": LOGIN_VIEW_SIZE[1], "everyNthFrame": 1}, timeout=CAPTURE_CALL_SEC)
+            while _attempt_is(attempt):
+                with _lock:
+                    if not _state.get("capturing"):
+                        return
+                try:
+                    opcode, data = ws.recv_message(timeout=2)
+                except TimeoutError:
+                    continue
+                if opcode not in (0x1, 0x2):
+                    continue
+                msg = json.loads(data.decode("utf-8"))
+                if msg.get("method") != "Page.screencastFrame":
+                    continue
+                p = msg.get("params") or {}
+                frame = base64.b64decode(p.get("data") or "")
+                if frame:
+                    with _cast["cond"]:
+                        _cast["frame"] = frame
+                        _cast["seq"] += 1
+                        _cast["cond"].notify_all()
+                # acknowledged without waiting for the answer: waiting would eat the next frames
+                ws.send_text(json.dumps({"id": ws._next_id, "method": "Page.screencastFrameAck", "params": {"sessionId": p.get("sessionId")}}))
+                ws._next_id += 1
+        except Exception:
+            time.sleep(0.5)
+        finally:
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+
+
+def login_stream(write, alive):
+    """The login window as a multipart JPEG stream: each frame as Chromium pushes it,
+    until the app stops waiting for a login or the reader goes away."""
+    last = -1
+    while True:
+        with _lock:
+            if not _state.get("capturing"):
+                return
+        with _cast["cond"]:
+            if _cast["seq"] == last:
+                _cast["cond"].wait(1.0)
+            if _cast["seq"] == last or _cast["frame"] is None:
+                continue
+            frame, last = _cast["frame"], _cast["seq"]
+        if not alive():
+            return
+        write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(frame) + frame + b"\r\n")
+
+
+_VIEW_KEYS = {"Enter": 13, "Tab": 9, "Backspace": 8, "Delete": 46, "Escape": 27, "ArrowLeft": 37, "ArrowUp": 38,
+              "ArrowRight": 39, "ArrowDown": 40, "Home": 36, "End": 35}
+
+
+def _view_key_event(ch):
+    """The key event for one typed character: its text, key, code and virtual key code."""
+    up = ch.upper()
+    if ch.isdigit():
+        code, vk = "Digit" + ch, ord(ch)
+    elif "A" <= up <= "Z" and ch.isascii():
+        code, vk = "Key" + up, ord(up)
+    elif ch == " ":
+        code, vk = "Space", 32
+    else:
+        code, vk = "", 0
+    ev = {"key": ch, "text": ch, "unmodifiedText": ch, "code": code}
+    if vk:
+        ev["windowsVirtualKeyCode"] = vk
+        ev["nativeVirtualKeyCode"] = vk
+    return ev
+
+
+def login_input(ev):
+    """One click, typed text, key or scroll from the page, forwarded to the login window."""
+    kind = _s((ev or {}).get("kind"))
+    try:
+        ws = _login_view_ws()
+        if ws is None:
+            return {"ok": False, "error": "No login window."}
+        x, y = float(ev.get("x") or 0), float(ev.get("y") or 0)
+        call = lambda method, params: _cdp_call(ws, method, params, timeout=CAPTURE_CALL_SEC)
+        if kind == "click":
+            call("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y})
+            for typ in ("mousePressed", "mouseReleased"):
+                call("Input.dispatchMouseEvent", {"type": typ, "x": x, "y": y, "button": "left", "clickCount": 1})
+        elif kind == "text":
+            text = _s(ev.get("text"))
+            if len(text) == 1 or (0 < len(text) <= 8 and text.isalnum()):
+                # a keystroke, or a pasted code: real key events, one per character, since a
+                # one-time-code field listens for keys and ignores text inserted as a block
+                for ch in text:
+                    call("Input.dispatchKeyEvent", dict(_view_key_event(ch), type="keyDown"))
+                    call("Input.dispatchKeyEvent", dict(_view_key_event(ch), type="keyUp"))
+            elif text:
+                call("Input.insertText", {"text": text})
+        elif kind == "key":
+            key = _s(ev.get("key"))
+            vk = _VIEW_KEYS.get(key)
+            if vk is None:
+                return {"ok": False, "error": "unknown key"}
+            base = {"key": key, "code": key, "windowsVirtualKeyCode": vk, "nativeVirtualKeyCode": vk}
+            if key == "Enter":
+                base["text"] = "\r"
+            call("Input.dispatchKeyEvent", dict(base, type="keyDown"))
+            call("Input.dispatchKeyEvent", dict(base, type="keyUp"))
+        elif kind == "wheel":
+            call("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": float(ev.get("deltaY") or 0)})
+        else:
+            return {"ok": False, "error": "unknown input"}
+        return {"ok": True}
+    except Exception:
+        _login_view_drop()
+        return {"ok": False, "error": "The login window did not take that."}
+
+
 def cancel_login():
     """Stop waiting for a login and close the window the app opened."""
     with _lock:
@@ -3197,8 +3398,13 @@ def start_login_browser():
         "--no-first-run",
         "--no-default-browser-check",
         "--new-window",
-        LOGIN_URL,
     ]
+    if LOGIN_VIEW:
+        # a container: a real window on its virtual display (headless Chromium is turned
+        # away at Wealthsimple's door), sized for the page, sandbox off since the process is root
+        args += ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--window-position=0,0",
+                 "--window-size=%d,%d" % LOGIN_VIEW_SIZE]
+    args.append(LOGIN_URL)
     try:
         kwargs = {
             "stdin": subprocess.DEVNULL,
@@ -3222,6 +3428,10 @@ def start_login_browser():
             daemon=True,
         )
         t.start()
+        if LOGIN_VIEW:
+            with _cast["cond"]:
+                _cast["frame"], _cast["seq"] = None, 0
+            threading.Thread(target=_screencast_loop, args=(attempt,), name="bagholder-screencast", daemon=True).start()
         return {"ok": True}
     except Exception:
         return {
@@ -3405,8 +3615,10 @@ def status_payload():
             "version": APP_VERSION,
             "latestVersion": str(update_status().get("latest") or ""),
             "updateAvailable": bool(update_status().get("updateAvailable")),
-            "updateUrl": str(update_status().get("url") or REPO_URL),
+            "updateUrl": IMAGE_PAGE if UPDATES_OFF else str(update_status().get("url") or REPO_URL),
             "canUpdate": can_update(),
+            "updateBy": "image" if UPDATES_OFF else "app",
+            "loginView": LOGIN_VIEW,
             "updating": str(_state.get("updating") or ""),
             "updateError": str(_state.get("updateError") or ""),
         }
@@ -3600,7 +3812,7 @@ def git_update_ready():
 
 def can_update(rec=None):
     rec = rec if rec is not None else update_status()
-    if not rec.get("updateAvailable"):
+    if not rec.get("updateAvailable") or UPDATES_OFF:
         return False
     if update_mode() == "git":
         return git_update_ready()[0]
@@ -3756,6 +3968,8 @@ def perform_update(tag, rec):
 
 def start_update():
     """Begin the update the page asked for; the work runs in the background."""
+    if UPDATES_OFF:
+        return {"ok": False, "error": UPDATES_OFF_MESSAGE}
     rec = update_status()
     with _lock:
         if _state.get("updating"):
@@ -3879,6 +4093,8 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write("bagholder %s - %s\n" % (self.address_string(), fmt % args))
 
     def _local(self):
+        if BIND_HOST != "127.0.0.1":
+            return True   # bound beyond loopback on purpose (a container); the peer is its bridge
         ip = self.client_address[0]
         return ip in ("127.0.0.1", "::1")
 
@@ -3886,6 +4102,9 @@ class Handler(BaseHTTPRequestHandler):
         raw = (self.headers.get("Host") or "").strip().lower()
         if not raw or "," in raw:
             return False
+        if BIND_HOST != "127.0.0.1":
+            # a container's port may be published under another number; the name must still be 127.0.0.1
+            return bool(re.fullmatch(r"127\.0\.0\.1:\d{1,5}", raw))
         port = self.server.server_address[1]
         return raw == "127.0.0.1:%s" % port
 
@@ -3937,6 +4156,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if path == "/api/login/stream":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            try:
+                login_stream(lambda chunk: (self.wfile.write(chunk), self.wfile.flush()), lambda: not self.wfile.closed)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            return
+        if path == "/api/login/frame":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            data = login_frame()
+            if data:
+                self._send(200, data, "image/jpeg")
+            else:
+                self._send(204, b"")
+            return
         if path in ("/", "/index.html", "/ledger.html", "/v2", "/v2/"):
             if not self._gate():
                 self._send(403, {"ok": False})
@@ -4057,6 +4300,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/login/cancel":
             self._read_json()
             self._send(200, cancel_login())
+            return
+        if path == "/api/login/input":
+            self._send(200, login_input(self._read_json() or {}))
             return
         if path == "/api/update":
             self._read_json()
@@ -4239,12 +4485,12 @@ def bind_server():
     last = None
     for port in port_choices():
         try:
-            httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            httpd = ThreadingHTTPServer((BIND_HOST, port), Handler)
             return httpd, port
         except OSError as e:
             last = e
             continue
-    raise SystemExit("Could not bind 127.0.0.1:%s (%s)" % ("-".join(str(p) for p in port_choices()), last))
+    raise SystemExit("Could not bind %s:%s (%s)" % (BIND_HOST, "-".join(str(p) for p in port_choices()), last))
 
 
 def main():
@@ -4282,6 +4528,13 @@ def main():
                 name="bagholder-listings",
                 daemon=True,
             ).start()
+    # a container stops its process with SIGTERM, which PID 1 would otherwise ignore: same exit as Ctrl-C
+    def _on_sigterm(*_):
+        raise KeyboardInterrupt
+    try:
+        signal.signal(signal.SIGTERM, _on_sigterm)
+    except (ValueError, OSError):
+        pass
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -4301,7 +4554,8 @@ def main():
 
 
 if __name__ == "__main__":
-    if os.environ.get("BAGHOLDER_CHILD") == "1":
+    if os.environ.get("BAGHOLDER_CHILD") == "1" or UPDATES_OFF:
+        # the supervisor exists to restart an updated server; a copy that never updates runs plain
         main()
     else:
         sys.exit(supervise())

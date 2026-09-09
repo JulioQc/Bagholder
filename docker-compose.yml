@@ -1,0 +1,12 @@
+services:
+  bagholder:
+    # published on every release; update with: docker compose pull && docker compose up -d
+    image: ghcr.io/professorbagholder/bagholder:latest
+    container_name: bagholder
+    # loopback only on the host, as the app itself binds: open http://127.0.0.1:8765/
+    ports:
+      - "127.0.0.1:8765:8765"
+    # the database and the login
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+.env
+data
+*.db
+*.db-journal
+session.json
+ios
+android
+docs
+tests
+*.md
+__pycache__

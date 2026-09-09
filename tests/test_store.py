@@ -1359,6 +1359,115 @@ class InAppUpdateTest(unittest.TestCase):
             self.assertEqual((Path(app) / "b.py").read_text(), "old b")
             self.assertFalse((Path(home) / "update-pending").exists())
 
+    def test_a_container_copy_binds_wide_keeps_the_host_check_and_never_updates(self):
+        import bagholder
+        from unittest import mock
+        from datetime import datetime, timezone
+
+        class Peer:
+            def __init__(self, ip, host, port=8765):
+                self.client_address = (ip, 50000)
+                self.headers = {"Host": host}
+                self.server = type("S", (), {"server_address": ("0.0.0.0", port)})()
+        local, host_ok = bagholder.Handler._local, bagholder.Handler._host_ok
+        # the desktop: loopback peers only, the Host as bound
+        self.assertTrue(local(Peer("127.0.0.1", "127.0.0.1:8765")))
+        self.assertFalse(local(Peer("172.18.0.1", "127.0.0.1:8765")))
+        self.assertTrue(host_ok(Peer("127.0.0.1", "127.0.0.1:8765")))
+        self.assertFalse(host_ok(Peer("127.0.0.1", "127.0.0.1:8798")), "the desktop's Host names its own port")
+        with mock.patch.object(bagholder, "BIND_HOST", "0.0.0.0"):
+            # the container: the peer is the bridge; the name must still be 127.0.0.1, under any published port
+            self.assertTrue(local(Peer("172.18.0.1", "127.0.0.1:8798")))
+            self.assertTrue(host_ok(Peer("172.18.0.1", "127.0.0.1:8798")))
+            self.assertFalse(host_ok(Peer("172.18.0.1", "localhost:8765")))
+            self.assertFalse(host_ok(Peer("172.18.0.1", "bagholder.example:8765")))
+        # the container still hears of a release; it is told to pull, never installs into itself
+        mine = bagholder.parse_version(bagholder.APP_VERSION)
+        newer = "v%d.%d.%d" % (mine[0], mine[1], mine[2] + 1)
+        with mock.patch.object(bagholder, "UPDATES_OFF", True), \
+             mock.patch.object(bagholder, "_http_json", return_value={"tag_name": newer, "html_url": "https://github.com/x/y/releases/tag/" + newer, "assets": [{"name": "bagholder-%s-web.zip" % newer, "browser_download_url": "u"}]}):
+            rec = bagholder.check_for_update(datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc))
+            self.assertEqual((rec["ok"], rec["updateAvailable"], rec["latest"]), (True, True, newer))
+            self.assertFalse(bagholder.can_update(rec), "seen, not installable")
+            self.assertEqual((bagholder.status_payload()["updateBy"], bagholder.status_payload()["updateUrl"]), ("image", bagholder.IMAGE_PAGE), "told of the release, sent to the image")
+            out = bagholder.start_update()
+            self.assertEqual((out["ok"], out["error"]), (False, bagholder.UPDATES_OFF_MESSAGE))
+        self.assertEqual(bagholder.status_payload()["updateBy"], "app")
+
+    def test_the_login_window_in_the_page_serves_frames_and_takes_input(self):
+        import bagholder
+        from unittest import mock
+        calls = []
+        class FakeWS:
+            closed = False
+            def close(self): self.closed = True
+        ws = FakeWS()
+        def cdp(sock, method, params=None, timeout=8):
+            calls.append((method, params))
+            return {"result": {"data": "/9j/AAAA"}} if method == "Page.captureScreenshot" else {"result": {}}
+        page = [{"type": "page", "id": "P1", "webSocketDebuggerUrl": "ws://127.0.0.1:18765/devtools/page/P1"}]
+        bagholder._login_view_drop()
+        bagholder._state["capturing"] = True
+        with mock.patch.object(bagholder, "_cdp_pages", return_value=page), mock.patch.object(bagholder, "_ws_connect", return_value=ws) as connect, \
+             mock.patch.object(bagholder, "_cdp_call", side_effect=cdp):
+            self.assertEqual(bagholder.login_frame(), b"\xff\xd8\xff\x00\x00\x00", "the window's screenshot, decoded")
+            self.assertTrue(bagholder.login_input({"kind": "click", "x": 40, "y": 50})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "text", "text": "me@example.com"})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "text", "text": "7"})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "text", "text": "123456"})["ok"], "a pasted code")
+            self.assertTrue(bagholder.login_input({"kind": "key", "key": "Enter"})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "wheel", "x": 1, "y": 2, "deltaY": 120})["ok"])
+            self.assertFalse(bagholder.login_input({"kind": "key", "key": "F13"})["ok"])
+            self.assertEqual(connect.call_count, 1, "one socket, kept across calls")
+        methods = [m for m, _ in calls]
+        self.assertEqual(methods[:4], ["Page.captureScreenshot", "Input.dispatchMouseEvent", "Input.dispatchMouseEvent", "Input.dispatchMouseEvent"])
+        self.assertEqual([p["type"] for m, p in calls if m == "Input.dispatchMouseEvent"][:3], ["mouseMoved", "mousePressed", "mouseReleased"])
+        self.assertIn(("Input.insertText", {"text": "me@example.com"}), calls, "an address is inserted as a block")
+        typed = [(p["type"], p["key"], p.get("windowsVirtualKeyCode")) for m, p in calls if m == "Input.dispatchKeyEvent" and p["key"] in "1234567"]
+        self.assertEqual(typed[:2], [("keyDown", "7", 55), ("keyUp", "7", 55)], "a keystroke is a real key event")
+        self.assertEqual(len(typed), 2 + 12, "a pasted six-digit code is six keystrokes")
+        enter = [p for m, p in calls if m == "Input.dispatchKeyEvent" and p["key"] == "Enter"]
+        self.assertEqual([(p["type"], p["key"], p["windowsVirtualKeyCode"]) for p in enter], [("keyDown", "Enter", 13), ("keyUp", "Enter", 13)])
+        self.assertEqual([p for m, p in calls if m == "Input.dispatchMouseEvent" and p["type"] == "mouseWheel"][0]["deltaY"], 120.0)
+        # no window: no frame, and input says so
+        with mock.patch.object(bagholder, "_cdp_pages", return_value=[]):
+            self.assertIsNone(bagholder.login_frame())
+            self.assertFalse(bagholder.login_input({"kind": "click", "x": 1, "y": 1})["ok"])
+        self.assertTrue(ws.closed, "the socket is dropped with the window")
+        bagholder._state["capturing"] = False
+        self.assertIsNone(bagholder.login_frame(), "not waiting for a login: nothing to show")
+
+    def test_the_container_launches_chromium_on_its_display_at_the_view_size(self):
+        import bagholder
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["BAGHOLDER_HOME"] = tmp
+            store.set_home(tmp)
+            bagholder.set_home(tmp) if hasattr(bagholder, "set_home") else None
+            seen = {}
+            class P:
+                pid = 4242
+                def poll(self): return None
+            def popen(args, **kw):
+                seen["args"] = args
+                return P()
+            bagholder._state["capturing"] = False
+            bagholder._state["chrome_proc"] = None
+            with mock.patch.object(bagholder, "LOGIN_VIEW", True), mock.patch.object(bagholder, "find_chrome", return_value="/usr/bin/chromium"), \
+                 mock.patch.object(bagholder, "_login_browser_alive", return_value=False), mock.patch.object(bagholder, "_close_login_browser"), \
+                 mock.patch.object(bagholder.subprocess, "Popen", side_effect=popen), mock.patch.object(bagholder.threading, "Thread"):
+                self.assertTrue(bagholder.start_login_browser()["ok"])
+            args = seen["args"]
+            self.assertEqual(args[0], "/usr/bin/chromium")
+            for flag in ("--no-sandbox", "--window-size=960,1000"):
+                self.assertIn(flag, args)
+            self.assertNotIn("--headless=new", args, "a real window on the virtual display: headless is turned away by Wealthsimple")
+            self.assertEqual(args[-1], bagholder.LOGIN_URL, "the login page last, after the flags")
+            bagholder._state["capturing"] = False
+            bagholder._state["chrome_proc"] = None
+        with mock.patch.dict(os.environ, {"BAGHOLDER_CHROME": "/definitely/not/there"}):
+            self.assertNotEqual(bagholder.find_chrome(), "/definitely/not/there", "an explicit path is used only when it exists")
+
     def test_update_button_refuses_during_a_sync(self):
         import bagholder
         from unittest import mock
