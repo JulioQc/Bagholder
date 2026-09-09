@@ -1111,7 +1111,6 @@ struct CashflowScreen: View {
     @Environment(\.theme) private var t
     @ObservedObject var book: Book
     let chrome: Chrome
-    @AppStorage("bagholder.allocationBy") private var allocBy = "market"
     @State private var picked: Int?
     @State private var distPick: Int? = nil
 
@@ -1146,46 +1145,86 @@ struct CashflowScreen: View {
     private func tiles(_ cf: BHCashflowView) -> some View {
         func tile(_ tile: BHTile) -> Tile {
             if tile.label == "Yield on cost" {
-                return Tile(label: tile.label, value: BHFmt.pct(tile.yield, digits: 2, signed: false), subtitle: BHFmt.wholeMoney(tile.earned) + " on " + BHFmt.wholeMoney(tile.book))
+                return Tile(label: tile.label, value: BHFmt.pct(tile.yield, digits: 2, signed: false), subtitle: BHFmt.money(tile.projected) + " / mo")
             }
-            return Tile(label: tile.label, value: BHFmt.money(tile.total), subtitle: BHFmt.money(tile.perMonth) + " / month")
+            if tile.label == "Margin used" {
+                return Tile(label: tile.label, value: BHFmt.wholeMoney(tile.marginUsed ?? 0), subtitle: BHFmt.wholeMoney(tile.interestPerMonth ?? 0) + "/mo margin interest")
+            }
+            return Tile(label: tile.label, value: BHFmt.money(tile.total), subtitle: tile.label == "All time" ? "total earned" : BHFmt.money(tile.perMonth) + " / month")
         }
-        // YTD and Yield on cost first, then All time and the past years
+        // YTD and Yield on cost first, then All time with Margin used (or Last 12 months), then the past years
         let ytd = cf.tiles.first { $0.label.hasSuffix("YTD") }
         let yoc = cf.tiles.first { $0.label == "Yield on cost" }
         let all = cf.tiles.first { $0.label == "All time" }
-        let years = cf.tiles.filter { !$0.label.hasSuffix("YTD") && $0.label != "Yield on cost" && $0.label != "All time" && $0.label != "Margin used" && $0.label != "Last 12 months" }.reversed()
-        let ordered = [ytd, yoc, all].compactMap { $0 } + years
+        let margin = cf.tiles.first { $0.label == "Margin used" || $0.label == "Last 12 months" }
+        let fixed = ["Yield on cost", "All time", "Margin used", "Last 12 months"]
+        let years = cf.tiles.filter { !$0.label.hasSuffix("YTD") && !fixed.contains($0.label) }.reversed()
+        let ordered = [ytd, yoc, all, margin].compactMap { $0 } + years
         return TilePager(tiles: ordered.map(tile))
     }
 
-    /// The projected month at the card's top right; the pressed month's payout while the chart is pressed.
+    /// The legend at the card's top right; while the chart is pressed, the month's
+    /// distributions, margin interest and net in a small card floating over the bars
+    /// at the top left, so nothing else moves.
     private func distributions(_ cf: BHCashflowView) -> some View {
-        let projected = cf.holdings.reduce(0.0) { $0 + ($1.annual ?? 0) / 12 }
-        let value = distPick.flatMap { i in cf.months.indices.contains(i) ? cf.months[i].value : nil } ?? projected
-        let amount = Text(BHFmt.money(value)).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(t.ink)
-        return Card(title: "Distributions", trailing: AnyView(amount)) {
+        let interest = CashflowScreen.interestByMonth(cf)
+        let picked = distPick.flatMap { i in cf.months.indices.contains(i) ? cf.months[i] : nil }
+        let legendRow = AnyView(HStack(spacing: 12) {
+            legend(t.accent, "Distributions")
+            legend(t.neg, "Margin interest")
+        })
+        return Card(title: "Cashflow", trailing: legendRow) {
             if cf.months.isEmpty { Text("No distributions in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             else {
-                PnlBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }, pick: $distPick, color: t.accent)
+                ZStack(alignment: .topLeading) {
+                    PnlBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }, pick: $distPick, color: t.accent,
+                                 overlay: cf.months.map { interest[$0.key] ?? 0 })
+                    if let m = picked {
+                        // as small as its four lines: labels in one column, values in the next
+                        let intr = interest[m.key] ?? 0
+                        let rows: [(String, String, Color)] = [
+                            ("Distributions", BHFmt.money(m.value), t.accent300),
+                            ("Margin interest", BHFmt.money(intr > 0 ? -intr : 0), t.neg),
+                            ("Net", BHFmt.signedMoney(m.value - intr), t.signed(m.value - intr)),
+                        ]
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(m.label).font(.system(size: 10, weight: .medium)).foregroundStyle(t.ink55)
+                            HStack(alignment: .top, spacing: 6) {
+                                VStack(alignment: .leading, spacing: 1) { ForEach(rows, id: \.0) { r in Text(r.0).font(.system(size: 10)).foregroundStyle(t.ink55) } }
+                                VStack(alignment: .trailing, spacing: 1) { ForEach(rows, id: \.0) { r in Text(r.1).font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundStyle(r.2) } }
+                            }
+                        }
+                        .padding(.horizontal, 7).padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(t.surface))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(t.hair, lineWidth: 1))
+                        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                        .allowsHitTesting(false)
+                    }
+                }
             }
         }
+    }
+
+    private func legend(_ color: Color, _ label: String) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 8, height: 8)
+            Text(label).font(.system(size: 11)).foregroundStyle(t.ink60)
+        }
+    }
+
+    /// The month's margin interest, CAD, from the Interest charge rows in scope.
+    static func interestByMonth(_ cf: BHCashflowView) -> [String: Double] {
+        var out: [String: Double] = [:]
+        for r in cf.other where r.kind == "Interest charge" { out[String(r.date.prefix(7)), default: 0] -= r.amountCad }
+        return out
     }
 
     private func allocation(_ cf: BHCashflowView) -> some View {
         let items: [(label: String, value: Double)] = cf.holdings.map { h in
-            (h.symbol + (cf.holdings.filter { $0.symbol == h.symbol }.count > 1 ? " · " + h.account : ""), allocBy == "projected" ? (h.annual ?? 0) / 12 : h.qty * h.last)
+            (h.symbol + (cf.holdings.filter { $0.symbol == h.symbol }.count > 1 ? " · " + h.account : ""), (h.annual ?? 0) / 12)
         }.filter { $0.value > 0 }.sorted { $0.value > $1.value }
         let total = items.reduce(0.0) { $0 + $1.value }
-        let switcher = HStack(spacing: 0) {
-            ForEach(["market", "projected"], id: \.self) { k in
-                Button(k == "market" ? "Market" : "Projected") { allocBy = k; picked = nil }
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(allocBy == k ? t.ink : t.ink55)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(allocBy == k ? t.well : .clear))
-            }
-        }
-        return Card(title: "Allocation", trailing: AnyView(switcher)) {
+        return Card(title: "Allocation") {
             if items.isEmpty { Text("No income holdings in scope.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             else {
                 HStack(alignment: .center, spacing: 16) {

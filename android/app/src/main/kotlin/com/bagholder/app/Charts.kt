@@ -214,9 +214,13 @@ fun equityDateLabels(series: List<EquityPoint>): List<String> {
  * the month sits under the finger at the bottom; a tap opens it.
  */
 @Composable
-fun PnlBarsChart(months: List<MonthBucket>, pick: Int?, onPickChange: (Int?) -> Unit, height: Int = 130, color: Color? = null, onOpen: ((MonthBucket) -> Unit)? = null) {
+fun PnlBarsChart(months: List<MonthBucket>, pick: Int?, onPickChange: (Int?) -> Unit, height: Int = 130, color: Color? = null, overlay: List<Double>? = null,
+                 onOpen: ((MonthBucket) -> Unit)? = null) {
+    // overlay: per month, an amount drawn over the bar from the same baseline at the same width in `neg`
+    // (the Cashflow chart's margin interest); the taller of the two sits behind
     val t = LocalTheme.current
-    val sc = monthlyScale(months, height.toFloat())
+    val scaled = if (overlay == null) months else months.mapIndexed { i, m -> MonthBucket(m.key, m.label).apply { value = max(m.value, overlay.getOrElse(i) { 0.0 }); count = m.count } }
+    val sc = monthlyScale(scaled, height.toFloat())
     Column(Modifier.fillMaxWidth()) {
         Canvas(Modifier.fillMaxWidth().height(height.dp).pointerInput(months) {
             detectTapGestures { pos ->
@@ -235,7 +239,12 @@ fun PnlBarsChart(months: List<MonthBucket>, pick: Int?, onPickChange: (Int?) -> 
                 val x = i * pitch + (pitch - barW) / 2
                 val y = if (m.value >= 0) zeroY - h else zeroY
                 val dim = pick != null && pick != i
-                drawRect((color ?: if (m.value >= 0) t.pos else t.neg).copy(alpha = if (dim) 0.35f else 1f), Offset(x, y), Size(barW, max(h, 1.5f)))
+                val alpha = if (dim) 0.35f else 1f
+                val ov = overlay?.getOrElse(i) { 0.0 } ?: 0.0
+                val ho = if (ov > 0) monthlyBarHeight(ov, sc, height.toFloat()).dp.toPx() else 0f
+                val bar = { drawRect((color ?: if (m.value >= 0) t.pos else t.neg).copy(alpha = alpha), Offset(x, y), Size(barW, max(h, 1.5f))) }
+                val over = { drawRect(t.neg.copy(alpha = alpha), Offset(x, zeroY - ho), Size(barW, ho)) }
+                if (ho > h) { over(); bar() } else { bar(); if (ho > 0) over() }
             }
         }
         Spacer(Modifier.height(6.dp))

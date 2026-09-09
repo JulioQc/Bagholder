@@ -153,9 +153,15 @@ struct PnlBarsChart: View {
     var height: CGFloat = 130
     var color: Color? = nil   // nil: gains in `pos`, losses in `neg`
     var onPick: ((BHMonthBucket) -> Void)?
+    /// Per month, an amount drawn over the bar from the same baseline at the same width in `neg`
+    /// (the Cashflow chart's margin interest); the taller of the two sits behind.
+    var overlay: [Double]? = nil
 
     var body: some View {
-        let sc = MonthlyBarsChart.scale(months, height: height)
+        let scaled: [BHMonthBucket] = overlay == nil ? months : months.enumerated().map { i, m in
+            var c = m; c.value = max(m.value, overlay!.indices.contains(i) ? overlay![i] : 0); return c
+        }
+        let sc = MonthlyBarsChart.scale(scaled, height: height)
         VStack(spacing: 6) {
             GeometryReader { geo in
                 let w = geo.size.width
@@ -170,11 +176,21 @@ struct PnlBarsChart: View {
                         let h = MonthlyBarsChart.barHeight(m.value, sc, height: height)
                         let x = CGFloat(i) * pitch + (pitch - barW) / 2
                         let y = m.value >= 0 ? zeroY - h : zeroY
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill((color ?? (m.value >= 0 ? t.pos : t.neg)).opacity(pick == nil || pick == i ? 1 : 0.35))
+                        let alpha = pick == nil || pick == i ? 1.0 : 0.35
+                        let ov = overlay.flatMap { $0.indices.contains(i) ? $0[i] : nil } ?? 0
+                        let ho = ov > 0 ? MonthlyBarsChart.barHeight(ov, sc, height: height) : 0
+                        let bar = RoundedRectangle(cornerRadius: 2)
+                            .fill((color ?? (m.value >= 0 ? t.pos : t.neg)).opacity(alpha))
                             .frame(width: barW, height: max(h, 1.5))
                             .offset(x: x, y: y)
-                            .onTapGesture { onPick?(m) }
+                        let over = RoundedRectangle(cornerRadius: 2)
+                            .fill(t.neg.opacity(alpha))
+                            .frame(width: barW, height: ho)
+                            .offset(x: x, y: zeroY - ho)
+                        Group {
+                            if ho > h { over; bar } else { bar; if ho > 0 { over } }
+                        }
+                        .onTapGesture { onPick?(m) }
                     }
                 }
                 .overlay(ChartPress { x, width in
