@@ -3359,16 +3359,20 @@ def update_status():
 
 
 def release_assets(rel):
-    """{zip, sha} download URLs of a release's bagholder-<tag>.zip and its .sha256, when present."""
+    """{zip, sha} download URLs of a release's web archive and its .sha256, when present.
+
+    The archive is bagholder-<tag>-web.zip; releases before the name carried a
+    platform were bagholder-<tag>.zip, still accepted. Other assets on the page
+    (the Android build, bagholder-<tag>-android.apk) are ignored.
+    """
     tag = str((rel or {}).get("tag_name") or "")
-    out = {}
+    found = {}
     for a in (rel or {}).get("assets") or []:
-        name = str(a.get("name") or "")
-        if name == "bagholder-%s.zip" % tag:
-            out["zip"] = str(a.get("browser_download_url") or "")
-        elif name == "bagholder-%s.zip.sha256" % tag:
-            out["sha"] = str(a.get("browser_download_url") or "")
-    return out if out.get("zip") and out.get("sha") else {}
+        found[str(a.get("name") or "")] = str(a.get("browser_download_url") or "")
+    for stem in ("bagholder-%s-web.zip" % tag, "bagholder-%s.zip" % tag):
+        if found.get(stem) and found.get(stem + ".sha256"):
+            return {"zip": found[stem], "sha": found[stem + ".sha256"]}
+    return {}
 
 
 # --------------------------------------------------------------------------
