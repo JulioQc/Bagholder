@@ -1230,10 +1230,10 @@ function portfolioPieHtml(pf) {
   }).join("");
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
     '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5></div>' +
-    (p.items.length ? '<div id="ppiePlot" data-hover="ppie" style="display:flex;gap:22px;align-items:center;flex:1;min-height:0">' +
+    (p.items.length ? '<div id="ppiePlot" data-hover="ppie" style="display:flex;gap:28px;align-items:center;justify-content:center;flex:1;min-height:0">' +
       '<div style="position:relative;width:' + SIZE + 'px;height:' + SIZE + 'px;flex:none"><svg viewBox="0 0 120 120" style="width:' + SIZE + 'px;height:' + SIZE + 'px;display:block">' + arcs + "</svg>" +
       '<div id="ppieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">Market value</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(p.total) + "</div></div></div>" +
-      '<div id="ppieLegend" class="scroll" style="flex:1;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
+      '<div id="ppieLegend" class="scroll" style="flex:none;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
       p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.label) + "</span></span>").join("") +
       "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No open positions in scope.</div>') + "</div>";
 }
@@ -1253,15 +1253,16 @@ function portfolioHtml(m) {
   const p = state.sel ? positionById(state.sel) : null;
   if (p) return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + tradeDetailHtml(holdingAsTrade(p), m) + "</div>";
   const pf = m.portfolio || {};
-  const cols = [{ key: "symbol", label: "Symbol" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "unreal", label: "Unrealized", align: "right" }, { key: "day", label: "Change ($)", align: "right" }, { key: "dayPct", label: "Change (%)", align: "right", padRight: "0" }];
+  const cols = [{ key: "symbol", label: "Symbol" }, { key: "avg", label: "Avg", align: "right" }, { key: "last", label: "Last", align: "right" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "unreal", label: "Unrealized", align: "right" }, { key: "day", label: "Change ($)", align: "right" }, { key: "dayPct", label: "Change (%)", align: "right", padRight: "0" }];
   const s = state.sort.positions;
   const rows = sortRows(m.positions || [], s.key, s.dir, posSortValue);
   return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + portfolioTilesHtml(pf) +
-    '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:14px;align-items:stretch">' + portfolioPieHtml(pf) +
+    '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:14px;align-items:stretch">' + portfolioPieHtml(pf) +
     '<div class="card elev-sm" style="padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:640px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Holdings</h5></div>' +
-    '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0"><table class="table" style="min-width:560px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
+    '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0"><table class="table" style="min-width:640px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="openHolding" data-arg=\'' + attr({ id: r.id }) + "'>" +
-      '<td title="' + esc(r.symbol) + ' · ' + esc(r.account) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + ' <span class="muted" style="font-size:11px;font-weight:400">' + esc(r.account) + "</span></td>" +
+      '<td title="' + esc(r.symbol) + ' · ' + esc(r.account) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
+      '<td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right">' + px(r.last) + "</td>" +
       '<td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
       '<td style="text-align:right;white-space:nowrap;font-weight:500;color:' + color(r.unreal) + '">' + signedMoney(r.unreal, r.currency) + " (" + pct(r.unrealPct) + ")</td>" +
       '<td style="text-align:right;white-space:nowrap;color:' + (r.dayChange == null ? "var(--ink55)" : color(r.dayChange)) + '">' + (r.dayChange == null ? "—" : signedMoney(r.dayChange, r.currency)) + "</td>" +

@@ -25,7 +25,7 @@ TODAY = "2026-09-08"
 ACCOUNTS = {
     "TFSA": ("acct-tfsa", "CAD", "SELF_DIRECTED_TFSA"),
     "RRSP": ("acct-rrsp", "CAD", "SELF_DIRECTED_RRSP"),
-    "Trading": ("acct-trading", "USD", "SELF_DIRECTED_NON_REGISTERED"),
+    "Trading": ("acct-trading", "USD", "SELF_DIRECTED_NON_REGISTERED_MARGIN"),
     "Crypto": ("acct-crypto", "CAD", "SELF_DIRECTED_CRYPTO"),
 }
 
