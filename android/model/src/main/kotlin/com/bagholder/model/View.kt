@@ -403,7 +403,7 @@ object ModelView {
 
     private class Rate(val per: Double, val freq: Int, val annual: Double, val verified: Boolean, val source: String)
 
-    fun cashflowView(base: Base, f: Filters, positionsAll: List<Position>): CashflowView {
+    fun cashflowView(base: Base, f: Filters, positionsAll: List<Position>, marginUsed: Double = 0.0): CashflowView {
         val today = base.today
         val accts = f.lists["account"]!!
         val symbolsF = f.lists["symbol"]!!
@@ -565,6 +565,11 @@ object ModelView {
         var monthsInScope = keys.count { bucket[it]!![1] > 0.0 }
         if (monthsInScope == 0) monthsInScope = 1
         tiles.add(Tile(label = "All time", total = total, perMonth = total / monthsInScope, count = recs.size))
+        // margin used is the Portfolio tab's figure; under it the average margin interest per charged month
+        val charges = everything.filter { it.kind == "Interest charge" }
+        val chargeMonths = charges.map { it.date.take(7) }.toSet().size
+        val charged = charges.sumOf { -it.amountCad }
+        tiles.add(Tile(label = "Margin used", marginUsed = marginUsed, interestPerMonth = if (chargeMonths > 0) charged / chargeMonths else 0.0, interestMonths = chargeMonths))
         tiles.add(Tile(label = "Yield on cost", yield = if (basisAll != 0.0) annualAll / basisAll else null, projected = annualAll / 12, earned = earnedAll, book = basisAll))
         val other = everything.filter { it.kind != "Dividend" }
         return CashflowView(
@@ -615,6 +620,7 @@ object ModelView {
             results = listOf("Winners", "Losers", "Breakeven"),
             years = tradesAll.filter { it.exitDate.isNotEmpty() }.map { it.exitDate.take(4) }.toSet().sorted().reversed(),
         )
+        val portfolio = portfolioView(base, f, positions)
         return View(
             today = today, filters = f, options = options, kpi = Model.kpi(trades),
             equity = EquityView(seriesLabel, shown, dd, ann), years = years,
@@ -622,8 +628,8 @@ object ModelView {
             monthly = monthly(trades), bySymbol = bySymbol(trades), grades = gradeBuckets(trades), queue = reviewQueue(trades),
             trades = trades, tradeTotal = tradesAll.size, positions = positions,
             positionsSummary = PositionsSummary(positions.size, positions.sumOf { abs(it.cost) }, positions.sumOf { if (it.short) -it.mv else it.mv }, positions.sumOf { it.unreal }),
-            portfolio = portfolioView(base, f, positions),
-            cashflow = cashflowView(base, f, positionsAll), unmatched = base.unmatched,
+            portfolio = portfolio,
+            cashflow = cashflowView(base, f, positionsAll, portfolio.marginUsed), unmatched = base.unmatched,
         )
     }
 

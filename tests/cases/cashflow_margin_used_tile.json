@@ -5,23 +5,23 @@
       "label": "S&P 500"
     },
     "bySymbol": [],
-    "cashflowCount": 2,
+    "cashflowCount": 1,
     "cashflowHoldings": [
       {
-        "all": 1200.0,
-        "annual": 7200.0,
+        "all": 5.0,
+        "annual": 60.0,
         "exPast": false,
         "freq": 12,
-        "freqVerified": true,
-        "nextExDate": "2026-09-30",
-        "nextPayDate": "2026-10-06",
-        "payPast": false,
-        "per": 0.15,
-        "qty": 4000.0,
-        "symbol": "RDDY",
-        "ttm": 1200.0,
-        "yoc": 0.154639,
-        "ytd": 1200.0
+        "freqVerified": false,
+        "nextExDate": "",
+        "nextPayDate": "2026-08-06",
+        "payPast": true,
+        "per": 0.5,
+        "qty": 10.0,
+        "symbol": "AAA",
+        "ttm": 5.0,
+        "yoc": 0.6,
+        "ytd": 5.0
       }
     ],
     "cashflowMonths": [
@@ -29,13 +29,13 @@
         "count": 1,
         "key": "2026-08",
         "label": "Aug '26",
-        "value": 600.0
+        "value": 5.0
       },
       {
-        "count": 1,
+        "count": 0,
         "key": "2026-09",
         "label": "Sep '26",
-        "value": 600.0
+        "value": 0.0
       }
     ],
     "cashflowSkipped": [],
@@ -53,32 +53,32 @@
         "total": 0
       },
       {
-        "count": 2,
+        "count": 1,
         "label": "2026 YTD",
-        "perMonth": 600.0,
-        "total": 1200.0
+        "perMonth": 5.0,
+        "total": 5.0
       },
       {
-        "count": 2,
+        "count": 1,
         "label": "All time",
-        "perMonth": 600.0,
-        "total": 1200.0
+        "perMonth": 5.0,
+        "total": 5.0
       },
       {
-        "interestMonths": 0,
-        "interestPerMonth": 0.0,
+        "interestMonths": 2,
+        "interestPerMonth": 70.0,
         "label": "Margin used",
-        "marginUsed": 0
+        "marginUsed": 300.0
       },
       {
-        "book": 46560.0,
-        "earned": 1200.0,
+        "book": 100.0,
+        "earned": 5.0,
         "label": "Yield on cost",
-        "projected": 600.0,
-        "yield": 0.154639
+        "projected": 5.0,
+        "yield": 0.6
       }
     ],
-    "cashflowTotal": 1200.0,
+    "cashflowTotal": 5.0,
     "equity": {
       "annualized": {
         "count": 0,
@@ -140,14 +140,15 @@
     "monthly": [],
     "options": {
       "accounts": [
-        "Cashflow"
+        "Cashflow",
+        "Trading"
       ],
       "exchanges": [],
       "kinds": [
         "Shares"
       ],
       "symbols": [
-        "RDDY"
+        "AAA"
       ],
       "tags": [],
       "years": []
@@ -156,32 +157,34 @@
       "accountCount": 1,
       "allocation": [
         {
-          "account": "Cashflow",
+          "account": "Trading",
           "id": "rt:b1",
           "share": 1.0,
-          "symbol": "RDDY",
-          "value": 46560.0
+          "symbol": "AAA",
+          "value": 100.0
         }
       ],
       "availableMargin": null,
       "availableMarginUnavailable": [],
-      "costBasis": 46560.0,
-      "marginUsed": 0,
-      "marginUsedBy": {},
-      "marginUsedPct": 0.0,
-      "marketValue": 46560.0,
-      "nav": null,
-      "navAccounts": 0,
+      "costBasis": 100.0,
+      "marginUsed": 300.0,
+      "marginUsedBy": {
+        "CAD": 300.0
+      },
+      "marginUsedPct": 3.0,
+      "marketValue": 100.0,
+      "nav": 1500.0,
+      "navAccounts": 1,
       "positionCount": 1,
       "unrealized": 0.0,
       "unrealizedPct": 0.0
     },
     "positions": [
       {
-        "account": "Cashflow",
+        "account": "Trading",
         "alloc": 1.0,
-        "avg": 11.64,
-        "cost": 46560.0,
+        "avg": 10.0,
+        "cost": 100.0,
         "currency": "CAD",
         "dayChange": null,
         "exchange": "",
@@ -189,18 +192,18 @@
           "BUY"
         ],
         "grade": "",
-        "held": 129,
+        "held": 245,
         "id": "rt:b1",
         "kind": "Shares",
-        "qty": 4000.0,
+        "qty": 10.0,
         "short": false,
-        "symbol": "RDDY"
+        "symbol": "AAA"
       }
     ],
     "positionsSummary": {
-      "book": 46560.0,
+      "book": 100.0,
       "count": 1,
-      "mv": 46560.0,
+      "mv": 100.0,
       "unreal": 0.0
     },
     "queue": [],
@@ -211,36 +214,25 @@
   "journal": {},
   "market": {
     "benchmark": {},
-    "distributions": {
-      "RDDY": [
-        {
-          "amount": 0.15,
-          "currency": "CAD",
-          "exDate": "2026-07-31",
-          "payDate": "2026-08-06"
-        },
-        {
-          "amount": 0.15,
-          "currency": "CAD",
-          "exDate": "2026-08-31",
-          "payDate": "2026-09-04"
-        },
-        {
-          "amount": 0.15,
-          "currency": "CAD",
-          "exDate": "2026-09-30",
-          "payDate": "2026-10-06"
-        }
-      ]
-    },
-    "fx": {}
+    "fx": {
+      "2026-08-01": 1.5,
+      "2026-09-07": 1.5
+    }
   },
   "snapshot": {
-    "accounts": [],
+    "accounts": [
+      {
+        "currency": "CAD",
+        "id": "acct-1",
+        "netLiquidationValue": 1500.0,
+        "nickname": "Trading",
+        "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"
+      }
+    ],
     "activities": [
       {
         "accountId": "acct-1",
-        "accountType": "Cashflow",
+        "accountType": "Trading",
         "activitySubType": "BUY",
         "activityType": "Trade",
         "category": "trade",
@@ -248,14 +240,14 @@
         "currency": "CAD",
         "id": "b1",
         "name": "LUNR",
-        "netCashAmount": -46560.0,
-        "occurredAt": "2026-05-01T15:00:00+00:00",
-        "quantity": 4000,
+        "netCashAmount": -100,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": 10,
         "rawType": "DIY_BUY",
         "securityId": "",
-        "symbol": "RDDY",
-        "transactionDate": "2026-05-01",
-        "unitPrice": 11.64
+        "symbol": "AAA",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 10
       },
       {
         "accountId": "acct-1",
@@ -267,41 +259,96 @@
         "currency": "CAD",
         "id": "d1",
         "name": "LUNR",
-        "netCashAmount": 600.0,
+        "netCashAmount": 5.0,
         "occurredAt": "2026-08-06T15:00:00+00:00",
-        "quantity": 4000,
+        "quantity": 10,
         "rawType": "DIVIDEND",
         "securityId": "",
-        "symbol": "RDDY",
+        "symbol": "AAA",
         "transactionDate": "2026-08-06",
-        "unitPrice": 0.15
+        "unitPrice": 0.5
       },
       {
         "accountId": "acct-1",
-        "accountType": "Cashflow",
-        "activitySubType": "",
-        "activityType": "Dividend",
-        "category": "dividend",
+        "accountType": "Trading",
+        "activitySubType": "MARGIN_INTEREST",
+        "activityType": "INTEREST_CHARGE",
+        "category": "other",
         "commission": 0,
         "currency": "CAD",
-        "id": "d2",
+        "id": "i1",
         "name": "LUNR",
-        "netCashAmount": 600.0,
-        "occurredAt": "2026-09-04T15:00:00+00:00",
-        "quantity": 4000,
-        "rawType": "DIVIDEND",
+        "netCashAmount": -100,
+        "occurredAt": "2026-07-01T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "INTEREST_CHARGE",
         "securityId": "",
-        "symbol": "RDDY",
-        "transactionDate": "2026-09-04",
-        "unitPrice": 0.15
+        "symbol": "",
+        "transactionDate": "2026-07-01",
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "MARGIN_INTEREST",
+        "activityType": "INTEREST_CHARGE",
+        "category": "other",
+        "commission": 0,
+        "currency": "USD",
+        "id": "i2",
+        "name": "LUNR",
+        "netCashAmount": -20,
+        "occurredAt": "2026-08-01T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "INTEREST_CHARGE",
+        "securityId": "",
+        "symbol": "",
+        "transactionDate": "2026-08-01",
+        "unitPrice": 0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "MARGIN_INTEREST",
+        "activityType": "INTEREST_CHARGE",
+        "category": "other",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "i3",
+        "name": "LUNR",
+        "netCashAmount": -10,
+        "occurredAt": "2026-08-04T15:00:00+00:00",
+        "quantity": 0,
+        "rawType": "INTEREST_CHARGE",
+        "securityId": "",
+        "symbol": "",
+        "transactionDate": "2026-08-04",
+        "unitPrice": 0
       }
     ],
-    "balances": [],
+    "balances": [
+      {
+        "accountId": "acct-1",
+        "quantity": -300.0,
+        "securityId": "sec-c-cad"
+      }
+    ],
     "margin": [],
     "navByAccount": {},
     "navHistory": [],
     "notes": {},
-    "securities": [],
+    "securities": [
+      {
+        "currency": "CAD",
+        "id": "sec-c-cad",
+        "symbol": "CAD"
+      },
+      {
+        "currency": "USD",
+        "id": "sec-c-usd",
+        "symbol": "USD"
+      }
+    ],
     "syncedAt": "",
     "tradeGroups": []
   },

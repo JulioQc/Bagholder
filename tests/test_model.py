@@ -874,8 +874,8 @@ class ViewTest(unittest.TestCase):
         ]
         snapshot = {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
         labels = lambda today: [t["label"] for t in model.build_view(model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today=today), {})["cashflow"]["tiles"]]
-        self.assertEqual(labels("2026-09-07"), ["2024", "2025", "2026 YTD", "All time", "Yield on cost"])
-        self.assertEqual(labels("2027-01-01"), ["2025", "2026", "2027 YTD", "All time", "Yield on cost"])
+        self.assertEqual(labels("2026-09-07"), ["2024", "2025", "2026 YTD", "All time", "Margin used", "Yield on cost"])
+        self.assertEqual(labels("2027-01-01"), ["2025", "2026", "2027 YTD", "All time", "Margin used", "Yield on cost"])
         totals = {t["label"]: round(t["total"]) for t in model.build_view(model.build_base(snapshot, {"fx": {}, "benchmark": {}}, {}, today="2027-01-01"), {})["cashflow"]["tiles"] if "total" in t}
         self.assertEqual((totals["2026"], totals["2027 YTD"], totals["All time"]), (20, 0, 40))
 
@@ -906,6 +906,37 @@ class ViewTest(unittest.TestCase):
 
 
 class CashflowTest(unittest.TestCase):
+    def test_margin_used_tile_averages_interest_charges_over_charged_months(self):
+        charge = lambda i, day, amount, ccy: act(
+            id="i%d" % i, activityType="INTEREST_CHARGE", activitySubType="MARGIN_INTEREST", rawType="INTEREST_CHARGE",
+            category="other", netCashAmount=-amount, transactionDate=day, symbol="", currency=ccy, accountType="Trading",
+        )
+        snapshot = {
+            "activities": [
+                buy("b1", "AAA", 10, 10, "2026-01-05", accountType="Trading"),
+                charge(1, "2026-07-01", 100, "CAD"),
+                charge(2, "2026-08-01", 20, "USD"),
+                charge(3, "2026-08-04", 10, "CAD"),
+            ],
+            "accounts": [{"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0, "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"}],
+            "balances": [{"accountId": "acct-1", "securityId": "sec-c-cad", "quantity": -300.0}],
+            "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {},
+            "securities": [{"id": "sec-c-cad", "symbol": "CAD", "currency": "CAD"}, {"id": "sec-c-usd", "symbol": "USD", "currency": "USD"}],
+        }
+        base = model.build_base(snapshot, {"fx": {"2026-08-01": 1.5}, "benchmark": {}}, {}, today="2026-09-06")
+        v = model.build_view(base, None)
+        labels = [t["label"] for t in v["cashflow"]["tiles"]]
+        self.assertEqual(labels[-3:], ["All time", "Margin used", "Yield on cost"])
+        tile = v["cashflow"]["tiles"][-2]
+        self.assertAlmostEqual(tile["marginUsed"], v["portfolio"]["marginUsed"])
+        self.assertAlmostEqual(tile["marginUsed"], 300.0)
+        # $100 + $20 × 1.5 + $10 over the two months that carried a charge
+        self.assertEqual(tile["interestMonths"], 2)
+        self.assertAlmostEqual(tile["interestPerMonth"], (100 + 30 + 10) / 2)
+        v = model.build_view(base, {"lists": {"account": ["Cashflow"]}})
+        tile = v["cashflow"]["tiles"][-2]
+        self.assertEqual((tile["marginUsed"], tile["interestMonths"], tile["interestPerMonth"]), (0, 0, 0.0))
+
     def test_yield_on_cost_from_declared_rate(self):
         div = lambda i, day, qty, per: act(
             id="d%d" % i, category="dividend", activityType="Dividend", activitySubType="dividend", rawType="DIVIDEND",

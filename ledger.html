@@ -1276,6 +1276,7 @@ function portfolioHtml(m) {
 function cashflowHtml(m) {
   const c = m.cashflow;
   const tiles = c.tiles.map((t) => {
+    if (t.label === "Margin used") return '<div class="card elev-sm kpi"><div class="lbl">Margin used</div><div class="tab v">' + money0(t.marginUsed) + '</div><div class="s">' + money0(t.interestPerMonth) + "/mo margin interest</div></div>";
     if (t.label === "Yield on cost") return '<div class="card elev-sm kpi"><div class="lbl">Yield on cost</div><div class="tab v" style="color:var(--accent-300)">' + (t.yield == null ? "—" : pctPlain(t.yield, 2)) + '</div><div class="s">' + money0(t.projected) + "/mo</div></div>";
     return '<div class="card elev-sm kpi"><div class="lbl">' + esc(String(t.label).replace(/^\d{4} YTD$/, "YTD")) + '</div><div class="tab v">' + money0(t.total) + '</div><div class="s">' + (t.label === "All time" ? "total earned" : money0(t.perMonth) + "/mo avg") + "</div></div>";
   }).join("");
@@ -1301,7 +1302,7 @@ function cashflowHtml(m) {
   const rows = sortRows(c.rows || [], cs.key, cs.dir, (r, k) => r[k]);
   const other = c.other || [];
   const otherLine = "";
-  return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px;min-height:380px"><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px">' + tiles + "</div>" +
+  return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px;min-height:380px"><div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px">' + tiles + "</div>" +
     (note ? '<div class="dim" style="font-size:11px;line-height:1.5">' + esc(note) + "</div>" : "") +
     '<div class="card elev-sm" style="padding:16px 18px 12px"><h5>Monthly distributions</h5><div style="display:flex;gap:10px;flex:1;min-height:232px;margin-top:14px"><div style="position:relative;width:58px;flex:none;font-size:10px;color:var(--ink60)" class="tab">' +
     [0, 1, 2, 3].map((i) => '<span style="position:absolute;left:0;top:' + (i / 3 * 94).toFixed(1) + '%;transform:translateY(-50%)">' + money0(head * (1 - i / 3)) + "</span>").join("") + "</div>" +

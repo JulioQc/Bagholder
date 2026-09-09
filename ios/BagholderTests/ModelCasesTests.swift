@@ -141,6 +141,11 @@ final class ModelCasesTests: XCTestCase {
                 if let x = t.total { d["total"] = x }
                 if let x = t.perMonth { d["perMonth"] = x }
                 if let x = t.count { d["count"] = x }
+                if t.label == "Margin used" {
+                    d["marginUsed"] = t.marginUsed ?? 0
+                    d["interestPerMonth"] = t.interestPerMonth ?? 0
+                    d["interestMonths"] = t.interestMonths ?? 0
+                }
                 if t.label == "Yield on cost" {
                     d["yield"] = opt(t.yield)
                     d["projected"] = t.projected ?? 0

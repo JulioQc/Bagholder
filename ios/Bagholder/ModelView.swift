@@ -510,7 +510,7 @@ extension BHModel {
 
     // MARK: the Cashflow page for one filter set
 
-    static func cashflowView(_ base: BHBase, _ f: BHFilters, _ positionsAll: [BHPosition]) -> BHCashflowView {
+    static func cashflowView(_ base: BHBase, _ f: BHFilters, _ positionsAll: [BHPosition], marginUsed: Double = 0) -> BHCashflowView {
         let today = base.today
         let accts = f.lists["account"] ?? []
         let symbolsF = f.lists["symbol"] ?? []
@@ -679,6 +679,11 @@ extension BHModel {
         var monthsInScope = keys.filter { bucket[$0]!.n > 0 }.count
         if monthsInScope == 0 { monthsInScope = 1 }
         tiles.append(BHTile(label: "All time", total: total, perMonth: total / Double(monthsInScope), count: recs.count))
+        // margin used is the Portfolio tab's figure; under it the average margin interest per charged month
+        let charges = everything.filter { $0.kind == "Interest charge" }
+        let chargeMonths = Set(charges.map { String($0.date.prefix(7)) }).count
+        let charged = charges.reduce(0.0) { $0 - $1.amountCad }
+        tiles.append(BHTile(label: "Margin used", marginUsed: marginUsed, interestPerMonth: chargeMonths > 0 ? charged / Double(chargeMonths) : 0, interestMonths: chargeMonths))
         tiles.append(BHTile(label: "Yield on cost", yield: basisAll != 0 ? annualAll / basisAll : nil, projected: annualAll / 12, earned: earnedAll, book: basisAll))
         let other = everything.filter { $0.kind != "Dividend" }
         var v = BHCashflowView()
@@ -760,7 +765,7 @@ extension BHModel {
             mv: positions.reduce(0.0) { $0 + ($1.short ? -$1.mv : $1.mv) },
             unreal: positions.reduce(0.0) { $0 + $1.unreal })
         v.portfolio = portfolioView(base, f, positions)
-        v.cashflow = cashflowView(base, f, positionsAll)
+        v.cashflow = cashflowView(base, f, positionsAll, marginUsed: v.portfolio.marginUsed)
         v.unmatched = base.unmatched
         return v
     }

@@ -25,7 +25,7 @@ MONTH_KEYS = ("key", "label", "value", "count")
 SYMBOL_KEYS = ("symbol", "pnl", "n", "legs", "winRate", "avgHold")
 QUEUE_KEYS = ("id", "symbol", "date", "pnl", "missing")
 HOLDING_KEYS = ("symbol", "qty", "per", "freq", "freqVerified", "annual", "yoc", "ytd", "ttm", "all", "nextExDate", "nextPayDate", "exPast", "payPast")
-TILE_KEYS = ("label", "total", "perMonth", "count", "yield", "projected", "earned", "book")
+TILE_KEYS = ("label", "total", "perMonth", "count", "yield", "projected", "earned", "book", "marginUsed", "interestPerMonth", "interestMonths")
 
 
 def snapshot(acts, securities=None, nav=None, nav_by_account=None, accounts=None, balances=None, margin=None):
@@ -175,6 +175,24 @@ CASES = {
         "margin": [{"accountId": "acct-2", "buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (1 securities)"}],
         "filters": {"lists": {"account": ["Kids"]}},
         "market": {"fx": {"2026-02-01": 1.5}, "benchmark": {}, "quotes": {"BBB": {"price": 30.0, "priceChange": -1.0, "percentChange": -3.2}}},
+    },
+    # the Margin used tile: the Portfolio figure, with margin interest averaged over the months that carried a charge
+    "cashflow_margin_used_tile": {
+        "today": "2026-09-07",
+        "activities": [
+            buy("b1", "AAA", 10, 10, "2026-01-05"),
+            dividend("d1", "AAA", 10, 0.5, "2026-08-06"),
+            act(id="i1", activityType="INTEREST_CHARGE", activitySubType="MARGIN_INTEREST", rawType="INTEREST_CHARGE", category="other",
+                netCashAmount=-100, transactionDate="2026-07-01", symbol="", currency="CAD"),
+            act(id="i2", activityType="INTEREST_CHARGE", activitySubType="MARGIN_INTEREST", rawType="INTEREST_CHARGE", category="other",
+                netCashAmount=-20, transactionDate="2026-08-01", symbol="", currency="USD"),
+            act(id="i3", activityType="INTEREST_CHARGE", activitySubType="MARGIN_INTEREST", rawType="INTEREST_CHARGE", category="other",
+                netCashAmount=-10, transactionDate="2026-08-04", symbol="", currency="CAD"),
+        ],
+        "securities": [{"id": "sec-c-cad", "symbol": "CAD", "currency": "CAD"}, {"id": "sec-c-usd", "symbol": "USD", "currency": "USD"}],
+        "accounts": [{"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0, "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"}],
+        "balances": [{"accountId": "acct-1", "securityId": "sec-c-cad", "quantity": -300.0}],
+        "market": {"fx": {"2026-08-01": 1.5, "2026-09-07": 1.5}, "benchmark": {}},
     },
     # an income holding with a declared distribution record: rate, projection, ex-div and pay day
     "cashflow_holding_with_declared_record": {

@@ -217,13 +217,14 @@ Nothing on the tab is derived beyond these sums: Max buying power, Portfolio val
 
 ### Cashflow
 
-Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
+Six tiles in the style of the dashboard tiles, CAD, dividends in scope:
 
 | Tile | Value | Subtitle |
 |---|---|---|
 | Two years ago, last year, by calendar year, rolling over on January 1 | Sum received that year | Average per paying month |
 | YTD | Sum received this year | Average per paying month |
 | All time | Sum received | `total earned` |
+| Margin used | The Portfolio tab's Margin used over the accounts in scope | Average margin interest per charged month: the Interest charge rows in scope, summed in CAD, ÷ the number of months carrying one, as `$x/mo margin interest` |
 | Yield on cost | Annual income of all rated holdings ÷ their book cost | Projected monthly income, that annual income ÷ 12, as `$x/mo` |
 
 **Monthly distributions.** One bar per month from the first payment to the current month (or to the end of the date filter), CAD, an empty bar for a month with nothing paid yet, six axis labels, hover shows month and amount.
@@ -293,7 +294,7 @@ The iOS and Android apps show the same figures as the web page, computed on the 
 
 **Portfolio.** Tiles; Allocation (the donut, one slice each up to ten holdings and otherwise the ten largest and `Other (N)`, with the symbols and their shares beside it); Holdings, each row the symbol (`SHORT` on a short) with `account · Book · Market` under it on the left, the unrealized P&L over its percentage on the right, then `Today` with the day's change and percent, or `—` without a quote; sorted by unrealized P&L. A tap opens the holding on the screen a trade opens, titled `Holding`: the chart with the fills, Open, Close (blank), Entry, Exit, Qty, Hold, Account, the executions and the journal.
 
-**Cashflow.** Tiles; Distributions (the monthly bars in the accent colour); Allocation (the donut by projected monthly income, with the symbols and their shares beside it); Positions, each row the symbol with `shares · avg · dist × freq` under it on the left, the month's payout over the yield on cost on the right, then Ex-Div and Pay Day; History, each row the symbol, `date · qty × per`, the amount and its currency, without the payment kind.
+**Cashflow.** Tiles; Distributions (the monthly bars in the accent colour); Allocation with its Market/Projected toggle; Positions, each row the symbol with `shares · avg · dist × freq` under it on the left, the month's payout over the yield on cost on the right, then Ex-Div and Pay Day; History, each row the symbol, `date · qty × per`, the amount and its currency, without the payment kind.
 
 **Connecting.** Connect opens Wealthsimple's sign-in page in the app's own web view, kept loaded ahead of the tap, and captures the session from its cookies once signed in; sign in with email, password and the two-factor code. A passkey does not work inside an app's web view on either platform: iOS refuses the request unless the app is a browser or the site lists the app, and Android's web view hides the button; that is the platforms' rule, not a fault to fix.
 

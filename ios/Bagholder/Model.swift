@@ -228,6 +228,7 @@ struct BHTile {
     var total: Double?, perMonth: Double?
     var count: Int?
     var yield: Double?, projected: Double?, earned: Double?, book: Double?
+    var marginUsed: Double?, interestPerMonth: Double?, interestMonths: Int?
 }
 
 struct BHMonth {

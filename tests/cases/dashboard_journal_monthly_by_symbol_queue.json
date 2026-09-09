@@ -98,6 +98,12 @@
         "total": 15.0
       },
       {
+        "interestMonths": 0,
+        "interestPerMonth": 0.0,
+        "label": "Margin used",
+        "marginUsed": 0
+      },
+      {
         "book": 600.0,
         "earned": 15.0,
         "label": "Yield on cost",

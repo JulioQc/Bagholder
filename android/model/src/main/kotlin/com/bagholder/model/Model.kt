@@ -195,6 +195,7 @@ class Holding {
 data class Tile(
     val label: String, val total: Double? = null, val perMonth: Double? = null, val count: Int? = null,
     val yield: Double? = null, val projected: Double? = null, val earned: Double? = null, val book: Double? = null,
+    val marginUsed: Double? = null, val interestPerMonth: Double? = null, val interestMonths: Int? = null,
 )
 
 data class MonthBar(val key: String, val label: String, val value: Double, val count: Int)

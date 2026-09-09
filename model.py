@@ -2384,7 +2384,7 @@ def payments_per_year(dates):
     return min(_SCHEDULES, key=lambda s: abs(s - per_year))
 
 
-def cashflow_view(base, f, positions_all):
+def cashflow_view(base, f, positions_all, margin_used=0.0):
     today = base["today"]
     L = f["lists"]
     accts = L["account"]
@@ -2552,6 +2552,11 @@ def cashflow_view(base, f, positions_all):
         tiles.append({"label": ("%d YTD" % y) if y == this_yr else str(y), "total": sm, "perMonth": sm / paid, "count": len(rs)})
     months_in_scope = len([k for k in keys if bucket[k]["n"] > 0]) or 1
     tiles.append({"label": "All time", "total": total, "perMonth": total / months_in_scope, "count": len(recs)})
+    # margin used is the Portfolio tab's figure; under it the average margin interest per charged month
+    charges = [r for r in everything if r["kind"] == "Interest charge"]
+    charge_months = len({r["date"][:7] for r in charges})
+    charged = sum(-r["amountCad"] for r in charges)
+    tiles.append({"label": "Margin used", "marginUsed": margin_used, "interestPerMonth": (charged / charge_months) if charge_months else 0.0, "interestMonths": charge_months})
     tiles.append(
         {
             "label": "Yield on cost",
@@ -2596,6 +2601,7 @@ def build_view(base, filters=None):
     ann = annualized(years)
     dd = drawdown(series)
     bounds = date_bounds(f, today)
+    portfolio = portfolio_view(base, f, positions)
     shown = series
     if bounds:
         shown = [p for p in series if bounds[0] <= p["d"] <= bounds[1]]
@@ -2654,8 +2660,8 @@ def build_view(base, filters=None):
         "tradeTotal": len(trades_all),
         "positions": positions,
         "positionsSummary": {"count": len(positions), "book": book, "mv": mv, "unreal": unreal},
-        "portfolio": portfolio_view(base, f, positions),
-        "cashflow": cashflow_view(base, f, positions_all),
+        "portfolio": portfolio,
+        "cashflow": cashflow_view(base, f, positions_all, portfolio["marginUsed"]),
         "unmatched": base["unmatched"],
         "accounts": base["accounts"],
         "activityCount": base["activityCount"],
