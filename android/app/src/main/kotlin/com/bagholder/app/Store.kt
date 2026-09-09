@@ -180,7 +180,4 @@ object Store {
         else -> v
     }
 
-    var allocationBy: String
-        get() = prefs.getString("allocationBy", "market") ?: "market"
-        set(v) = prefs.edit().putString("allocationBy", v).apply()
 }

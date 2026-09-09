@@ -1318,22 +1318,17 @@ function cashflowHtml(m) {
     (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.kind) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="7" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
     "</tbody></table></div></div></div></div>";
 }
-// The pie: each income holding's share of the whole, by market value or by
-// projected monthly income. The centre reads the total, or the hovered slice.
-const PIE_BY = [["mv", "Market"], ["proj", "Projected"]];
-function pieBy() { const v = state.pieBy || (function () { try { return localStorage.getItem("bh2.pieBy"); } catch (e) { return ""; } })(); return v === "proj" ? "proj" : "mv"; }
-function setPieBy(v) { state.pieBy = v; try { localStorage.setItem("bh2.pieBy", v); } catch (e) {} }
+// The pie: each income holding's share of the whole by projected monthly income.
+// The centre reads the total, or the hovered slice's symbol, value and share.
 function pieSlices(rows) {
-  const by = pieBy();
-  const val = (h) => (by === "mv" ? (h.mv != null ? h.mv : null) : (h.annual != null ? h.annual / 12 : null));
+  const val = (h) => (h.annual != null ? h.annual / 12 : null);
   const items = rows.map((h) => ({ symbol: h.symbol, account: h.account, v: val(h) })).filter((x) => x.v != null && x.v > 0).sort((a, b) => b.v - a.v);
   const total = items.reduce((a, x) => a + x.v, 0);
-  return { by, total, items: items.map((x, i) => Object.assign(x, { share: total ? x.v / total : 0, color: "var(--pie-" + ((i % 8) + 1) + ")" })) };
+  return { total, items: items.map((x, i) => Object.assign(x, { share: total ? x.v / total : 0, color: "var(--pie-" + ((i % 8) + 1) + ")" })) };
 }
 function pieCardHtml(rows) {
   const p = pieSlices(rows);
-  const pills = PIE_BY.map((x) => '<button class="pill' + (x[0] === p.by ? " on" : "") + '" data-act="pieBy" data-arg=\'' + attr({ by: x[0] }) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + x[1] + "</button>").join("");
-  const fmt = (v) => (p.by === "mv" ? money0(v) : money0(v) + "/mo");
+  const fmt = (v) => money0(v) + "/mo";
   const R = 44, W = 14, C = 60, SIZE = 236;
   let acc = 0;
   const arcs = p.items.map((x, i) => {
@@ -1345,10 +1340,10 @@ function pieCardHtml(rows) {
     return '<path d="' + d + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '" style="cursor:default"/>';
   }).join("");
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
-    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5><div style="display:flex;gap:4px">' + pills + "</div></div>" +
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5></div>' +
     (p.items.length ? '<div id="piePlot" data-hover="pie" style="display:flex;gap:22px;align-items:center;flex:1;min-height:0">' +
       '<div style="position:relative;width:' + SIZE + 'px;height:' + SIZE + 'px;flex:none"><svg viewBox="0 0 120 120" style="width:' + SIZE + 'px;height:' + SIZE + 'px;display:block">' + arcs + "</svg>" +
-      '<div id="pieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="tab" style="font-size:17px;font-weight:500">' + fmt(p.total) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + esc(p.by === "mv" ? "market value" : "projected") + "</div></div></div>" +
+      '<div id="pieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">Projected</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(p.total) + "</div></div></div>" +
       '<div id="pieLegend" class="scroll" style="flex:1;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
       p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.symbol) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + fmt(x.v) + '</span><span class="tab muted" style="text-align:right;white-space:nowrap;min-width:44px">' + pctPlain(x.share) + "</span></span>").join("") +
       "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No income holdings in scope.</div>') + "</div>";
@@ -1361,9 +1356,9 @@ function pieHover(e) {
   const centre = document.getElementById("pieCentre"); if (!centre) return;
   const p = pieSlices(cashflowHoldingRows());
   const x = i >= 0 ? p.items[i] : null;
-  const fmt = (v) => (p.by === "mv" ? money0(v) : money0(v) + "/mo");
-  centre.innerHTML = x ? '<div class="tab" style="font-size:13px;font-weight:500">' + fmt(x.v) + '</div><div class="muted" style="font-size:10px">' + esc(x.symbol) + " · " + pctPlain(x.share) + "</div>"
-    : '<div class="tab" style="font-size:13px;font-weight:500">' + fmt(p.total) + '</div><div class="muted" style="font-size:10px">' + esc(p.by === "mv" ? "market value" : "projected") + "</div>";
+  const fmt = (v) => money0(v) + "/mo";
+  centre.innerHTML = x ? '<div class="lbl">' + esc(x.symbol) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(x.v) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + pctPlain(x.share) + "</div>"
+    : '<div class="lbl">Projected</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(p.total) + "</div>";
 }
 function pieLeave() { pieHover({ target: document.body }); }
 function cashflowHoldingRows() {
@@ -1615,7 +1610,6 @@ function act(name, arg, ev) {
     case "chartTf": setChartTf(arg.tf); render(); break;
     case "chartBasis": setChartBasis(arg.basis); render(); break;
     case "benchmark": setBenchmark(arg.key); break;
-    case "pieBy": setPieBy(arg.by); render(); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
     case "toggleList": {

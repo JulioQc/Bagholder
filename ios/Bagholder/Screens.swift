@@ -1111,7 +1111,6 @@ struct CashflowScreen: View {
     @Environment(\.theme) private var t
     @ObservedObject var book: Book
     let chrome: Chrome
-    @AppStorage("bagholder.allocationBy") private var allocBy = "market"
     @State private var picked: Int?
     @State private var distPick: Int? = nil
 
@@ -1174,18 +1173,10 @@ struct CashflowScreen: View {
 
     private func allocation(_ cf: BHCashflowView) -> some View {
         let items: [(label: String, value: Double)] = cf.holdings.map { h in
-            (h.symbol + (cf.holdings.filter { $0.symbol == h.symbol }.count > 1 ? " · " + h.account : ""), allocBy == "projected" ? (h.annual ?? 0) / 12 : h.qty * h.last)
+            (h.symbol + (cf.holdings.filter { $0.symbol == h.symbol }.count > 1 ? " · " + h.account : ""), (h.annual ?? 0) / 12)
         }.filter { $0.value > 0 }.sorted { $0.value > $1.value }
         let total = items.reduce(0.0) { $0 + $1.value }
-        let switcher = HStack(spacing: 0) {
-            ForEach(["market", "projected"], id: \.self) { k in
-                Button(k == "market" ? "Market" : "Projected") { allocBy = k; picked = nil }
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(allocBy == k ? t.ink : t.ink55)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(allocBy == k ? t.well : .clear))
-            }
-        }
-        return Card(title: "Allocation", trailing: AnyView(switcher)) {
+        return Card(title: "Allocation") {
             if items.isEmpty { Text("No income holdings in scope.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             else {
                 HStack(alignment: .center, spacing: 16) {
