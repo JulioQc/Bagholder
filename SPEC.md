@@ -92,6 +92,7 @@ Annual income for a holding = per-unit amount × payments per year × qty.
 | Cboe (delayed chains) | Bid, ask, last trade and previous close of each held US-listed option contract | Every minute while running |
 | TMX Money | Declared distribution record of every Canadian-listed dividend payer | Refetched once its stored copy is older than 20 hours; the check runs hourly and after every sync |
 | Wealthsimple | Activities, balances, accounts, NAV history | Full sync once, then incremental from fourteen days before the newest stored row (Wealthsimple files a row under the day it belongs to, which can be earlier than rows already stored), automatically on weekdays after 2 PM Mountain while running; the session is refreshed without a new sign-in |
+| Wealthsimple | Per account: net liquidation value, cash balances, buying power (`marginV3.trading.buyingPower`, the figure its margin page labels Margin available, or the reason it is unavailable) | At every sync, and every five minutes while running and connected |
 
 Each declared record carries its own fetch stamp, separate from the quote's, so the quote loop keeping a price fresh never makes the fund's distribution history look fresh.
 
@@ -191,9 +192,28 @@ The TradingView credit the library's licence requires is the library's own small
 
 Bars are cached in the database. Closed days are written once and never rewritten; the newest day may be replaced. A span reaching the present is refetched once its copy is 20 hours old.
 
-### Positions
+### Portfolio
 
-Table columns: Symbol · Qty · Avg cost · Price · FX · Book · Market · P&L · Hold · Allocation, sorted by allocation. P&L reads `+$20.05 (+3.45%)`. Selecting a row opens the panel: name and exchange, unrealized P&L and percentage, Qty (with Wealthsimple's balance if it differs), Hold, Avg cost, Price, Book value, Market value, FX, Allocation, the lots with Date · Qty · Price · Amount, and the running note.
+Six tiles in the style of the dashboard tiles, CAD aggregates over the accounts in scope (every account when the filter names none):
+
+| Tile | Value | Subtitle |
+|---|---|---|
+| Market value | Market value of the open positions in scope, converted at today's rate | `across N open positions` |
+| Net asset value | Sum of Wealthsimple's net liquidation value per account, as Wealthsimple states it; every open account counts, cash accounts included, so it differs from Market value by the cash; closed accounts never count | `N accounts, N positions`, or `—` when no account in scope reports one |
+| Cost basis | Book value of the open positions in scope | `Total book value` |
+| Margin used | The negative cash balances of the accounts in scope, one per currency, shown positive, converted to CAD | Its share of Market value |
+| Available margin | Sum of Wealthsimple's buying power over the open margin accounts in scope, the figure Wealthsimple labels Margin available. Only margin accounts are asked: every self-directed account answers the same query with the cash it could buy with, which is not margin | `buying power`; `unavailable for <account>` when Wealthsimple cannot price a security in it; `—` with no margin account in scope |
+| Unrealized P&L | Unrealized P&L of the open positions in scope, converted at today's rate | Its percentage of Cost basis, `gain` or `loss` |
+
+Nothing on the tab is derived beyond these sums: Max buying power, Portfolio value and the interest panel of Wealthsimple's margin page have no source and are not shown.
+
+**Allocation.** A donut of the open positions in scope by market value in CAD, one slice each up to ten, otherwise the ten largest and `Other (N)`, coloured from the eleven-colour palette; the centre reads `Market value` and the total, or the hovered slice's value and share; the legend is each slice's symbol and share. The card takes the height of the Holdings card beside it and does not grow. No toggle.
+
+**Holdings.** One row per open position: Symbol (`SHORT` on a short; the account is the row's title text, not shown) · Avg (average cost per unit) · Last (the current price) · Book · Market · Change ($) · Change (%) · Unrealized P&L (`+$20.05 (+3.4%)`), sorted by Unrealized P&L; the two Change columns are the day's move on the position from its quote's change and percent change, `—` without a quote. Avg, Last, Book, Market and the changes are in the position's currency. The table shows ten rows and scrolls inside the card past that.
+
+**A holding.** Clicking a row opens the holding on the page a trade opens (§Trades), the position standing in for the trade: the symbol, name and listing; the unrealized P&L and its percentage at the top right; the chart with the fills so far; Open, Close (blank, since it is open), Entry (average cost), Exit (the current price), Hold (the days so far), Account; the executions; the thesis, grade and tags. The holding and the trade it becomes when it closes share one journal entry, keyed by the round trip that opened it, so what is written here is the trade's journal on that day.
+
+**Refresh.** Net liquidation values, cash balances and buying power are read at every sync and again every five minutes while the app runs and is connected, so the tiles move with the day instead of waiting for the daily sync.
 
 ### Cashflow
 
@@ -261,15 +281,17 @@ For the phone apps the equivalent is in `CLAUDE.md` ("How changes land", step 6)
 
 The iOS and Android apps show the same figures as the web page, computed on the device by their own model implementations; §2 and §3 apply unchanged. A phone screen is a layout of those figures, not a new definition of them, and both apps lay them out the same way. Where the phone departs from §4 to §6 it is listed here; anything not listed is as on the web.
 
-**Shell.** A header with the mark, the wordmark, the version, the sync status, a funnel button for the filters and a three-line button for the menu; four tabs along the bottom (Dashboard, Trades, Positions, Cashflow), each with its symbol over its label and a 2 pt accent line over the current one. A trade or position detail sits over its tab with the tab bar still below it and a round back button. The menu is a sheet: Connect Wealthsimple or Sync now and Disconnect, then the activity count and the version. The filters are a sheet whose search field takes focus as it opens.
+**Shell.** A header with the mark, the wordmark, the version, the sync status, a funnel button for the filters and a three-line button for the menu; four tabs along the bottom (Dashboard, Trades, Portfolio, Cashflow), each with its symbol over its label and a 2 pt accent line over the current one. A trade or holding detail sits over its tab with the tab bar still below it and a round back button. The menu is a sheet: Connect Wealthsimple or Sync now and Disconnect, then the activity count and the version. The filters are a sheet whose search field takes focus as it opens.
 
 **Cards.** 12 pt above and below the content, 16 pt at the sides, a 24 pt header row with a 15 pt semibold title at its top; a control at the right of the header (the index toggle, a sort menu, a figure) sits in that row. Nothing under a title: no captions, subtitles or helper lines, no "All accounts", no "Vs S&P 500" (the toggle itself reads `Vs S&P 500`), no "CAD", no "Outperformed … in N of M years", no "Dividend" beside a history row.
 
-**Tiles.** Two per page in a row that swipes sideways, with the indicator below: 4 pt dots at 24 % ink, a 14 × 4 accent pill for the current page. Dashboard: Realized P&L, Win rate; Profit factor, Expectancy; Max drawdown, Avg annualized. Cashflow: the year to date, Yield on cost; All time, then the past years, newest first.
+**Tiles.** Two per page in a row that swipes sideways, with the indicator below: 4 pt dots at 24 % ink, a 14 × 4 accent pill for the current page. Dashboard: Realized P&L, Win rate; Profit factor, Expectancy; Max drawdown, Avg annualized. Portfolio: Market value, Net asset value; Cost basis, Margin used; Available margin, Unrealized P&L. Cashflow: the year to date, Yield on cost; All time, then the past years, newest first.
 
 **Charts.** No value axis. The card's figure sits at its top right: Equity shows the latest point, P&L the sum in scope, Distributions the projected month. The Equity line runs edge to edge, scaled from its low to its high, 160 pt tall, four date labels below. A long press reads the point under the finger from the first touch: the figure at the top right becomes that day's or month's, the date or month appears at the bottom under the finger, the rest of the chart dims (the equity line and its fill keep their colour up to the finger, the marker is a ring), and the page and any pager hold still until release. Bars fill their month's slot 4 pt apart on the web page's scale (§4); a tap on a P&L bar opens the month.
 
 **Dashboard.** Tiles; Equity; then one swiping row of three equal cards, Annual returns (the years scrolling inside the card, three visible, no footer), P&L (the monthly bars, titled `P&L`) and Grade vs P&L; By symbol, whose header is a sort menu (P&L, Trades, Win rate, Avg hold; the current column again flips the order); Review queue.
+
+**Portfolio.** Tiles; Allocation (the donut with the symbols and their shares beside it); Holdings, each row the symbol (`SHORT` on a short) with `account · Book · Market` under it on the left, the unrealized P&L over its percentage on the right, then `Today` with the day's change and percent, or `—` without a quote; sorted by unrealized P&L. A tap opens the holding on the screen a trade opens, titled `Holding`: the chart with the fills, Open, Close (blank), Entry, Exit, Qty, Hold, Account, the executions and the journal.
 
 **Cashflow.** Tiles; Distributions (the monthly bars in the accent colour); Allocation with its Market/Projected toggle; Positions, each row the symbol with `shares · avg · dist × freq` under it on the left, the month's payout over the yield on cost on the right, then Ex-Div and Pay Day; History, each row the symbol, `date · qty × per`, the amount and its currency, without the payment kind.
 

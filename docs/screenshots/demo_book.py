@@ -5,6 +5,7 @@ staking, and two and a half years of daily equity. Nothing in it is anyone's.
     python3 docs/screenshots/demo_book.py --home /tmp/bh-demo      # a desktop data directory
     python3 docs/screenshots/demo_book.py --pull /tmp/bh-demo-phone  # last-pull.json + journal.json for the apps
 
+It carries what the Portfolio tab needs too: each account's net liquidation value, a margin balance and buying power.
 The desktop directory is served with `BAGHOLDER_HOME=/tmp/bh-demo BAGHOLDER_PORT=8799 python3 bagholder.py`;
 market data (FX, indexes, quotes, declared distributions) is fetched by the app itself. The phone files
 are seeded as MOBILE.md describes. The screenshots in this folder were taken that way.
@@ -24,7 +25,7 @@ TODAY = "2026-09-08"
 ACCOUNTS = {
     "TFSA": ("acct-tfsa", "CAD", "SELF_DIRECTED_TFSA"),
     "RRSP": ("acct-rrsp", "CAD", "SELF_DIRECTED_RRSP"),
-    "Trading": ("acct-trading", "USD", "SELF_DIRECTED_NON_REGISTERED"),
+    "Trading": ("acct-trading", "USD", "SELF_DIRECTED_NON_REGISTERED_MARGIN"),
     "Crypto": ("acct-crypto", "CAD", "SELF_DIRECTED_CRYPTO"),
 }
 
@@ -231,6 +232,18 @@ def build():
     return j
 
 
+# What Wealthsimple states per account, as of the snapshot: net liquidation value, cash
+# (negative on margin), and buying power for the margin account.
+NAV_BY_ACCOUNT = {"TFSA": 90714.35, "RRSP": 97220.10, "Trading": 18157.40, "Crypto": 27787.60}   # positions at the snapshot plus cash, less margin
+CASH_SECURITIES = [{"id": "sec-c-cad", "symbol": "CAD", "name": "Canadian dollar", "primaryExchange": "", "primaryMic": "", "currency": "CAD", "underlyingId": ""},
+                   {"id": "sec-c-usd", "symbol": "USD", "name": "US dollar", "primaryExchange": "", "primaryMic": "", "currency": "USD", "underlyingId": ""}]
+BALANCES = [{"accountId": "acct-tfsa", "securityId": "sec-c-cad", "quantity": 4210.35},
+            {"accountId": "acct-rrsp", "securityId": "sec-c-cad", "quantity": 1875.00},
+            {"accountId": "acct-trading", "securityId": "sec-c-usd", "quantity": -18240.60},
+            {"accountId": "acct-crypto", "securityId": "sec-c-cad", "quantity": 312.40}]
+MARGIN = [{"accountId": "acct-trading", "buyingPower": 12680.45, "currency": "CAD", "unavailable": ""}]
+
+
 def listings():
     out = []
     for sym, (name, ex, mic, cur) in LISTINGS.items():
@@ -276,7 +289,9 @@ def main():
             metrics = {"realizedPnlCad": 0.0, "tradeCount": 0, "winCount": 0, "lossCount": 0, "evenCount": 0, "grossProfit": 0.0, "grossLoss": 0.0, "winRate": 0.0,
                        "profitFactor": 0.0, "avgWin": 0.0, "avgLoss": 0.0, "expectancy": 0.0, "maxWinPnl": 0.0, "maxWinSymbol": "", "maxLossPnl": 0.0, "maxLossSymbol": "", "avgHoldDays": 0.0}
             # the iOS decoder wants every field of the pull, the derived ones included; the apps compute them from the rows
-            json.dump({"activities": _acts, "listings": lst, "nav": nav, "navByAccount": {}, "syncedAt": TODAY + "T20:05:00Z",
+            accounts = [{"id": aid, "nickname": nick, "unifiedAccountType": typ, "currency": cur, "status": "open", "type": "self_directed", "netLiquidationValue": NAV_BY_ACCOUNT[nick]} for nick, (aid, cur, typ) in ACCOUNTS.items()]
+            json.dump({"activities": _acts, "listings": lst + CASH_SECURITIES, "nav": nav, "navByAccount": {}, "syncedAt": TODAY + "T20:05:00Z",
+                       "accounts": accounts, "balances": BALANCES, "margin": MARGIN,
                        "closed": [], "metrics": metrics, "monthly": [], "years": [], "avgAnnualized": "", "avgAnnualizedSubtitle": ""}, f)
         with open(os.path.join(args.pull, "journal.json"), "w") as f:
             json.dump({k: v for k, v in journal.items() if v["grade"] or v["tags"] or v["thesis"]}, f, indent=1, sort_keys=True)
@@ -289,7 +304,10 @@ def main():
         store.ensure()
         store.apply_wealthsimple_mapped(_acts)
         store.upsert_securities(lst)
-        store.replace_accounts([{"id": aid, "nickname": nick, "unifiedAccountType": typ, "currency": cur, "status": "open", "type": "self_directed"} for nick, (aid, cur, typ) in ACCOUNTS.items()])
+        store.replace_accounts([{"id": aid, "nickname": nick, "unifiedAccountType": typ, "currency": cur, "status": "open", "type": "self_directed", "netLiquidationValue": NAV_BY_ACCOUNT[nick]} for nick, (aid, cur, typ) in ACCOUNTS.items()])
+        store.upsert_securities(CASH_SECURITIES)
+        store.replace_balances(BALANCES)
+        store.replace_margin(MARGIN)
         store.replace_nav(nav)
         store.set_meta("synced_at", TODAY + "T20:05:00Z")
         for k, v in journal.items():

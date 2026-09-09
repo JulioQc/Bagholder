@@ -8,7 +8,10 @@ import android.webkit.CookieManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.bagholder.model.AccountInfo
+import com.bagholder.model.BalanceRow
 import com.bagholder.model.Base
+import com.bagholder.model.MarginRow
 import com.bagholder.model.Filters
 import com.bagholder.model.JournalEntry
 import com.bagholder.model.Market
@@ -117,6 +120,7 @@ object Book {
     /** On appear: a saved pull is shown at once; the session pulls when a sync is due. */
     fun handleAppear() {
         startMarketLoop()
+        startPortfolioLoop()
         if (!connected || pulling) return
         if (pull == null || activityPullDue(lastSync)) pull()
     }
@@ -184,7 +188,7 @@ object Book {
                     scope.launch(Dispatchers.Main) { if (gen == generation) syncStep = step }
                 }
                 if (gen != generation) return@launch
-                val newPull = StoredPull(res.activities, res.listings, nowIso(), res.nav, res.navByAccount)
+                val newPull = StoredPull(res.activities, res.listings, nowIso(), res.nav, res.navByAccount, res.accounts, res.balances, res.margin)
                 Store.savePull(newPull)
                 pull = newPull
                 withContext(Dispatchers.Main) {
@@ -247,7 +251,10 @@ object Book {
         val market = Market(fx = Store.loadFx(), distributions = MarketData.distributions(), quotes = quotes, benchmark = sp, benchmarks = benchmarks)
         val nav = p.nav.map { NavPoint(it.date, it.equity, it.netDeposits) }
         val navBy = p.navByAccount.mapValues { e -> e.value.map { NavPoint(it.date, it.equity, it.netDeposits) } }
-        val b = Model.buildBase(p.activities.map { it.toAct() }, securities, market, Model.todayLocal(), nav, navBy, journal)
+        val accounts = p.accounts.map { AccountInfo(it.id, it.nickname, it.currency, it.netLiquidationValue) }
+        val balances = p.balances.map { BalanceRow(it.accountId, it.securityId, it.quantity) }
+        val margin = p.margin.map { MarginRow(it.accountId, it.buyingPower, it.currency, it.unavailable) }
+        val b = Model.buildBase(p.activities.map { it.toAct() }, securities, market, Model.todayLocal(), nav, navBy, journal, accounts, balances, margin)
         base = b
         return ModelView.buildView(b, filters)
     }
@@ -284,7 +291,7 @@ object Book {
         Store.saveJournal(journal)
         val b = base ?: return
         b.trades.firstOrNull { it.id == id }?.let { it.grade = entry.grade; it.thesis = entry.thesis; it.tags = entry.tags }
-        for (p in b.positions) if (p.id == id) { p.thesis = entry.thesis; p.tags = entry.tags }
+        for (p in b.positions) if (p.id == id) { p.grade = entry.grade; p.thesis = entry.thesis; p.tags = entry.tags }
         view = ModelView.buildView(b, filters)
     }
 
@@ -292,6 +299,29 @@ object Book {
     fun position(id: String): Position? = base?.positions?.firstOrNull { it.id == id }
 
     // MARK: market data, every minute while the app is up
+
+    // MARK: the Portfolio figures Wealthsimple states, every five minutes while the app is up
+
+    private val PORTFOLIO_REFRESH_MS = 5L * 60_000
+    private var portfolioJob: Job? = null
+
+    private fun startPortfolioLoop() {
+        if (portfolioJob != null) return
+        portfolioJob = scope.launch {
+            while (isActive) {
+                delay(PORTFOLIO_REFRESH_MS)
+                val session = Store.loadSession() ?: continue
+                val stored = pull ?: continue
+                if (phase != Phase.Ready) continue
+                val snap = try { withContext(Dispatchers.IO) { WSPull.refreshPortfolio(session.first, session.second) } } catch (e: Exception) { continue }
+                val newPull = StoredPull(stored.activities, stored.listings, stored.syncedAt, stored.nav, stored.navByAccount, snap.accounts, snap.balances, snap.margin)
+                withContext(Dispatchers.IO) { Store.savePull(newPull) }
+                pull = newPull
+                val v = rebuild()
+                withContext(Dispatchers.Main) { view = v }
+            }
+        }
+    }
 
     private fun startMarketLoop() {
         if (marketJob != null) return

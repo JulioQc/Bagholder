@@ -904,6 +904,22 @@ class StoreTest(unittest.TestCase):
         row = bagholder.map_activity(_ws_item(securityId="sec-s-abc123"))
         self.assertEqual(row["securityId"], "sec-s-abc123")
 
+    def test_margin_rows_round_trip_and_clear_with_the_synced_data(self):
+        store.replace_margin([
+            {"accountId": "acct-1", "buyingPower": 6817.33, "currency": "CAD"},
+            {"accountId": "acct-2", "buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (2 securities)"},
+            {"accountId": "", "buyingPower": 1.0},
+        ])
+        rows = store.snapshot()["margin"]
+        self.assertEqual([(r["accountId"], r["buyingPower"], r["unavailable"]) for r in rows],
+                         [("acct-1", 6817.33, ""), ("acct-2", None, "UnavailableSecurities (2 securities)")])
+        self.assertTrue(all(r["fetchedAt"] for r in rows))
+        v1 = store.data_version()
+        store.replace_margin([{"accountId": "acct-1", "buyingPower": 6900.0, "currency": "CAD"}])
+        self.assertNotEqual(v1, store.data_version(), "a new reading changes the model fingerprint")
+        store.clear_synced_data()
+        self.assertEqual(store.snapshot()["margin"], [])
+
     def test_second_sync_stamps_security_id_and_takes_the_revision(self):
         row = bagholder.map_activity(_ws_item())
         store.apply_wealthsimple_mapped([row])
@@ -1514,6 +1530,39 @@ class WealthsimpleHttpTest(unittest.TestCase):
         self.assertEqual(bagholder._state["error"], "session has no client id")
         self.assertTrue(bagholder.SESSION_PATH.exists())
         self.assertEqual(bagholder.load_session().get("refresh_token"), "r")
+
+    def test_only_open_margin_accounts_are_asked_for_buying_power(self):
+        accounts = [
+            {"id": "tfsa-1", "unifiedAccountType": "SELF_DIRECTED_TFSA", "status": "open"},
+            {"id": "nr-1", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN", "status": "open"},
+            {"id": "nr-2", "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN", "status": "closed"},
+            {"id": "cash-1", "unifiedAccountType": "CASH", "status": "open"},
+            {"id": "", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN", "status": "open"},
+        ]
+        self.assertEqual(bagholder.margin_account_ids(accounts), ["nr-1"], "a TFSA's buying power is cash, not margin; a closed margin account holds nothing")
+
+    def test_parse_margin_and_fetch_margin(self):
+        available = {"account": {"financials": {"current": {"marginV3": {"trading": {"buyingPower": {"__typename": "BuyingPowerMetricAvailable", "total": {"amount": "6817.33", "currency": "CAD"}, "restrictions": []}}}}}}}
+        unavailable = {"account": {"financials": {"current": {"marginV3": {"trading": {"buyingPower": {"__typename": "BuyingPowerMetricUnavailable", "reason": {"__typename": "UnavailableSecurities", "securities": [{"securityId": "s1", "status": "x"}, {"securityId": "s2", "status": "x"}]}}}}}}}}
+        none = {"account": {"financials": {"current": {"marginV3": None}}}}
+        self.assertEqual(bagholder.parse_margin(available), {"buyingPower": 6817.33, "currency": "CAD", "unavailable": ""})
+        self.assertEqual(bagholder.parse_margin(unavailable), {"buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (2 securities)"})
+        self.assertIsNone(bagholder.parse_margin(none))
+        self.assertIsNone(bagholder.parse_margin({}))
+        answers = {"acct-1": available, "acct-2": none, "acct-3": unavailable}
+        calls = []
+
+        def fake_graphql(sess, operation, variables, query=None):
+            calls.append((operation, variables["accountId"], variables["currency"]))
+            return answers[variables["accountId"]]
+
+        with mock.patch.object(bagholder, "graphql", fake_graphql):
+            rows = bagholder.fetch_margin({"access_token": "x"}, ["acct-1", "acct-2", "acct-3", ""])
+        self.assertEqual([c[0] for c in calls], ["FetchAccountCurrentMarginBuyingPowerV2"] * 3)
+        self.assertEqual([c[2] for c in calls], ["CAD"] * 3)
+        self.assertEqual([(r["accountId"], r["buyingPower"], r["unavailable"]) for r in rows],
+                         [("acct-1", 6817.33, ""), ("acct-3", None, "UnavailableSecurities (2 securities)")], "an account without margin figures is not a row")
+        self.assertTrue(all(r["fetchedAt"] for r in rows))
 
     def test_refresh_session_uses_cached_client_id_file(self):
         bagholder.save_client_id(FAKE_CLIENT_ID)

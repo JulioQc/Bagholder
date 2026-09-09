@@ -140,8 +140,35 @@ class Position {
     var rt: String? = null
     var lots: List<PositionLot> = emptyList()
     var alloc = 0.0
-    var thesis = ""
+    var dayChange: Double? = null
+    var fills: List<FillRow> = emptyList()
+    var grade = ""; var thesis = ""
     var tags: List<String> = emptyList()
+}
+
+/** What Wealthsimple states per account: its net liquidation value, in its currency. */
+class AccountInfo(val id: String, val name: String, val currency: String, val nav: Double?)
+
+class BalanceRow(val accountId: String, val securityId: String, val quantity: Double)
+
+/** Wealthsimple's buying power for an account, or why it has none. */
+class MarginRow(val accountId: String, val buyingPower: Double?, val currency: String = "CAD", val unavailable: String = "")
+
+class AllocationRow(val id: String, val symbol: String, val account: String, val value: Double) { var share = 0.0 }
+
+/** The Portfolio tiles: CAD aggregates over the accounts in scope (model.py portfolio_view). */
+class Portfolio {
+    var allocation: List<AllocationRow> = emptyList()
+    var marketValue = 0.0; var costBasis = 0.0; var unrealized = 0.0
+    var unrealizedPct: Double? = null
+    var positionCount = 0; var accountCount = 0
+    var nav: Double? = null
+    var navAccounts = 0
+    var marginUsed = 0.0
+    var marginUsedBy: Map<String, Double> = emptyMap()
+    var marginUsedPct: Double? = null
+    var availableMargin: Double? = null
+    var availableMarginUnavailable: List<String> = emptyList()
 }
 
 class CashRow {
@@ -201,6 +228,10 @@ class Base {
     var trades: List<Trade> = emptyList()
     var positions: List<Position> = emptyList()
     var cashflow: List<CashRow> = emptyList()
+    var accounts: List<AccountInfo> = emptyList()
+    var balances: List<BalanceRow> = emptyList()
+    var margin: List<MarginRow> = emptyList()
+    var cashCurrencies: Map<String, String> = emptyMap()
 }
 
 object Model {
@@ -1288,6 +1319,16 @@ object Model {
             for (r in rows) if (r.id.isNotEmpty()) byId[r.id] = r
         }
 
+        /** Security id -> currency for the cash rows Wealthsimple lists as securities (CAD, USD). */
+        fun cashCurrencies(): Map<String, String> {
+            val out = HashMap<String, String>()
+            for ((sid, sec) in byId) {
+                val sym = sec.symbol.uppercase()
+                if (sym == "CAD" || sym == "USD" || sid.startsWith("sec-c-")) out[sid] = sec.currency.uppercase().ifEmpty { sym }
+            }
+            return out
+        }
+
         fun preferred(sec: Security?): Security? {
             if (sec == null || !isAlphaVenue(sec)) return sec
             val sym = listingTicker(sec.symbol)
@@ -1441,7 +1482,7 @@ object Model {
         return out
     }
 
-    fun buildPositions(openLots: List<Lot>, lastPrices: Map<String, Pair<Double, String>>, securities: Securities, today: String, quotes: Map<String, Quote>, journal: Map<String, JournalEntry> = emptyMap()): List<Position> {
+    fun buildPositions(openLots: List<Lot>, lastPrices: Map<String, Pair<Double, String>>, securities: Securities, today: String, quotes: Map<String, Quote>, journal: Map<String, JournalEntry> = emptyMap(), actsById: Map<String, Act> = emptyMap()): List<Position> {
         val groups = LinkedHashMap<String, MutableList<Lot>>()
         for (lot in openLots) {
             val k = listOf(lot.symbol, lot.accountType, lot.currency, lot.direction).joinToString("\u0001")
@@ -1495,6 +1536,8 @@ object Model {
             p.priceSource = priceSource
             p.priceChange = quote?.priceChange
             p.percentChange = quote?.percentChange
+            // the day's move on the whole position, in its own currency, from the quote's change
+            p.dayChange = quote?.priceChange?.let { qty * it * mult * (if (direction == "SHORT") -1 else 1) }
             p.mv = mv
             p.unreal = unreal
             p.unrealPct = if (cost != 0.0) unreal / cost else null
@@ -1505,8 +1548,10 @@ object Model {
             // A position and the trade it becomes when it closes share one journal
             // entry: both are keyed by the round trip that opened the position.
             val note = journal[p.id] ?: journal[legacyPid]
+            p.grade = note?.grade ?: ""
             p.thesis = note?.thesis ?: ""
             p.tags = note?.tags ?: emptyList()
+            p.fills = lots.mapNotNull { actsById[it.activityId] }.map { fillRow(it) }.sortedByDescending { it.whenAt }
             rows.add(p)
         }
         val book = rows.sumOf { abs(it.cost) }
@@ -1553,7 +1598,7 @@ object Model {
 
     // MARK: build
 
-    fun buildBase(raw: List<Act>, securityRows: List<Security>, market: Market, today: String, navHistory: List<NavPoint> = emptyList(), navByAccount: Map<String, List<NavPoint>> = emptyMap(), journal: Map<String, JournalEntry> = emptyMap()): Base {
+    fun buildBase(raw: List<Act>, securityRows: List<Security>, market: Market, today: String, navHistory: List<NavPoint> = emptyList(), navByAccount: Map<String, List<NavPoint>> = emptyMap(), journal: Map<String, JournalEntry> = emptyMap(), accounts: List<AccountInfo> = emptyList(), balances: List<BalanceRow> = emptyList(), margin: List<MarginRow> = emptyList()): Base {
         var acts = normalizeActivities(raw)
         val securities = Securities(securityRows)
         val delivered = synthesizeAssignmentShares(acts, securities)
@@ -1584,8 +1629,12 @@ object Model {
         base.openLots = fifo.open
         base.unmatched = fifo.unmatched
         base.trades = buildTrades(fifo.closed, actsById, securities, journal)
-        base.positions = buildPositions(fifo.open, lastFillPrices(acts), securities, today, market.quotes, journal)
+        base.positions = buildPositions(fifo.open, lastFillPrices(acts), securities, today, market.quotes, journal, actsById)
         base.cashflow = buildCashflow(acts, securities, market.fx)
+        base.accounts = accounts.map { AccountInfo(it.id, normAccountName(it.name), it.currency, it.nav) }
+        base.balances = balances
+        base.margin = margin
+        base.cashCurrencies = securities.cashCurrencies()
         return base
     }
 

@@ -199,6 +199,37 @@
         "2026"
       ]
     },
+    "portfolio": {
+      "accountCount": 2,
+      "allocation": [
+        {
+          "account": "TFSA",
+          "id": "rt:b6",
+          "share": 0.625,
+          "symbol": "EEE",
+          "value": 1000.0
+        },
+        {
+          "account": "Trading",
+          "id": "rt:b5",
+          "share": 0.375,
+          "symbol": "DDD",
+          "value": 600.0
+        }
+      ],
+      "availableMargin": null,
+      "availableMarginUnavailable": [],
+      "costBasis": 1600.0,
+      "marginUsed": 0,
+      "marginUsedBy": {},
+      "marginUsedPct": 0.0,
+      "marketValue": 1600.0,
+      "nav": null,
+      "navAccounts": 0,
+      "positionCount": 2,
+      "unrealized": 0.0,
+      "unrealizedPct": 0.0
+    },
     "positions": [
       {
         "account": "Trading",
@@ -206,7 +237,12 @@
         "avg": 2.0,
         "cost": 600.0,
         "currency": "CAD",
+        "dayChange": null,
         "exchange": "TSX",
+        "fills": [
+          "BUY"
+        ],
+        "grade": "",
         "held": 68,
         "id": "rt:b5",
         "kind": "Shares",
@@ -220,7 +256,12 @@
         "avg": 25.0,
         "cost": 1000.0,
         "currency": "CAD",
+        "dayChange": null,
         "exchange": "",
+        "fills": [
+          "BUY"
+        ],
+        "grade": "",
         "held": 37,
         "id": "rt:b6",
         "kind": "Shares",
@@ -684,6 +725,7 @@
       }
     ],
     "balances": [],
+    "margin": [],
     "navByAccount": {},
     "navHistory": [
       {

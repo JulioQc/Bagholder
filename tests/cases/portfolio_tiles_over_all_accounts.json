@@ -1,0 +1,367 @@
+{
+  "expect": {
+    "benchmark": {
+      "key": "SP500",
+      "label": "S&P 500"
+    },
+    "bySymbol": [],
+    "cashflowCount": 0,
+    "cashflowHoldings": [],
+    "cashflowMonths": [],
+    "cashflowSkipped": [],
+    "cashflowTiles": [
+      {
+        "count": 0,
+        "label": "2024",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2025",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "2026 YTD",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "count": 0,
+        "label": "All time",
+        "perMonth": 0.0,
+        "total": 0
+      },
+      {
+        "book": 0,
+        "earned": 0,
+        "label": "Yield on cost",
+        "yield": null
+      }
+    ],
+    "cashflowTotal": 0,
+    "equity": {
+      "annualized": {
+        "count": 0,
+        "first": "",
+        "last": "",
+        "rate": null,
+        "years": 0.0
+      },
+      "drawdown": {
+        "abs": null,
+        "at": "",
+        "pct": null,
+        "peakAt": ""
+      },
+      "label": "All accounts",
+      "series": []
+    },
+    "grades": {
+      "buckets": [
+        {
+          "grade": "A",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "B",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "C",
+          "n": 0,
+          "pnl": 0
+        },
+        {
+          "grade": "F",
+          "n": 0,
+          "pnl": 0
+        }
+      ],
+      "graded": 0,
+      "ungraded": 0
+    },
+    "kpi": {
+      "avgHold": null,
+      "avgLoss": 0.0,
+      "avgWin": 0.0,
+      "breakeven": 0,
+      "count": 0,
+      "expectancy": null,
+      "grossLoss": 0,
+      "grossWin": 0,
+      "losses": 0,
+      "profitFactor": 0.0,
+      "realized": 0,
+      "winRate": null,
+      "wins": 0
+    },
+    "monthly": [],
+    "options": {
+      "accounts": [
+        "Kids",
+        "Trading"
+      ],
+      "exchanges": [],
+      "kinds": [
+        "Shares"
+      ],
+      "symbols": [
+        "AAA",
+        "BBB"
+      ],
+      "tags": [],
+      "years": []
+    },
+    "portfolio": {
+      "accountCount": 2,
+      "allocation": [
+        {
+          "account": "Kids",
+          "id": "rt:b2",
+          "share": 0.652174,
+          "symbol": "BBB",
+          "value": 225.0
+        },
+        {
+          "account": "Trading",
+          "id": "rt:b1",
+          "share": 0.347826,
+          "symbol": "AAA",
+          "value": 120.0
+        }
+      ],
+      "availableMargin": 700.0,
+      "availableMarginUnavailable": [
+        "Kids"
+      ],
+      "costBasis": 250.0,
+      "marginUsed": 315.0,
+      "marginUsedBy": {
+        "CAD": 300.0,
+        "USD": 10.0
+      },
+      "marginUsedPct": 0.913043,
+      "marketValue": 345.0,
+      "nav": 1925.0,
+      "navAccounts": 4,
+      "positionCount": 2,
+      "unrealized": 95.0,
+      "unrealizedPct": 0.38
+    },
+    "positions": [
+      {
+        "account": "Trading",
+        "alloc": 0.5,
+        "avg": 10.0,
+        "cost": 100.0,
+        "currency": "CAD",
+        "dayChange": 5.0,
+        "exchange": "",
+        "fills": [
+          "BUY"
+        ],
+        "grade": "B",
+        "held": 27,
+        "id": "rt:b1",
+        "kind": "Shares",
+        "qty": 10.0,
+        "short": false,
+        "symbol": "AAA"
+      },
+      {
+        "account": "Kids",
+        "alloc": 0.5,
+        "avg": 20.0,
+        "cost": 100.0,
+        "currency": "USD",
+        "dayChange": null,
+        "exchange": "",
+        "fills": [
+          "BUY"
+        ],
+        "grade": "",
+        "held": 26,
+        "id": "rt:b2",
+        "kind": "Shares",
+        "qty": 5.0,
+        "short": false,
+        "symbol": "BBB"
+      }
+    ],
+    "positionsSummary": {
+      "book": 200.0,
+      "count": 2,
+      "mv": 270.0,
+      "unreal": 70.0
+    },
+    "queue": [],
+    "trades": [],
+    "years": []
+  },
+  "filters": {},
+  "journal": {
+    "rt:b1": {
+      "grade": "B",
+      "tags": [
+        "core"
+      ],
+      "thesis": "hold"
+    }
+  },
+  "market": {
+    "benchmark": {},
+    "fx": {
+      "2026-02-01": 1.5
+    },
+    "quotes": {
+      "AAA": {
+        "percentChange": 4.35,
+        "price": 12.0,
+        "priceChange": 0.5
+      },
+      "BBB": {
+        "price": 30.0
+      }
+    }
+  },
+  "snapshot": {
+    "accounts": [
+      {
+        "currency": "CAD",
+        "id": "acct-1",
+        "netLiquidationValue": 1500.0,
+        "nickname": "Trading",
+        "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"
+      },
+      {
+        "currency": "CAD",
+        "id": "acct-2",
+        "netLiquidationValue": 400.0,
+        "nickname": "Kids",
+        "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"
+      },
+      {
+        "currency": "CAD",
+        "id": "acct-3",
+        "netLiquidationValue": 25.0,
+        "nickname": "Cash",
+        "unifiedAccountType": "CASH"
+      },
+      {
+        "currency": "CAD",
+        "id": "acct-4",
+        "netLiquidationValue": 999.0,
+        "nickname": "Old",
+        "status": "closed",
+        "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"
+      },
+      {
+        "currency": "CAD",
+        "id": "acct-5",
+        "netLiquidationValue": 0.0,
+        "nickname": "TFSA",
+        "unifiedAccountType": "SELF_DIRECTED_TFSA"
+      }
+    ],
+    "activities": [
+      {
+        "accountId": "acct-1",
+        "accountType": "Trading",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "b1",
+        "name": "LUNR",
+        "netCashAmount": -100,
+        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "quantity": 10,
+        "rawType": "DIY_BUY",
+        "securityId": "",
+        "symbol": "AAA",
+        "transactionDate": "2026-01-05",
+        "unitPrice": 10
+      },
+      {
+        "accountId": "acct-2",
+        "accountType": "Kids",
+        "activitySubType": "BUY",
+        "activityType": "Trade",
+        "category": "trade",
+        "commission": 0,
+        "currency": "USD",
+        "id": "b2",
+        "name": "LUNR",
+        "netCashAmount": -100,
+        "occurredAt": "2026-01-06T15:00:00+00:00",
+        "quantity": 5,
+        "rawType": "DIY_BUY",
+        "securityId": "",
+        "symbol": "BBB",
+        "transactionDate": "2026-01-06",
+        "unitPrice": 20
+      }
+    ],
+    "balances": [
+      {
+        "accountId": "acct-1",
+        "quantity": -300.0,
+        "securityId": "sec-c-cad"
+      },
+      {
+        "accountId": "acct-1",
+        "quantity": -10.0,
+        "securityId": "sec-c-usd"
+      },
+      {
+        "accountId": "acct-2",
+        "quantity": 50.0,
+        "securityId": "sec-c-cad"
+      }
+    ],
+    "margin": [
+      {
+        "accountId": "acct-1",
+        "buyingPower": 700.0,
+        "currency": "CAD",
+        "unavailable": ""
+      },
+      {
+        "accountId": "acct-2",
+        "buyingPower": null,
+        "currency": "CAD",
+        "unavailable": "UnavailableSecurities (1 securities)"
+      },
+      {
+        "accountId": "acct-5",
+        "buyingPower": 5638.24,
+        "currency": "CAD",
+        "unavailable": ""
+      }
+    ],
+    "navByAccount": {},
+    "navHistory": [],
+    "notes": {},
+    "securities": [
+      {
+        "currency": "CAD",
+        "id": "sec-c-cad",
+        "symbol": "CAD"
+      },
+      {
+        "currency": "USD",
+        "id": "sec-c-usd",
+        "symbol": "USD"
+      }
+    ],
+    "syncedAt": "",
+    "tradeGroups": []
+  },
+  "today": "2026-02-01"
+}

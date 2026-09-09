@@ -185,6 +185,7 @@ final class Book: ObservableObject {
         // the password manager's sheet takes the scene inactive and back; nothing restarts behind the login
         if loginActive { return }
         startMarketLoop()
+        startPortfolioLoop()
         guard connected, phase != .pulling else { return }
         if result == nil || Self.activityPullDue(lastSync: lastSync) { pull() }
     }
@@ -203,6 +204,32 @@ final class Book: ObservableObject {
         let paying = Set(b.cashflow.filter { $0.kind == "Dividend" }.map { $0.symbol })
         let payers = held.filter { paying.contains($0.symbol) && $0.kind == "Shares" }
         return (held, payers)
+    }
+
+    // MARK: the Portfolio figures Wealthsimple states, every five minutes while the app is up
+
+    private var portfolioTask: Task<Void, Never>?
+
+    private func startPortfolioLoop() {
+        if portfolioTask != nil { return }
+        portfolioTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 300_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                guard self.result != nil, self.phase == .ready, let rec = Keychain.load(), let cookie = rec["oauth_cookie"] as? String else { continue }
+                guard let snap = try? await WSPull.refreshPortfolio(oauthCookie: cookie, wssdi: rec["wssdi"] as? String) else { continue }
+                if Task.isCancelled { return }
+                await MainActor.run { [weak self] in
+                    guard let self, var result = self.result else { return }
+                    result.accounts = snap.accounts
+                    result.balances = snap.balances
+                    result.margin = snap.margin
+                    self.result = result
+                    LastPullStore.save(result)
+                    self.rebuild()
+                }
+            }
+        }
     }
 
     private func startMarketLoop() {
@@ -248,7 +275,7 @@ final class Book: ObservableObject {
 
     /// While the login sheet is up nothing behind it needs quotes; the loop resumes when it closes.
     func loginShown() { loginActive = true; marketTask?.cancel(); marketTask = nil }
-    func loginHidden() { loginActive = false; startMarketLoop() }
+    func loginHidden() { loginActive = false; startMarketLoop(); startPortfolioLoop() }
 
     func disconnect() {
         task?.cancel()
@@ -405,8 +432,12 @@ final class Book: ObservableObject {
             let nav = snap.nav.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) }
             var navBy: [String: [BHNavPoint]] = [:]
             for (nick, pts) in snap.navByAccount { navBy[nick] = pts.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) } }
+            let accounts = (snap.accounts ?? []).map { BHAccountInfo(id: $0.id, name: $0.nickname, currency: $0.currency, nav: $0.netLiquidationValue) }
+            let balances = (snap.balances ?? []).map { BHBalanceRow(accountId: $0.accountId, securityId: $0.securityId, quantity: $0.quantity) }
+            let margin = (snap.margin ?? []).map { BHMarginRow(accountId: $0.accountId, buyingPower: $0.buyingPower, currency: $0.currency, unavailable: $0.unavailable) }
             let b = BHModel.buildBase(activities: snap.activities.map(BHAct.init), securities: snap.listings.map(WSPull.security), market: market,
-                                      today: BHModel.todayLocal(), navHistory: nav, navByAccount: navBy, journal: journal)
+                                      today: BHModel.todayLocal(), navHistory: nav, navByAccount: navBy, journal: journal,
+                                      accounts: accounts, balances: balances, margin: margin)
             let v = BHModel.buildView(b, filters)
             await MainActor.run { [weak self] in
                 guard let self, gen == self.buildGeneration else { return }
@@ -446,6 +477,7 @@ final class Book: ObservableObject {
             b.trades[i].tags = entry.tags
         }
         for i in b.positions.indices where b.positions[i].id == id {
+            b.positions[i].grade = entry.grade
             b.positions[i].thesis = entry.thesis
             b.positions[i].tags = entry.tags
         }

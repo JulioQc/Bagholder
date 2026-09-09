@@ -133,6 +133,22 @@
         "2027"
       ]
     },
+    "portfolio": {
+      "accountCount": 0,
+      "allocation": [],
+      "availableMargin": null,
+      "availableMarginUnavailable": [],
+      "costBasis": 0,
+      "marginUsed": 0,
+      "marginUsedBy": {},
+      "marginUsedPct": null,
+      "marketValue": 0,
+      "nav": null,
+      "navAccounts": 0,
+      "positionCount": 0,
+      "unrealized": 0,
+      "unrealizedPct": null
+    },
     "positions": [],
     "positionsSummary": {
       "book": 0,
@@ -229,6 +245,7 @@
       }
     ],
     "balances": [],
+    "margin": [],
     "navByAccount": {},
     "navHistory": [],
     "notes": {},

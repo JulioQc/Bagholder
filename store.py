@@ -197,6 +197,14 @@ def _init_schema(conn):
             fetched_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS margin (
+            account_id TEXT PRIMARY KEY,
+            buying_power REAL,
+            currency TEXT,
+            unavailable TEXT,
+            fetched_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS distribution_fetches (
             symbol TEXT PRIMARY KEY,
             fetched_at TEXT NOT NULL
@@ -1163,6 +1171,28 @@ def _write_nav_points(conn, points):
         )
 
 
+def replace_margin(rows):
+    """Wealthsimple's margin figures per account, replaced whole on every read:
+    buying power (Margin available) with its currency, or the reason it was
+    unavailable. Accounts that answer nothing are not rows."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute("DELETE FROM margin")
+            now = _now_iso()
+            for m in rows or []:
+                if not isinstance(m, dict) or not _s(m.get("accountId")):
+                    continue
+                conn.execute(
+                    "INSERT INTO margin (account_id, buying_power, currency, unavailable, fetched_at) VALUES (?, ?, ?, ?, ?)",
+                    (_s(m.get("accountId")), _num(m.get("buyingPower"), None), _s(m.get("currency")) or "CAD", _s(m.get("unavailable")), _s(m.get("fetchedAt")) or now),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def upsert_nav(points):
     """Insert or update daily-value rows. Does not delete existing days."""
     with _lock:
@@ -1922,7 +1952,7 @@ def clear_synced_data(keep_journal=True, keep_market=True):
         conn = _connect()
         try:
             _init_schema(conn)
-            for table in ("activities", "accounts", "balances", "nav_history", "securities", "grouped_trades"):
+            for table in ("activities", "accounts", "balances", "margin", "nav_history", "securities", "grouped_trades"):
                 conn.execute("DELETE FROM %s" % table)
             keys = list(SYNC_META_KEYS) + ["trade_groups", "trade_notes"]
             if not keep_journal:
@@ -1958,6 +1988,8 @@ def data_version():
                 "SELECT COUNT(*), MAX(fetched_at) FROM securities",
                 "SELECT COUNT(*), SUM(quantity) FROM balances",
                 "SELECT COUNT(*), MAX(id) FROM accounts",
+                "SELECT COUNT(*), MAX(fetched_at) FROM margin",
+                "SELECT COUNT(*), SUM(COALESCE(net_liquidation_value, 0)) FROM accounts",
             ):
                 row = conn.execute(sql).fetchone()
                 parts.append("%s:%s" % (row[0], row[1]))
@@ -2114,6 +2146,17 @@ def snapshot():
                         "quantity": r["quantity"],
                     }
                 )
+            margin = []
+            for r in conn.execute("SELECT * FROM margin ORDER BY account_id").fetchall():
+                margin.append(
+                    {
+                        "accountId": r["account_id"],
+                        "buyingPower": r["buying_power"],
+                        "currency": r["currency"] or "CAD",
+                        "unavailable": r["unavailable"] or "",
+                        "fetchedAt": r["fetched_at"] or "",
+                    }
+                )
             nav = []
             nav_by_account = {}
             for r in conn.execute(
@@ -2144,6 +2187,7 @@ def snapshot():
                 "activities": activities,
                 "accounts": accounts,
                 "balances": balances,
+            "margin": margin,
                 "navHistory": nav,
                 "navByAccount": nav_by_account,
                 "syncedAt": synced,

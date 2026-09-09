@@ -211,6 +211,30 @@
         "2026"
       ]
     },
+    "portfolio": {
+      "accountCount": 1,
+      "allocation": [
+        {
+          "account": "Trading",
+          "id": "rt:b5",
+          "share": 1.0,
+          "symbol": "DDD",
+          "value": 600.0
+        }
+      ],
+      "availableMargin": null,
+      "availableMarginUnavailable": [],
+      "costBasis": 600.0,
+      "marginUsed": 0,
+      "marginUsedBy": {},
+      "marginUsedPct": 0.0,
+      "marketValue": 600.0,
+      "nav": null,
+      "navAccounts": 0,
+      "positionCount": 1,
+      "unrealized": 0.0,
+      "unrealizedPct": 0.0
+    },
     "positions": [
       {
         "account": "Trading",
@@ -218,7 +242,12 @@
         "avg": 2.0,
         "cost": 600.0,
         "currency": "CAD",
+        "dayChange": null,
         "exchange": "TSX",
+        "fills": [
+          "BUY"
+        ],
+        "grade": "",
         "held": 68,
         "id": "rt:b5",
         "kind": "Shares",
@@ -690,6 +719,7 @@
       }
     ],
     "balances": [],
+    "margin": [],
     "navByAccount": {
       "Trading": [
         {

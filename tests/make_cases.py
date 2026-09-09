@@ -17,7 +17,9 @@ from test_model import act, buy, sell  # noqa: E402
 
 TRADE_KEYS = ("id", "symbol", "kind", "currency", "side", "qty", "mult", "entry", "exit", "entryDate", "exitDate", "holdDays", "pnl", "pnlCad", "pnlPct", "status", "fees", "account", "exchange", "grade", "tags")
 KPI_KEYS = ("count", "wins", "losses", "breakeven", "winRate", "realized", "expectancy", "profitFactor", "avgHold", "avgWin", "avgLoss", "grossWin", "grossLoss")
-POSITION_KEYS = ("id", "symbol", "kind", "currency", "account", "exchange", "qty", "avg", "cost", "held", "alloc", "short")
+POSITION_KEYS = ("id", "symbol", "kind", "currency", "account", "exchange", "qty", "avg", "cost", "held", "alloc", "short", "dayChange", "grade")
+PORTFOLIO_KEYS = ("marketValue", "costBasis", "unrealized", "unrealizedPct", "positionCount", "accountCount", "nav", "navAccounts", "marginUsed", "marginUsedBy", "marginUsedPct", "availableMargin", "availableMarginUnavailable")
+ALLOCATION_KEYS = ("id", "symbol", "account", "value", "share")
 YEAR_KEYS = ("year", "r", "days", "from", "to", "flow", "endV", "spR")
 MONTH_KEYS = ("key", "label", "value", "count")
 SYMBOL_KEYS = ("symbol", "pnl", "n", "legs", "winRate", "avgHold")
@@ -26,8 +28,8 @@ HOLDING_KEYS = ("symbol", "qty", "per", "freq", "freqVerified", "annual", "yoc",
 TILE_KEYS = ("label", "total", "perMonth", "count", "yield", "earned", "book")
 
 
-def snapshot(acts, securities=None, nav=None, nav_by_account=None):
-    return {"activities": acts, "accounts": [], "balances": [], "navHistory": nav or [], "navByAccount": nav_by_account or {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": securities or []}
+def snapshot(acts, securities=None, nav=None, nav_by_account=None, accounts=None, balances=None, margin=None):
+    return {"activities": acts, "accounts": accounts or [], "balances": balances or [], "margin": margin or [], "navHistory": nav or [], "navByAccount": nav_by_account or {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": securities or []}
 
 
 def dividend(id, symbol, qty, per, day, account="Cashflow"):
@@ -123,6 +125,56 @@ CASES = {
         "today": "2026-03-01",
         "activities": [buy("b1", "BBB", 100, 5.0, "2026-01-05"), buy("b2", "BBB", 100, 7.0, "2026-02-05")],
         "market": {"fx": {}, "benchmark": {}},
+    },
+    # the Portfolio tiles: CAD aggregates over every account, cash accounts included, margin used
+    # from the negative cash per currency, available margin from Wealthsimple's buying power,
+    # and the day's change on a position from its quote
+    "portfolio_tiles_over_all_accounts": {
+        "today": "2026-02-01",
+        "activities": [
+            buy("b1", "AAA", 10, 10, "2026-01-05"),
+            buy("b2", "BBB", 5, 20, "2026-01-06", accountType="Kids", accountId="acct-2", currency="USD"),
+        ],
+        "securities": [
+            {"id": "sec-c-cad", "symbol": "CAD", "currency": "CAD"},
+            {"id": "sec-c-usd", "symbol": "USD", "currency": "USD"},
+        ],
+        "accounts": [
+            {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0, "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"},
+            {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 400.0, "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"},
+            {"id": "acct-3", "nickname": "Cash", "currency": "CAD", "netLiquidationValue": 25.0, "unifiedAccountType": "CASH"},
+            {"id": "acct-4", "nickname": "Old", "currency": "CAD", "netLiquidationValue": 999.0, "status": "closed", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"},
+            {"id": "acct-5", "nickname": "TFSA", "currency": "CAD", "netLiquidationValue": 0.0, "unifiedAccountType": "SELF_DIRECTED_TFSA"},
+        ],
+        "balances": [
+            {"accountId": "acct-1", "securityId": "sec-c-cad", "quantity": -300.0},
+            {"accountId": "acct-1", "securityId": "sec-c-usd", "quantity": -10.0},
+            {"accountId": "acct-2", "securityId": "sec-c-cad", "quantity": 50.0},
+        ],
+        "margin": [
+            {"accountId": "acct-1", "buyingPower": 700.0, "currency": "CAD", "unavailable": ""},
+            {"accountId": "acct-2", "buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (1 securities)"},
+            {"accountId": "acct-5", "buyingPower": 5638.24, "currency": "CAD", "unavailable": ""},
+        ],
+        "journal": {"rt:b1": {"grade": "B", "thesis": "hold", "tags": ["core"]}},
+        "market": {"fx": {"2026-02-01": 1.5}, "benchmark": {}, "quotes": {"AAA": {"price": 12.0, "priceChange": 0.5, "percentChange": 4.35}, "BBB": {"price": 30.0}}},
+    },
+    # the same book with one account on: the tiles narrow to it, and the account whose margin is unavailable says so
+    "portfolio_tiles_one_account": {
+        "today": "2026-02-01",
+        "activities": [
+            buy("b1", "AAA", 10, 10, "2026-01-05"),
+            buy("b2", "BBB", 5, 20, "2026-01-06", accountType="Kids", accountId="acct-2", currency="USD"),
+        ],
+        "securities": [{"id": "sec-c-cad", "symbol": "CAD", "currency": "CAD"}, {"id": "sec-c-usd", "symbol": "USD", "currency": "USD"}],
+        "accounts": [
+            {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0, "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"},
+            {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 400.0, "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"},
+        ],
+        "balances": [{"accountId": "acct-1", "securityId": "sec-c-cad", "quantity": -300.0}, {"accountId": "acct-2", "securityId": "sec-c-cad", "quantity": 50.0}],
+        "margin": [{"accountId": "acct-2", "buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (1 securities)"}],
+        "filters": {"lists": {"account": ["Kids"]}},
+        "market": {"fx": {"2026-02-01": 1.5}, "benchmark": {}, "quotes": {"BBB": {"price": 30.0, "priceChange": -1.0, "percentChange": -3.2}}},
     },
     # an income holding with a declared distribution record: rate, projection, ex-div and pay day
     "cashflow_holding_with_declared_record": {
@@ -414,8 +466,9 @@ def expect_from(snap, market, today, filters, journal=None):
     out = {
         "kpi": pick(view["kpi"], KPI_KEYS),
         "trades": [dict(pick(t, TRADE_KEYS), fills=[f["sub"] for f in sorted(t["fills"], key=lambda f: f["when"])]) for t in trades],
-        "positions": [pick(p, POSITION_KEYS) for p in sorted(view["positions"], key=lambda p: (p["symbol"], p["account"]))],
+        "positions": [dict(pick(p, POSITION_KEYS), fills=[f["sub"] for f in sorted(p["fills"], key=lambda f: f["when"])]) for p in sorted(view["positions"], key=lambda p: (p["symbol"], p["account"]))],
         "positionsSummary": view["positionsSummary"],
+        "portfolio": dict(pick(view["portfolio"], PORTFOLIO_KEYS), allocation=[pick(a, ALLOCATION_KEYS) for a in view["portfolio"]["allocation"]]),
         "equity": {"label": view["equity"]["label"], "series": [{"d": p["d"], "v": p["v"]} for p in view["equity"]["series"]],
                    "drawdown": view["equity"]["drawdown"], "annualized": view["equity"]["annualized"]},
         "years": [pick(y, YEAR_KEYS) for y in view["years"]],
@@ -434,7 +487,7 @@ def expect_from(snap, market, today, filters, journal=None):
 
 
 def case_snapshot(case):
-    return snapshot(case["activities"], case.get("securities"), case.get("nav"), case.get("nav_by_account"))
+    return snapshot(case["activities"], case.get("securities"), case.get("nav"), case.get("nav_by_account"), case.get("accounts"), case.get("balances"), case.get("margin"))
 
 
 def expect(case):

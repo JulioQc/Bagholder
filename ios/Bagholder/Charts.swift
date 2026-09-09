@@ -388,6 +388,8 @@ struct DonutChart: View {
     var picked: Int?
     var onPick: ((Int?) -> Void)?
     var size: CGFloat = 170
+    /// The figure at rest in the centre, when it is not the sum of the slices (the Portfolio's market value).
+    var centre: Double? = nil
 
     var body: some View {
         let total = slices.reduce(0.0) { $0 + $1.value }
@@ -414,7 +416,7 @@ struct DonutChart: View {
                     Text(BHFmt.money(slices[i].value)).font(.system(size: 13)).foregroundStyle(t.ink75)
                     Text(BHFmt.pct(total > 0 ? slices[i].value / total : nil, signed: false)).font(.system(size: 12)).foregroundStyle(t.ink55)
                 } else {
-                    Text(BHFmt.money(total)).font(.system(size: 15, weight: .semibold)).foregroundStyle(t.ink)
+                    Text(centre.map { BHFmt.wholeMoney($0) } ?? BHFmt.money(total)).font(.system(size: 15, weight: .semibold)).foregroundStyle(t.ink)
                 }
             }
         }

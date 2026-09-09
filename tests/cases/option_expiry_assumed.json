@@ -134,6 +134,30 @@
         "2026"
       ]
     },
+    "portfolio": {
+      "accountCount": 1,
+      "allocation": [
+        {
+          "account": "Trading",
+          "id": "rt:bto",
+          "share": 1.0,
+          "symbol": "ZZZ 17JUL26 10.00 CALL",
+          "value": 135.0
+        }
+      ],
+      "availableMargin": null,
+      "availableMarginUnavailable": [],
+      "costBasis": 135.0,
+      "marginUsed": 0,
+      "marginUsedBy": {},
+      "marginUsedPct": 0.0,
+      "marketValue": 135.0,
+      "nav": null,
+      "navAccounts": 0,
+      "positionCount": 1,
+      "unrealized": 0.0,
+      "unrealizedPct": 0.0
+    },
     "positions": [
       {
         "account": "Trading",
@@ -141,7 +165,12 @@
         "avg": 1.0,
         "cost": 100.0,
         "currency": "USD",
+        "dayChange": null,
         "exchange": "",
+        "fills": [
+          "BUYTOOPEN"
+        ],
+        "grade": "",
         "held": 55,
         "id": "rt:bto",
         "kind": "Options",
@@ -245,6 +274,7 @@
       }
     ],
     "balances": [],
+    "margin": [],
     "navByAccount": {},
     "navHistory": [],
     "notes": {},
