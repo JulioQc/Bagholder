@@ -1845,7 +1845,9 @@ def clear_synced_data(keep_journal=True, keep_market=True):
 
     Activities, accounts, balances, NAV history, securities, manual trade
     groups and the sync bookmarks go. The journal (grades, tags, theses) and
-    the downloaded market data are kept unless told otherwise."""
+    the downloaded market data (FX, benchmark, distributions, quotes, price
+    history and bars, with their fetch records) are kept unless told otherwise.
+    The Wealthsimple login is not this function's business."""
     with _lock:
         conn = _connect()
         try:
@@ -1857,11 +1859,12 @@ def clear_synced_data(keep_journal=True, keep_market=True):
                 keys.append(JOURNAL_META)
             conn.executemany("DELETE FROM meta WHERE key = ?", [(k,) for k in keys])
             if not keep_market:
-                conn.execute("DELETE FROM fx_rates")
-                conn.execute("DELETE FROM benchmark_prices")
-                conn.execute("DELETE FROM distributions")
-                conn.execute("DELETE FROM quotes")
-                conn.execute("DELETE FROM meta WHERE key = 'spy_by_date'")
+                for table in ("fx_rates", "benchmark_prices", "distributions", "distribution_fetches", "quotes",
+                              "price_history", "history_fetches", "price_bars", "bar_fetches"):
+                    conn.execute("DELETE FROM %s" % table)
+                conn.execute("DELETE FROM meta WHERE key IN ('spy_by_date', 'market_attempt_at')")
+                for prefix in ("bars_miss:", "bars_source:", "coinbase_product:", "coingecko_id:", "tmx_form:", "yahoo_miss:"):
+                    conn.execute("DELETE FROM meta WHERE key LIKE ?", (prefix + "%",))
             conn.commit()
         finally:
             conn.close()
