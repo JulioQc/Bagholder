@@ -1478,7 +1478,7 @@ def _oauth_error_code(data):
     return _public_sync_error(err)
 
 
-REFUSED_LOGIN_MESSAGE = "Wealthsimple no longer accepts the saved login. Choose Connect Wealthsimple."
+REFUSED_LOGIN_MESSAGE = "Saved login refused. Connect Wealthsimple again."
 
 
 def _refresh_failure_message(data):
