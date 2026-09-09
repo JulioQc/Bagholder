@@ -6,6 +6,8 @@ Use at your own risk. The app has you sign in to the real Wealthsimple website i
 
 ## Screenshots
 
+![Bagholder on the desktop](docs/screenshots/desktop-tour.gif)
+
 ![Dashboard](docs/screenshots/desktop-dashboard.png)
 
 | Trades | A trade |
