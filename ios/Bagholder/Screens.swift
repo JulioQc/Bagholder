@@ -1163,40 +1163,45 @@ struct CashflowScreen: View {
         return TilePager(tiles: ordered.map(tile))
     }
 
-    /// The projected month at the card's top right; the pressed month's distributions,
-    /// margin interest and net while the chart is pressed.
+    /// The legend at the card's top right; while the chart is pressed, the month's
+    /// distributions, margin interest and net in a small card floating over the bars
+    /// at the top left, so nothing else moves.
     private func distributions(_ cf: BHCashflowView) -> some View {
-        let projected = cf.holdings.reduce(0.0) { $0 + ($1.annual ?? 0) / 12 }
         let interest = CashflowScreen.interestByMonth(cf)
         let picked = distPick.flatMap { i in cf.months.indices.contains(i) ? cf.months[i] : nil }
-        let trailing: AnyView
-        if let m = picked {
-            let intr = interest[m.key] ?? 0
-            trailing = AnyView(VStack(alignment: .trailing, spacing: 1) {
-                readout("Distributions", BHFmt.money(m.value), t.ink)
-                readout("Margin interest", BHFmt.money(intr > 0 ? -intr : 0), t.neg)
-                readout("Net", BHFmt.signedMoney(m.value - intr), t.signed(m.value - intr))
-            })
-        } else {
-            trailing = AnyView(Text(BHFmt.money(projected)).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(t.ink))
-        }
-        return Card(title: "Cashflow", trailing: trailing) {
+        let legendRow = AnyView(HStack(spacing: 12) {
+            legend(t.accent, "Distributions")
+            legend(t.neg, "Margin interest")
+        })
+        return Card(title: "Cashflow", trailing: legendRow) {
             if cf.months.isEmpty { Text("No distributions in this span.").font(.system(size: 14)).foregroundStyle(t.ink55) }
             else {
-                HStack(spacing: 12) {
-                    Spacer()
-                    legend(t.accent, "Distributions")
-                    legend(t.neg, "Margin interest")
+                ZStack(alignment: .topLeading) {
+                    PnlBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }, pick: $distPick, color: t.accent,
+                                 overlay: cf.months.map { interest[$0.key] ?? 0 })
+                    if let m = picked {
+                        let intr = interest[m.key] ?? 0
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(m.label).font(.system(size: 11, weight: .medium)).foregroundStyle(t.ink55)
+                            readout("Distributions", BHFmt.money(m.value), t.ink)
+                            readout("Margin interest", BHFmt.money(intr > 0 ? -intr : 0), t.neg)
+                            readout("Net", BHFmt.signedMoney(m.value - intr), t.signed(m.value - intr))
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(t.surface))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(t.hair, lineWidth: 1))
+                        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+                        .allowsHitTesting(false)
+                    }
                 }
-                PnlBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }, pick: $distPick, color: t.accent,
-                             overlay: cf.months.map { interest[$0.key] ?? 0 })
             }
         }
     }
 
     private func readout(_ label: String, _ value: String, _ color: Color) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Text(label).font(.system(size: 11)).foregroundStyle(t.ink55)
+            Spacer(minLength: 0)
             Text(value).font(.system(size: 12, weight: .semibold)).monospacedDigit().foregroundStyle(color)
         }
     }

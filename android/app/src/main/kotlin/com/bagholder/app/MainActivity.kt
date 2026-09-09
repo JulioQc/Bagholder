@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
@@ -876,7 +877,7 @@ fun PortfolioScreen(chrome: Chrome, onHolding: (String) -> Unit) {
 @Composable
 private fun Readout(label: String, value: String, color: Color) {
     val t = LocalTheme.current
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.width(170.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 11.sp, color = t.ink55)
         Text(value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = color)
     }
@@ -1027,29 +1028,34 @@ fun CashflowScreen(chrome: Chrome) {
             if (cf.skippedFilters.isNotEmpty()) item { Text("Ignoring " + cf.skippedFilters.joinToString(", ") + ".", fontSize = 13.sp, color = t.ink55) }
             item { CashflowTiles(cf) }
             item {
-                // the projected month at the card's top right; the pressed month's distributions,
-                // margin interest and net while the chart is pressed
-                val projected = cf.holdings.sumOf { (it.annual ?: 0.0) / 12 }
+                // the legend at the card's top right; while the chart is pressed, the month's
+                // distributions, margin interest and net in a small card floating over the bars
+                // at the top left, so nothing else moves
                 val interest = interestByMonth(cf)
                 val picked = distPick?.let { cf.months.getOrNull(it) }
                 Card("Cashflow", trailing = {
-                    if (picked != null) {
-                        val intr = interest[picked.key] ?: 0.0
-                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Readout("Distributions", Fmt.money(picked.value), t.ink)
-                            Readout("Margin interest", Fmt.money(if (intr > 0) -intr else 0.0), t.neg)
-                            Readout("Net", Fmt.signedMoney(picked.value - intr), t.signed(picked.value - intr))
-                        }
-                    } else Text(Fmt.money(projected), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Legend(t.accent, "Distributions")
+                        Legend(t.neg, "Margin interest")
+                    }
                 }) {
                     if (cf.months.isEmpty()) Muted("No distributions in this span.")
-                    else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                            Legend(t.accent, "Distributions")
-                            Legend(t.neg, "Margin interest")
-                        }
+                    else Box(Modifier.fillMaxWidth()) {
                         PnlBarsChart(cf.months.map { m -> com.bagholder.model.MonthBucket(m.key, m.label).apply { value = m.value; count = m.count } }, distPick, { distPick = it }, color = t.accent,
                             overlay = cf.months.map { interest[it.key] ?: 0.0 })
+                        if (picked != null) {
+                            val intr = interest[picked.key] ?: 0.0
+                            Column(
+                                Modifier.align(Alignment.TopStart).shadow(8.dp, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)).background(t.surface)
+                                    .border(1.dp, t.hair, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(picked.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = t.ink55)
+                                Readout("Distributions", Fmt.money(picked.value), t.ink)
+                                Readout("Margin interest", Fmt.money(if (intr > 0) -intr else 0.0), t.neg)
+                                Readout("Net", Fmt.signedMoney(picked.value - intr), t.signed(picked.value - intr))
+                            }
+                        }
                     }
                 }
             }
