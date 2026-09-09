@@ -3208,6 +3208,24 @@ _VIEW_KEYS = {"Enter": 13, "Tab": 9, "Backspace": 8, "Delete": 46, "Escape": 27,
               "ArrowRight": 39, "ArrowDown": 40, "Home": 36, "End": 35}
 
 
+def _view_key_event(ch):
+    """The key event for one typed character: its text, key, code and virtual key code."""
+    up = ch.upper()
+    if ch.isdigit():
+        code, vk = "Digit" + ch, ord(ch)
+    elif "A" <= up <= "Z" and ch.isascii():
+        code, vk = "Key" + up, ord(up)
+    elif ch == " ":
+        code, vk = "Space", 32
+    else:
+        code, vk = "", 0
+    ev = {"key": ch, "text": ch, "unmodifiedText": ch, "code": code}
+    if vk:
+        ev["windowsVirtualKeyCode"] = vk
+        ev["nativeVirtualKeyCode"] = vk
+    return ev
+
+
 def login_input(ev):
     """One click, typed text, key or scroll from the page, forwarded to the login window."""
     kind = _s((ev or {}).get("kind"))
@@ -3223,7 +3241,13 @@ def login_input(ev):
                 call("Input.dispatchMouseEvent", {"type": typ, "x": x, "y": y, "button": "left", "clickCount": 1})
         elif kind == "text":
             text = _s(ev.get("text"))
-            if text:
+            if len(text) == 1 or (0 < len(text) <= 8 and text.isalnum()):
+                # a keystroke, or a pasted code: real key events, one per character, since a
+                # one-time-code field listens for keys and ignores text inserted as a block
+                for ch in text:
+                    call("Input.dispatchKeyEvent", dict(_view_key_event(ch), type="keyDown"))
+                    call("Input.dispatchKeyEvent", dict(_view_key_event(ch), type="keyUp"))
+            elif text:
                 call("Input.insertText", {"text": text})
         elif kind == "key":
             key = _s(ev.get("key"))

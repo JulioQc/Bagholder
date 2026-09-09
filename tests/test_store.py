@@ -1413,6 +1413,8 @@ class InAppUpdateTest(unittest.TestCase):
             self.assertEqual(bagholder.login_frame(), b"\xff\xd8\xff\x00\x00\x00", "the window's screenshot, decoded")
             self.assertTrue(bagholder.login_input({"kind": "click", "x": 40, "y": 50})["ok"])
             self.assertTrue(bagholder.login_input({"kind": "text", "text": "me@example.com"})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "text", "text": "7"})["ok"])
+            self.assertTrue(bagholder.login_input({"kind": "text", "text": "123456"})["ok"], "a pasted code")
             self.assertTrue(bagholder.login_input({"kind": "key", "key": "Enter"})["ok"])
             self.assertTrue(bagholder.login_input({"kind": "wheel", "x": 1, "y": 2, "deltaY": 120})["ok"])
             self.assertFalse(bagholder.login_input({"kind": "key", "key": "F13"})["ok"])
@@ -1420,7 +1422,10 @@ class InAppUpdateTest(unittest.TestCase):
         methods = [m for m, _ in calls]
         self.assertEqual(methods[:4], ["Page.captureScreenshot", "Input.dispatchMouseEvent", "Input.dispatchMouseEvent", "Input.dispatchMouseEvent"])
         self.assertEqual([p["type"] for m, p in calls if m == "Input.dispatchMouseEvent"][:3], ["mouseMoved", "mousePressed", "mouseReleased"])
-        self.assertIn(("Input.insertText", {"text": "me@example.com"}), calls)
+        self.assertIn(("Input.insertText", {"text": "me@example.com"}), calls, "an address is inserted as a block")
+        typed = [(p["type"], p["key"], p.get("windowsVirtualKeyCode")) for m, p in calls if m == "Input.dispatchKeyEvent" and p["key"] in "1234567"]
+        self.assertEqual(typed[:2], [("keyDown", "7", 55), ("keyUp", "7", 55)], "a keystroke is a real key event")
+        self.assertEqual(len(typed), 2 + 12, "a pasted six-digit code is six keystrokes")
         enter = [p for m, p in calls if m == "Input.dispatchKeyEvent"]
         self.assertEqual([(p["type"], p["key"], p["windowsVirtualKeyCode"]) for p in enter], [("keyDown", "Enter", 13), ("keyUp", "Enter", 13)])
         self.assertEqual([p for m, p in calls if m == "Input.dispatchMouseEvent" and p["type"] == "mouseWheel"][0]["deltaY"], 120.0)
