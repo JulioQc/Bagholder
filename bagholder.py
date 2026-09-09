@@ -538,7 +538,7 @@ UPDATE_CHECK_HOURS = 1   # a release is a click away now, so the check is hourly
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-09.1"
+PROTOCOL = "2026-09-09.2"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -3845,14 +3845,9 @@ def history_payload(query):
     inst = market.chart_instrument(rec)
     src = market.history_source(inst)
     available = market.offered_timeframes(inst, start)
-    # an option contract's own premium, recorded by the app while it was held
-    recorded = [x for x in market.TIMEFRAMES if x in store.recorded_timeframes(rec["symbol"])] if rec["kind"] == "Options" else []
-    basis = "contract" if (one("basis") == "contract" and recorded) else "underlying"
     pending = False
     try:
-        if basis == "contract":
-            bars = store.price_bars(rec["symbol"], tf) if tf in recorded else []
-        elif not (src and tf in available):
+        if not (src and tf in available):
             bars = []
         elif tf in market.INTRADAY_SECONDS and not market.intraday_ready(inst, tf, start):
             # never block the chart on a minute-data fetch: hand back what is stored,
@@ -3864,9 +3859,9 @@ def history_payload(query):
             bars = market.ensure_bars(inst, tf, start, end, _ssl_context())
     except Exception:
         bars = []
-    return {"ok": True, "symbol": rec["symbol"], "chartSymbol": rec["symbol"] if basis == "contract" else inst["symbol"], "source": "recorded" if basis == "contract" else (src[0] if src else ""),
-            "tf": tf, "basis": basis, "available": recorded if basis == "contract" else available, "contractAvailable": recorded, "bars": bars, "pending": pending,
-            "reason": "" if bars or pending else (market.chart_reason(inst, tf) if basis != "contract" else "No premium was recorded for this contract while the app was running.")}
+    return {"ok": True, "symbol": rec["symbol"], "chartSymbol": inst["symbol"], "source": src[0] if src else "",
+            "tf": tf, "available": available, "bars": bars, "pending": pending,
+            "reason": "" if bars or pending else market.chart_reason(inst, tf)}
 
 
 def _model_filters(query):

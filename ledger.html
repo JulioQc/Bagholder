@@ -196,7 +196,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-09.1"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-09.2"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -221,8 +221,6 @@ function setChartTf(tf) { if (state.sel) _tfByTrade[state.sel] = tf; }
 const BENCHMARKS = [["SP500", "S&P 500"], ["TSX", "S&P/TSX"], ["TSX60", "TSX 60"]];
 function benchmarkPref() { const v = state.benchmark || (function () { try { return localStorage.getItem("bh2.benchmark"); } catch (e) { return ""; } })(); return BENCHMARKS.some((x) => x[0] === v) ? v : "SP500"; }
 function setBenchmark(key) { state.benchmark = key; try { localStorage.setItem("bh2.benchmark", key); } catch (e) {} loadModel(); }
-function chartBasis() { const v = state.chartBasis || (function () { try { return localStorage.getItem("bh2.chartBasis"); } catch (e) { return ""; } })(); return v === "contract" ? "contract" : "underlying"; }
-function setChartBasis(b) { state.chartBasis = b; try { localStorage.setItem("bh2.chartBasis", b); } catch (e) {} }
 function applyTheme(name) {
   state.theme = THEMES.some((t) => t[0] === name) ? name : "nocturne";
   if (state.theme === "nocturne") document.documentElement.removeAttribute("data-theme");
@@ -340,7 +338,7 @@ function positionById(id) { return (state.model && state.model.positions || []).
 // no close date, the current price as the exit, the days so far as the hold.
 function holdingAsTrade(p) {
   if (!p) return null;
-  return Object.assign({}, p, { pnl: p.unreal, pnlPct: p.unrealPct, entryDate: p.opened, exitDate: "", entry: p.avg, exit: p.last, holdDays: p.held, status: "open", legs: [] });
+  return Object.assign({}, p, { holding: true, pnl: p.unreal, pnlPct: p.unrealPct, entryDate: p.opened, exitDate: "", entry: p.avg, exit: p.last, holdDays: p.held, status: "open", legs: [] });
 }
 function selById(id) { return tradeById(id) || holdingAsTrade(positionById(id)); }
 function filtersActive() {
@@ -1005,26 +1003,17 @@ function chartSpan(t) {
   const to = new Date(t.exitDate ? Math.min(Date.now(), Date.parse(t.exitDate) + 10 * day) : Date.now()).toISOString().slice(0, 10);
   return { from, to };
 }
-function loadHistory(t, tf, basis) {
-  const key = t.id + "|" + tf + "|" + (basis || "");
+function loadHistory(t, tf) {
+  const key = t.id + "|" + tf;
   if (_histCache[key]) return Promise.resolve(_histCache[key]);
   const sp = chartSpan(t);
-  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to + "&tf=" + tf + (basis ? "&basis=" + basis : "");
-  return api("GET", "/api/history?" + q).then((r) => { const out = { reason: (r && r.ok && r.reason) || "", bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [], contractAvailable: (r && r.ok && r.contractAvailable) || [], basis: (r && r.ok && r.basis) || "underlying", chartSymbol: (r && r.ok && r.chartSymbol) || t.symbol, pending: !!(r && r.ok && r.pending) }; if (!out.pending) _histCache[key] = out; return out; });
+  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to + "&tf=" + tf;
+  return api("GET", "/api/history?" + q).then((r) => { const out = { reason: (r && r.ok && r.reason) || "", bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [], chartSymbol: (r && r.ok && r.chartSymbol) || t.symbol, pending: !!(r && r.ok && r.pending) }; if (!out.pending) _histCache[key] = out; return out; });
 }
 function tfPillsHtml(h, active, t) {
   if (!h.available.length) return "";
   const pill = (on, act, arg, label) => '<button class="pill' + (on ? " on" : "") + '" data-act="' + act + '" data-arg=\'' + attr(arg) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + esc(label) + "</button>";
-  let basis = "";
-  if (t.kind === "Options") {
-    // an option trade is charted on its underlying, or on the contract's own
-    // recorded premium when the app has some
-    const under = h.basis === "contract" ? underlyingOf(t) : h.chartSymbol;
-    basis = h.contractAvailable.length
-      ? pill(h.basis !== "contract", "chartBasis", { basis: "underlying" }, under) + pill(h.basis === "contract", "chartBasis", { basis: "contract" }, "Contract") + '<span style="width:8px"></span>'
-      : "";
-  }
-  return basis + TIMEFRAMES.filter((x) => h.available.indexOf(x[0]) >= 0).map((x) => pill(x[0] === active, "chartTf", { tf: x[0] }, x[1])).join("");
+  return TIMEFRAMES.filter((x) => h.available.indexOf(x[0]) >= 0).map((x) => pill(x[0] === active, "chartTf", { tf: x[0] }, x[1])).join("");
 }
 function underlyingOf(t) { return t.underlying || String(t.symbol || "").split(" ")[0]; }
 function listingTicker(t) { return (t.kind === "Options" ? underlyingOf(t) : String(t.symbol || "")).replace(/\.(TO|V|CN|NE)$/i, ""); }
@@ -1055,13 +1044,12 @@ function mountTradeChart() {
   const c = chartColors();
   const LW = window.LightweightCharts;
   const wanted = chartTfFor(t);
-  const basisWanted = t.kind === "Options" ? chartBasis() : "";
-  loadHistory(t, wanted, basisWanted).then((h) => {
+  loadHistory(t, wanted).then((h) => {
     if (seq !== _mountSeq || !document.getElementById("tradeChart") || state.sel !== t.id) return;
     const available = h.available;
     // the wanted timeframe may not be offered for this instrument
     const tf = chartTfFor(t, available);
-    if (tf && tf !== wanted) { loadHistory(t, tf, basisWanted).then(() => { if (state.sel === t.id) mountTradeChartWith(t, tf); }); return; }
+    if (tf && tf !== wanted) { loadHistory(t, tf).then(() => { if (state.sel === t.id) mountTradeChartWith(t, tf); }); return; }
     if (h.pending) {
       // the minute data is still being fetched: show the daily chart meanwhile and
       // ask again shortly; the timeframe switches by itself once the bars are stored
@@ -1069,7 +1057,7 @@ function mountTradeChart() {
       _pendingTimer = setTimeout(() => { if (state.sel === t.id && chartTfFor(t) === wanted) mountTradeChart(); }, 3000);
       const onScreen = _chart && _chartFor === t.id && host.contains(_chart.chartElement());
       if (onScreen) return;
-      if (available.indexOf("1d") >= 0) { loadHistory(t, "1d", basisWanted).then((d) => { if (seq !== _mountSeq || state.sel !== t.id) return; drawTradeChart(host, t, d, "1d", c, LW, true); }); }
+      if (available.indexOf("1d") >= 0) { loadHistory(t, "1d").then((d) => { if (seq !== _mountSeq || state.sel !== t.id) return; drawTradeChart(host, t, d, "1d", c, LW, true); }); }
       return;
     }
     drawTradeChart(host, t, h, tf, c, LW, false);
@@ -1146,7 +1134,11 @@ function tradeDetailHtml(t, m) {
     '<div id="chartTf" style="display:flex;gap:4px;justify-content:flex-end;margin:0 0 8px"></div><div id="tradeChart" style="position:relative;height:300px"></div></div>' +
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch;height:372px">' +
     '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div class="rule-b" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:0 0 14px">' +
-    fact("Open", esc(t.entryDate)) + fact("Close", esc(t.exitDate)) + fact("Entry", px(t.entry)) + fact("Exit", px(t.exit)) + fact("Hold", hold(t.holdDays)) + fact("Account", esc(t.account)) + "</div>" +
+    // an open holding has no close, entry or exit yet: its size, average cost, book and market value instead
+    (t.holding
+      ? fact("Qty", qty(t.qty)) + fact("Avg", px(t.avg)) + fact("Book", money0(t.cost, t.currency)) + fact("Market", money0(t.mv, t.currency))
+      : fact("Open", esc(t.entryDate)) + fact("Close", esc(t.exitDate)) + fact("Entry", px(t.entry)) + fact("Exit", px(t.exit))) +
+    fact("Hold", hold(t.holdDays)) + fact("Account", esc(t.account)) + "</div>" +
     '<div style="display:flex;align-items:baseline;gap:8px;margin:14px 0 6px"><span class="lbl">Executions (' + execs.length + ')</span></div>' +
     '<div class="scroll" style="flex:1;min-height:0"><table class="table" style="font-size:12.5px;width:100%"><thead><tr>' + th("execs", ecols) + "</tr></thead><tbody>" +
     execs.map((e) => '<tr class="tab"><td style="padding-left:0;color:var(--ink75);white-space:nowrap">' + esc(e.date) + ' <span class="dim">' + esc(e.time) + '</span></td><td style="padding-inline:6px;font-size:11.5px;letter-spacing:.03em;color:var(--ink60)">' + esc(e.sub || e.side) + '</td><td style="text-align:right;padding-inline:6px">' + qty(e.qty) + '</td><td class="dim" style="text-align:center;padding:7px 18px;font-variant-numeric:normal">' + esc(e.currency) + '</td><td style="text-align:right;padding-inline:6px;color:var(--ink75)">' + px(e.price) + '</td><td style="text-align:right;padding-right:0;color:rgba(var(--ink-rgb),.85)">' + money(e.amount, e.currency) + "</td></tr>").join("") +
@@ -1630,7 +1622,6 @@ function act(name, arg, ev) {
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
     case "chartTf": setChartTf(arg.tf); render(); break;
-    case "chartBasis": setChartBasis(arg.basis); render(); break;
     case "benchmark": setBenchmark(arg.key); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;
