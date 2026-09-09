@@ -64,7 +64,7 @@ The app opens at `http://127.0.0.1:8765` in your browser. Use that address as wr
 
 ## First use
 
-Open the menu at the top right, choose **Connect Wealthsimple** and sign in. Bagholder pulls your full history, then syncs every weekday after the close while it is running.
+Connect Wealthsimple and sign in. Bagholder pulls your full history, then syncs every weekday after the close while it is running.
 
 Trades can also be imported from Wealthsimple's CSV exports, or entered by hand.
 
