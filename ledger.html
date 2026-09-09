@@ -116,7 +116,7 @@ textarea.input{resize:none;line-height:1.5}
 .tabbtn{background:transparent;border:0;cursor:pointer;font:500 13px Inter,system-ui,sans-serif;padding:11px 0;flex:none;white-space:nowrap;color:var(--ink60)}
 .tabbtn:hover{color:var(--accent-300)}
 .tabbtn.on{color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)}
-.kpi{padding:13px 14px;height:97px;display:flex;flex-direction:column;justify-content:center}
+.kpi{padding:12px;height:87px;display:flex;flex-direction:column;justify-content:center}
 .kpi .v{font-size:21px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:4px;white-space:nowrap;line-height:1.15}
 .kpi .s{font-size:11px;color:var(--ink60);white-space:nowrap;margin-top:2px}
 .grade{display:inline-grid;place-items:center;vertical-align:middle;width:20px;height:20px;border-radius:5px;font-size:11px;line-height:1}
@@ -196,7 +196,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-09.1"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-09.2"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -221,8 +221,6 @@ function setChartTf(tf) { if (state.sel) _tfByTrade[state.sel] = tf; }
 const BENCHMARKS = [["SP500", "S&P 500"], ["TSX", "S&P/TSX"], ["TSX60", "TSX 60"]];
 function benchmarkPref() { const v = state.benchmark || (function () { try { return localStorage.getItem("bh2.benchmark"); } catch (e) { return ""; } })(); return BENCHMARKS.some((x) => x[0] === v) ? v : "SP500"; }
 function setBenchmark(key) { state.benchmark = key; try { localStorage.setItem("bh2.benchmark", key); } catch (e) {} loadModel(); }
-function chartBasis() { const v = state.chartBasis || (function () { try { return localStorage.getItem("bh2.chartBasis"); } catch (e) { return ""; } })(); return v === "contract" ? "contract" : "underlying"; }
-function setChartBasis(b) { state.chartBasis = b; try { localStorage.setItem("bh2.chartBasis", b); } catch (e) {} }
 function applyTheme(name) {
   state.theme = THEMES.some((t) => t[0] === name) ? name : "nocturne";
   if (state.theme === "nocturne") document.documentElement.removeAttribute("data-theme");
@@ -340,7 +338,7 @@ function positionById(id) { return (state.model && state.model.positions || []).
 // no close date, the current price as the exit, the days so far as the hold.
 function holdingAsTrade(p) {
   if (!p) return null;
-  return Object.assign({}, p, { pnl: p.unreal, pnlPct: p.unrealPct, entryDate: p.opened, exitDate: "", entry: p.avg, exit: p.last, holdDays: p.held, status: "open", legs: [] });
+  return Object.assign({}, p, { holding: true, pnl: p.unreal, pnlPct: p.unrealPct, entryDate: p.opened, exitDate: "", entry: p.avg, exit: p.last, holdDays: p.held, status: "open", legs: [] });
 }
 function selById(id) { return tradeById(id) || holdingAsTrade(positionById(id)); }
 function filtersActive() {
@@ -774,7 +772,7 @@ function kpiHtml(m) {
   const k = m.kpi, eq = m.equity, ann = eq.annualized, dd = eq.drawdown;
   const pf = k.profitFactorInfinite ? "∞" : k.profitFactor == null ? "—" : k.profitFactor.toFixed(2);
   const tile = (label, value, sub, vcls) => '<div class="card elev-sm kpi"><div class="lbl">' + label + '</div><div class="v ' + (vcls || "") + '">' + value + '</div><div class="s">' + sub + "</div></div>";
-  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px">' +
+  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px">' +
     tile("Realized P&amp;L", money(k.realized), k.count + (k.count === 1 ? " trade" : " trades"), cls(k.realized)) +
     tile("Win rate", k.winRate == null ? "—" : pctPlain(k.winRate), k.wins + " W · " + k.losses + " L" + (k.breakeven ? " · " + k.breakeven + " BE" : "")) +
     tile("Profit factor", pf, "W " + money0(k.grossWin) + " · L " + money0(k.grossLoss)) +
@@ -948,9 +946,9 @@ function queueCardHtml(m) {
 }
 function dashboardHtml(m) {
   return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px">' + kpiHtml(m) +
-    '<div style="display:grid;grid-template-columns:minmax(0,2.05fr) minmax(0,1fr);gap:14px">' + equityCardHtml(m) + yearsCardHtml(m) + "</div>" +
-    '<div style="display:grid;grid-template-columns:minmax(0,2.05fr) minmax(0,1fr);gap:14px">' + monthlyCardHtml(m) + gradeCardHtml(m) + "</div>" +
-    '<div style="display:grid;grid-template-columns:minmax(0,2.05fr) minmax(0,1fr);gap:14px;height:342px">' + bySymbolCardHtml(m) + queueCardHtml(m) + "</div></div>";
+    '<div style="display:grid;grid-template-columns:calc((100% - 70px) / 6 * 4 + 42px) minmax(0,1fr);gap:14px">' + equityCardHtml(m) + yearsCardHtml(m) + "</div>" +
+    '<div style="display:grid;grid-template-columns:calc((100% - 70px) / 6 * 4 + 42px) minmax(0,1fr);gap:14px">' + monthlyCardHtml(m) + gradeCardHtml(m) + "</div>" +
+    '<div style="display:grid;grid-template-columns:calc((100% - 70px) / 6 * 4 + 42px) minmax(0,1fr);gap:14px;height:342px">' + bySymbolCardHtml(m) + queueCardHtml(m) + "</div></div>";
 }
 
 // ---------------------------------------------------------------------------
@@ -1005,26 +1003,17 @@ function chartSpan(t) {
   const to = new Date(t.exitDate ? Math.min(Date.now(), Date.parse(t.exitDate) + 10 * day) : Date.now()).toISOString().slice(0, 10);
   return { from, to };
 }
-function loadHistory(t, tf, basis) {
-  const key = t.id + "|" + tf + "|" + (basis || "");
+function loadHistory(t, tf) {
+  const key = t.id + "|" + tf;
   if (_histCache[key]) return Promise.resolve(_histCache[key]);
   const sp = chartSpan(t);
-  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to + "&tf=" + tf + (basis ? "&basis=" + basis : "");
-  return api("GET", "/api/history?" + q).then((r) => { const out = { reason: (r && r.ok && r.reason) || "", bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [], contractAvailable: (r && r.ok && r.contractAvailable) || [], basis: (r && r.ok && r.basis) || "underlying", chartSymbol: (r && r.ok && r.chartSymbol) || t.symbol, pending: !!(r && r.ok && r.pending) }; if (!out.pending) _histCache[key] = out; return out; });
+  const q = "symbol=" + encodeURIComponent(t.symbol) + "&exchange=" + encodeURIComponent(t.exchange || "") + "&currency=" + encodeURIComponent(t.currency || "") + "&kind=" + encodeURIComponent(t.kind || "") + "&from=" + sp.from + "&to=" + sp.to + "&tf=" + tf;
+  return api("GET", "/api/history?" + q).then((r) => { const out = { reason: (r && r.ok && r.reason) || "", bars: (r && r.ok && r.bars) || [], available: (r && r.ok && r.available) || [], chartSymbol: (r && r.ok && r.chartSymbol) || t.symbol, pending: !!(r && r.ok && r.pending) }; if (!out.pending) _histCache[key] = out; return out; });
 }
 function tfPillsHtml(h, active, t) {
   if (!h.available.length) return "";
   const pill = (on, act, arg, label) => '<button class="pill' + (on ? " on" : "") + '" data-act="' + act + '" data-arg=\'' + attr(arg) + "' style=\"padding:2px 8px;font-size:11px;width:auto\">" + esc(label) + "</button>";
-  let basis = "";
-  if (t.kind === "Options") {
-    // an option trade is charted on its underlying, or on the contract's own
-    // recorded premium when the app has some
-    const under = h.basis === "contract" ? underlyingOf(t) : h.chartSymbol;
-    basis = h.contractAvailable.length
-      ? pill(h.basis !== "contract", "chartBasis", { basis: "underlying" }, under) + pill(h.basis === "contract", "chartBasis", { basis: "contract" }, "Contract") + '<span style="width:8px"></span>'
-      : "";
-  }
-  return basis + TIMEFRAMES.filter((x) => h.available.indexOf(x[0]) >= 0).map((x) => pill(x[0] === active, "chartTf", { tf: x[0] }, x[1])).join("");
+  return TIMEFRAMES.filter((x) => h.available.indexOf(x[0]) >= 0).map((x) => pill(x[0] === active, "chartTf", { tf: x[0] }, x[1])).join("");
 }
 function underlyingOf(t) { return t.underlying || String(t.symbol || "").split(" ")[0]; }
 function listingTicker(t) { return (t.kind === "Options" ? underlyingOf(t) : String(t.symbol || "")).replace(/\.(TO|V|CN|NE)$/i, ""); }
@@ -1055,13 +1044,12 @@ function mountTradeChart() {
   const c = chartColors();
   const LW = window.LightweightCharts;
   const wanted = chartTfFor(t);
-  const basisWanted = t.kind === "Options" ? chartBasis() : "";
-  loadHistory(t, wanted, basisWanted).then((h) => {
+  loadHistory(t, wanted).then((h) => {
     if (seq !== _mountSeq || !document.getElementById("tradeChart") || state.sel !== t.id) return;
     const available = h.available;
     // the wanted timeframe may not be offered for this instrument
     const tf = chartTfFor(t, available);
-    if (tf && tf !== wanted) { loadHistory(t, tf, basisWanted).then(() => { if (state.sel === t.id) mountTradeChartWith(t, tf); }); return; }
+    if (tf && tf !== wanted) { loadHistory(t, tf).then(() => { if (state.sel === t.id) mountTradeChartWith(t, tf); }); return; }
     if (h.pending) {
       // the minute data is still being fetched: show the daily chart meanwhile and
       // ask again shortly; the timeframe switches by itself once the bars are stored
@@ -1069,7 +1057,7 @@ function mountTradeChart() {
       _pendingTimer = setTimeout(() => { if (state.sel === t.id && chartTfFor(t) === wanted) mountTradeChart(); }, 3000);
       const onScreen = _chart && _chartFor === t.id && host.contains(_chart.chartElement());
       if (onScreen) return;
-      if (available.indexOf("1d") >= 0) { loadHistory(t, "1d", basisWanted).then((d) => { if (seq !== _mountSeq || state.sel !== t.id) return; drawTradeChart(host, t, d, "1d", c, LW, true); }); }
+      if (available.indexOf("1d") >= 0) { loadHistory(t, "1d").then((d) => { if (seq !== _mountSeq || state.sel !== t.id) return; drawTradeChart(host, t, d, "1d", c, LW, true); }); }
       return;
     }
     drawTradeChart(host, t, h, tf, c, LW, false);
@@ -1146,7 +1134,11 @@ function tradeDetailHtml(t, m) {
     '<div id="chartTf" style="display:flex;gap:4px;justify-content:flex-end;margin:0 0 8px"></div><div id="tradeChart" style="position:relative;height:300px"></div></div>' +
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch;height:372px">' +
     '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div class="rule-b" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:0 0 14px">' +
-    fact("Open", esc(t.entryDate)) + fact("Close", esc(t.exitDate)) + fact("Entry", px(t.entry)) + fact("Exit", px(t.exit)) + fact("Hold", hold(t.holdDays)) + fact("Account", esc(t.account)) + "</div>" +
+    // an open holding has no close, entry or exit yet: its size, average cost, book and market value instead
+    (t.holding
+      ? fact("Qty", qty(t.qty)) + fact("Avg", px(t.avg)) + fact("Book", money0(t.cost, t.currency)) + fact("Market", money0(t.mv, t.currency))
+      : fact("Open", esc(t.entryDate)) + fact("Close", esc(t.exitDate)) + fact("Entry", px(t.entry)) + fact("Exit", px(t.exit))) +
+    fact("Hold", hold(t.holdDays)) + fact("Account", esc(t.account)) + "</div>" +
     '<div style="display:flex;align-items:baseline;gap:8px;margin:14px 0 6px"><span class="lbl">Executions (' + execs.length + ')</span></div>' +
     '<div class="scroll" style="flex:1;min-height:0"><table class="table" style="font-size:12.5px;width:100%"><thead><tr>' + th("execs", ecols) + "</tr></thead><tbody>" +
     execs.map((e) => '<tr class="tab"><td style="padding-left:0;color:var(--ink75);white-space:nowrap">' + esc(e.date) + ' <span class="dim">' + esc(e.time) + '</span></td><td style="padding-inline:6px;font-size:11.5px;letter-spacing:.03em;color:var(--ink60)">' + esc(e.sub || e.side) + '</td><td style="text-align:right;padding-inline:6px">' + qty(e.qty) + '</td><td class="dim" style="text-align:center;padding:7px 18px;font-variant-numeric:normal">' + esc(e.currency) + '</td><td style="text-align:right;padding-inline:6px;color:var(--ink75)">' + px(e.price) + '</td><td style="text-align:right;padding-right:0;color:rgba(var(--ink-rgb),.85)">' + money(e.amount, e.currency) + "</td></tr>").join("") +
@@ -1201,7 +1193,7 @@ function portfolioTilesHtml(pf) {
   const n = pf.positionCount || 0;
   const positions = n + (n === 1 ? " position" : " positions");
   const unavailable = pf.availableMarginUnavailable || [];
-  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px">' +
+  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px">' +
     tile("Market value", money0(pf.marketValue), "across " + n + (n === 1 ? " open position" : " open positions")) +
     tile("Net asset value", pf.nav == null ? "—" : money0(pf.nav), pf.nav == null ? "—" : pf.navAccounts + (pf.navAccounts === 1 ? " account, " : " accounts, ") + positions) +
     tile("Cost basis", money0(pf.costBasis), "Total book value") +
@@ -1262,7 +1254,7 @@ function portfolioHtml(m) {
   const s = state.sort.positions;
   const rows = sortRows(m.positions || [], s.key, s.dir, posSortValue);
   return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + portfolioTilesHtml(pf) +
-    '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:14px;align-items:stretch">' + portfolioPieHtml(pf) +
+    '<div style="display:grid;grid-template-columns:calc((100% - 70px) / 6 * 2 + 14px) minmax(0,1fr);gap:14px;align-items:stretch">' + portfolioPieHtml(pf) +
     '<div class="card elev-sm" style="padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Holdings</h5></div>' +
     '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0;max-height:362px"><table class="table" style="min-width:640px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="openHolding" data-arg=\'' + attr({ id: r.id }) + "'>" +
@@ -1328,7 +1320,7 @@ function cashflowHtml(m) {
     '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Cashflow Positions</h5><div class="scroll" style="max-height:344px"><table class="table" style="font-size:12px;table-layout:fixed"><thead><tr>' + th("yoc", ycols) + "</tr></thead><tbody>" +
     (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(h.symbol) + '</td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + px(h.avg) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.mv == null ? "—" : money0(h.mv)) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2)) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right;color:' + (h.exPast ? "var(--ink55)" : "var(--ink)") + '">' + esc(h.nextExDate || "—") + '</td><td style="text-align:right;color:' + (h.payPast ? "var(--ink55)" : "var(--ink)") + '">' + esc(h.nextPayDate || "—") + '</td><td style="text-align:right">' + (h.annual == null ? "—" : money0(h.annual / 12)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="13" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
     "</tbody></table></div></div>" +
-    '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;height:380px">' + pieCardHtml(holdingRows) +
+    '<div style="display:grid;grid-template-columns:calc((100% - 70px) / 6 * 3 + 28px) minmax(0,1fr);gap:14px;height:380px">' + pieCardHtml(holdingRows) +
     '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><h5 style="margin-bottom:4px">Distribution history</h5><div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:560px;width:100%;table-layout:fixed;font-size:12px"><thead><tr>' + th("cash", dcols) + "</tr></thead><tbody>" +
     (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="6" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
     "</tbody></table></div></div></div></div>";
@@ -1630,7 +1622,6 @@ function act(name, arg, ev) {
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
     case "chartTf": setChartTf(arg.tf); render(); break;
-    case "chartBasis": setChartBasis(arg.basis); render(); break;
     case "benchmark": setBenchmark(arg.key); break;
     case "clearField": clearField(arg.key); break;
     case "clearAll": state.filters = EMPTY_FILTERS(); state.picker = null; setFilters({}); break;

@@ -1722,36 +1722,6 @@ def upsert_price_bars(symbol, tf, bars, source=""):
             conn.close()
 
 
-def record_bar_tick(symbol, tf, ts, price, source="recorded"):
-    """Fold one observed price into the bar that starts at `ts`: the first reading
-    opens it, later ones stretch high and low and move the close."""
-    sym = _s(symbol).strip().upper()
-    px = _num(price, None)
-    if not sym or ts is None or not px or px <= 0:
-        return
-    with _lock:
-        conn = _connect()
-        try:
-            _init_schema(conn)
-            conn.execute("INSERT OR IGNORE INTO price_bars(symbol, tf, ts, open, high, low, close, volume, source) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)", (sym, _s(tf), int(ts), px, px, px, px, _s(source)))
-            conn.execute("UPDATE price_bars SET high = MAX(high, ?), low = MIN(low, ?), close = ? WHERE symbol = ? AND tf = ? AND ts = ?", (px, px, px, sym, _s(tf), int(ts)))
-            conn.commit()
-        finally:
-            conn.close()
-
-
-def recorded_timeframes(symbol):
-    """Timeframes that have recorded bars for a symbol."""
-    sym = _s(symbol).strip().upper()
-    with _lock:
-        conn = _connect()
-        try:
-            _init_schema(conn)
-            return [r[0] for r in conn.execute("SELECT DISTINCT tf FROM price_bars WHERE symbol = ? ORDER BY tf", (sym,)).fetchall()]
-        finally:
-            conn.close()
-
-
 def bar_fetch(symbol, tf):
     sym = _s(symbol).strip().upper()
     with _lock:
