@@ -1941,8 +1941,6 @@ def fetch_activities_for_account(
 ):
     items = []
     cursor = None
-    known = set(known_canonical_ids or [])
-    bounded = bool(start_date)
     while True:
         variables = {
             "first": 100,
@@ -1953,18 +1951,13 @@ def fetch_activities_for_account(
             variables["cursor"] = cursor
         data = graphql(sess, "FetchActivityFeedItems", variables)
         feed = (data or {}).get("activityFeedItems") or {}
-        new_on_page = 0
         for edge in feed.get("edges") or []:
             node = (edge or {}).get("node")
-            if not node:
-                continue
-            items.append(node)
-            cid = _s(node.get("canonicalId")).strip()
-            if cid and cid not in known:
-                new_on_page += 1
+            if node:
+                items.append(node)
         page = feed.get("pageInfo") or {}
-        if bounded and known and new_on_page == 0:
-            break
+        # Walk every page Wealthsimple returns for the window: a page of known
+        # rows can still carry a revised one, and the rows behind it are new.
         if not page.get("hasNextPage"):
             break
         cursor = page.get("endCursor")
