@@ -1350,15 +1350,18 @@ class StoreTablesTest(unittest.TestCase):
         snap = {
             "activities": acts,
             "accounts": [
-                {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0},
-                {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 400.0},
-                {"id": "acct-3", "nickname": "Cash", "currency": "CAD", "netLiquidationValue": 25.0},
+                {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0, "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"},
+                {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 400.0, "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"},
+                {"id": "acct-3", "nickname": "Cash", "currency": "CAD", "netLiquidationValue": 25.0, "unifiedAccountType": "CASH"},
+                {"id": "acct-4", "nickname": "Old", "currency": "CAD", "netLiquidationValue": 999.0, "status": "closed", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"},
+                {"id": "acct-5", "nickname": "TFSA", "currency": "CAD", "netLiquidationValue": 0.0, "unifiedAccountType": "SELF_DIRECTED_TFSA"},
             ],
             "balances": [
                 {"accountId": "acct-1", "securityId": "sec-c-cad", "quantity": -300.0},
                 {"accountId": "acct-1", "securityId": "sec-c-usd", "quantity": -10.0},
                 {"accountId": "acct-2", "securityId": "sec-c-cad", "quantity": 50.0},
                 {"accountId": "acct-1", "securityId": "sec-s-aaa", "quantity": 10.0},
+                {"accountId": "acct-4", "securityId": "sec-c-cad", "quantity": -5000.0},
             ],
             "securities": [
                 {"id": "sec-c-cad", "symbol": "CAD", "currency": "CAD"},
@@ -1368,6 +1371,7 @@ class StoreTablesTest(unittest.TestCase):
             "margin": [
                 {"accountId": "acct-1", "buyingPower": 700.0, "currency": "CAD", "unavailable": ""},
                 {"accountId": "acct-2", "buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (1 securities)"},
+                {"accountId": "acct-5", "buyingPower": 5638.24, "currency": "CAD", "unavailable": ""},   # a TFSA's buying power is its cash, not margin
             ],
         }
         market = {"fx": {"2026-02-01": 1.5}, "benchmark": {}, "quotes": {"AAA": {"price": 12.0, "priceChange": 0.5, "percentChange": 4.35}, "BBB": {"price": 30.0}}}
@@ -1378,10 +1382,10 @@ class StoreTablesTest(unittest.TestCase):
         self.assertAlmostEqual(pf["costBasis"], 100 + 100 * 1.5)
         self.assertAlmostEqual(pf["unrealized"], 20 + 50 * 1.5)
         self.assertEqual((pf["positionCount"], pf["accountCount"]), (2, 2))
-        self.assertAlmostEqual(pf["nav"], 1500 + 400 + 25, msg="every account counts, cash accounts included")
+        self.assertAlmostEqual(pf["nav"], 1500 + 400 + 25, msg="every open account counts, cash accounts included, closed ones not")
         self.assertAlmostEqual(pf["marginUsed"], 300 + 10 * 1.5, msg="negative cash per currency, in CAD")
-        self.assertEqual(pf["marginUsedBy"], {"CAD": 300.0, "USD": 10.0})
-        self.assertAlmostEqual(pf["availableMargin"], 700.0)
+        self.assertEqual(pf["marginUsedBy"], {"CAD": 300.0, "USD": 10.0}, "the closed account's cash is not margin used")
+        self.assertAlmostEqual(pf["availableMargin"], 700.0, "the TFSA's buying power is not counted")
         self.assertEqual(pf["availableMarginUnavailable"], ["Kids"])
         aaa = next(p for p in v["positions"] if p["symbol"] == "AAA")
         self.assertAlmostEqual(aaa["dayChange"], 10 * 0.5)

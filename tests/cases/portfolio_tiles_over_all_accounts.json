@@ -148,7 +148,7 @@
       "marginUsedPct": 0.913043,
       "marketValue": 345.0,
       "nav": 1925.0,
-      "navAccounts": 3,
+      "navAccounts": 4,
       "positionCount": 2,
       "unrealized": 95.0,
       "unrealizedPct": 0.38
@@ -235,19 +235,37 @@
         "currency": "CAD",
         "id": "acct-1",
         "netLiquidationValue": 1500.0,
-        "nickname": "Trading"
+        "nickname": "Trading",
+        "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"
       },
       {
         "currency": "CAD",
         "id": "acct-2",
         "netLiquidationValue": 400.0,
-        "nickname": "Kids"
+        "nickname": "Kids",
+        "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"
       },
       {
         "currency": "CAD",
         "id": "acct-3",
         "netLiquidationValue": 25.0,
-        "nickname": "Cash"
+        "nickname": "Cash",
+        "unifiedAccountType": "CASH"
+      },
+      {
+        "currency": "CAD",
+        "id": "acct-4",
+        "netLiquidationValue": 999.0,
+        "nickname": "Old",
+        "status": "closed",
+        "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"
+      },
+      {
+        "currency": "CAD",
+        "id": "acct-5",
+        "netLiquidationValue": 0.0,
+        "nickname": "TFSA",
+        "unifiedAccountType": "SELF_DIRECTED_TFSA"
       }
     ],
     "activities": [
@@ -319,6 +337,12 @@
         "buyingPower": null,
         "currency": "CAD",
         "unavailable": "UnavailableSecurities (1 securities)"
+      },
+      {
+        "accountId": "acct-5",
+        "buyingPower": 5638.24,
+        "currency": "CAD",
+        "unavailable": ""
       }
     ],
     "navByAccount": {},

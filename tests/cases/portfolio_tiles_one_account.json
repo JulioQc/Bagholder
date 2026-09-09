@@ -201,13 +201,15 @@
         "currency": "CAD",
         "id": "acct-1",
         "netLiquidationValue": 1500.0,
-        "nickname": "Trading"
+        "nickname": "Trading",
+        "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"
       },
       {
         "currency": "CAD",
         "id": "acct-2",
         "netLiquidationValue": 400.0,
-        "nickname": "Kids"
+        "nickname": "Kids",
+        "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"
       }
     ],
     "activities": [

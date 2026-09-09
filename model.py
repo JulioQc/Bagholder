@@ -2172,13 +2172,16 @@ def portfolio_view(base, f, positions):
     cost basis and unrealized P&L come from the open positions in scope, converted
     at today's rate. Net asset value is the sum of Wealthsimple's net liquidation
     value per account, margin used the negative cash balances per currency, available
-    margin Wealthsimple's buying power; each over the accounts the filter has on, every
-    account when it has none, and None when no account in scope reports it."""
+    margin Wealthsimple's buying power for margin accounts (the server asks only those:
+    every self-directed account answers the query with its cash to buy with, which is
+    not margin); each over the open accounts the filter has on, every open account when
+    it has none, and None when no account in scope reports it."""
     fx = base["fx"]
     today = base["today"]
     cad = lambda amount, currency: to_cad(fx, amount, currency, today)
     names = f["lists"]["account"]
-    accounts = [a for a in base["accounts"] if not names or a["name"] in names]
+    # closed accounts hold nothing and count for nothing here
+    accounts = [a for a in base["accounts"] if _s(a.get("status")).lower() != "closed" and (not names or a["name"] in names)]
     ids = {a["id"] for a in accounts}
     name_of = {a["id"]: a["name"] for a in accounts}
     mv = sum(cad(p["mv"] if not p["short"] else -p["mv"], p["currency"]) for p in positions)
@@ -2194,11 +2197,13 @@ def portfolio_view(base, f, positions):
         if aid in ids and ccy and q < 0:
             used[ccy] = used.get(ccy, 0.0) + (-q)
     margin_used = sum(cad(v, c) for c, v in used.items())
+    # only a margin account's buying power is margin available; any other row is cash to buy with
+    margin_ids = {a["id"] for a in accounts if "MARGIN" in _s(a.get("type")).upper()}
     avail = []
     unavailable = []
     for m in base.get("margin") or []:
         aid = _s(m.get("accountId"))
-        if aid not in ids:
+        if aid not in margin_ids:
             continue
         bp = _num(m.get("buyingPower"), None)
         if bp is None:

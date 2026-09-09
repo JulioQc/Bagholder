@@ -140,9 +140,11 @@ CASES = {
             {"id": "sec-c-usd", "symbol": "USD", "currency": "USD"},
         ],
         "accounts": [
-            {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0},
-            {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 400.0},
-            {"id": "acct-3", "nickname": "Cash", "currency": "CAD", "netLiquidationValue": 25.0},
+            {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0, "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"},
+            {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 400.0, "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"},
+            {"id": "acct-3", "nickname": "Cash", "currency": "CAD", "netLiquidationValue": 25.0, "unifiedAccountType": "CASH"},
+            {"id": "acct-4", "nickname": "Old", "currency": "CAD", "netLiquidationValue": 999.0, "status": "closed", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"},
+            {"id": "acct-5", "nickname": "TFSA", "currency": "CAD", "netLiquidationValue": 0.0, "unifiedAccountType": "SELF_DIRECTED_TFSA"},
         ],
         "balances": [
             {"accountId": "acct-1", "securityId": "sec-c-cad", "quantity": -300.0},
@@ -152,6 +154,7 @@ CASES = {
         "margin": [
             {"accountId": "acct-1", "buyingPower": 700.0, "currency": "CAD", "unavailable": ""},
             {"accountId": "acct-2", "buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (1 securities)"},
+            {"accountId": "acct-5", "buyingPower": 5638.24, "currency": "CAD", "unavailable": ""},
         ],
         "journal": {"rt:b1": {"grade": "B", "thesis": "hold", "tags": ["core"]}},
         "market": {"fx": {"2026-02-01": 1.5}, "benchmark": {}, "quotes": {"AAA": {"price": 12.0, "priceChange": 0.5, "percentChange": 4.35}, "BBB": {"price": 30.0}}},
@@ -165,8 +168,8 @@ CASES = {
         ],
         "securities": [{"id": "sec-c-cad", "symbol": "CAD", "currency": "CAD"}, {"id": "sec-c-usd", "symbol": "USD", "currency": "USD"}],
         "accounts": [
-            {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0},
-            {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 400.0},
+            {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0, "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"},
+            {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 400.0, "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"},
         ],
         "balances": [{"accountId": "acct-1", "securityId": "sec-c-cad", "quantity": -300.0}, {"accountId": "acct-2", "securityId": "sec-c-cad", "quantity": 50.0}],
         "margin": [{"accountId": "acct-2", "buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (1 securities)"}],

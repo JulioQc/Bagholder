@@ -2061,9 +2061,23 @@ def parse_margin(data):
     return {"buyingPower": None, "currency": "CAD", "unavailable": why}
 
 
+def margin_account_ids(accounts):
+    """The open margin accounts: the only ones whose buying power is margin available.
+    Wealthsimple answers the buying-power query for every self-directed account with
+    the cash it could buy with, and with an error for cash, card and crypto accounts;
+    neither is margin."""
+    out = []
+    for a in accounts or []:
+        typ = _s(a.get("unifiedAccountType") or a.get("unified_account_type")).upper()
+        status = _s(a.get("status")).lower()
+        if a.get("id") and "MARGIN" in typ and status != "closed":
+            out.append(a.get("id"))
+    return out
+
+
 def fetch_margin(sess, account_ids):
-    """One buying-power request per account; only accounts that answer are rows.
-    A request that fails is reported once on the terminal, not hidden."""
+    """One buying-power request per margin account (margin_account_ids); only accounts
+    that answer are rows. A request that fails is reported once on the terminal, not hidden."""
     rows = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     failed = 0
@@ -2113,7 +2127,7 @@ def refresh_portfolio():
             sys.stderr.write("bagholder portfolio: Wealthsimple returned no accounts\n")
             return {"ok": False, "skipped": "no accounts"}
         balances = fetch_balances(sess, ids)
-        margin = fetch_margin(sess, ids)
+        margin = fetch_margin(sess, margin_account_ids(accounts))
         store.replace_accounts([slim_account(a) for a in accounts])
         store.replace_balances(balances)
         store.replace_margin(margin)
@@ -2475,7 +2489,7 @@ def run_sync(allow_refresh=True, force_activity=True):
             row["fifoId"] = pools.get(aid, aid)
         _set_sync_step("Fetching balances…")
         balances = fetch_balances(sess, list(acc_by_id.keys()))
-        margin = fetch_margin(sess, list(acc_by_id.keys()))
+        margin = fetch_margin(sess, margin_account_ids(accounts))
         _set_sync_step("Fetching equity history…")
         last_by = store.nav_last_dates()
         try:

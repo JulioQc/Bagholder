@@ -1531,6 +1531,16 @@ class WealthsimpleHttpTest(unittest.TestCase):
         self.assertTrue(bagholder.SESSION_PATH.exists())
         self.assertEqual(bagholder.load_session().get("refresh_token"), "r")
 
+    def test_only_open_margin_accounts_are_asked_for_buying_power(self):
+        accounts = [
+            {"id": "tfsa-1", "unifiedAccountType": "SELF_DIRECTED_TFSA", "status": "open"},
+            {"id": "nr-1", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN", "status": "open"},
+            {"id": "nr-2", "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN", "status": "closed"},
+            {"id": "cash-1", "unifiedAccountType": "CASH", "status": "open"},
+            {"id": "", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN", "status": "open"},
+        ]
+        self.assertEqual(bagholder.margin_account_ids(accounts), ["nr-1"], "a TFSA's buying power is cash, not margin; a closed margin account holds nothing")
+
     def test_parse_margin_and_fetch_margin(self):
         available = {"account": {"financials": {"current": {"marginV3": {"trading": {"buyingPower": {"__typename": "BuyingPowerMetricAvailable", "total": {"amount": "6817.33", "currency": "CAD"}, "restrictions": []}}}}}}}
         unavailable = {"account": {"financials": {"current": {"marginV3": {"trading": {"buyingPower": {"__typename": "BuyingPowerMetricUnavailable", "reason": {"__typename": "UnavailableSecurities", "securities": [{"securityId": "s1", "status": "x"}, {"securityId": "s2", "status": "x"}]}}}}}}}}
