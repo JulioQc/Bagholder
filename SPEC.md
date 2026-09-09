@@ -250,5 +250,5 @@ One filter set applies to every page: Date (presets 1D 1W 1M 3M 6M YTD 1Y 5Y, ye
 2. The page is rendered against a copy of real data at 1200, 1340, 1440 and 1680 px. On every page, including a trade detail, no table overflows its container and no cell content is clipped at 1340 px and above.
 3. Header boxes are measured to be at one height, and centred headers at zero offset from their column's centre.
 4. Any lookup between tables uses ids, and is exercised with a synthetic duplicate symbol in a second account.
-5. `python3 -m unittest test_store test_model` passes.
+5. `python3 -m unittest discover tests` passes.
 6. If any step fails, nothing is committed and the finding is reported first.

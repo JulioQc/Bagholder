@@ -8,13 +8,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The shared model cases in ../../fixtures/cases, run through the Kotlin model.
- * The same files run through the Python (test_fixtures.py) and Swift
+/** The shared model cases in ../../tests/cases, run through the Kotlin model.
+ * The same files run through the Python (tests/test_cases.py) and Swift
  * (ModelCasesTests) models; a rule changed in one place fails here.
- * fixtures/README.md describes the format: `expect` is the view for the
+ * tests/README.md describes the format: `expect` is the view for the
  * case's filters, floats rounded to six places. */
 class ModelCasesTest {
-    private val casesDir = File("../../fixtures/cases")
+    private val casesDir = File("../../tests/cases")
 
     private fun str(d: JSONObject, k: String) = d.optString(k, "")
     private fun num(d: JSONObject, k: String) = if (d.has(k) && !d.isNull(k)) d.optDouble(k, 0.0) else 0.0

@@ -70,7 +70,7 @@ Market data the app needs but Wealthsimple does not provide is fetched over HTTP
 ## For developers
 
 ```
-python3 -m unittest test_store test_model
+python3 -m unittest discover tests
 ```
 
 The derived numbers are computed in `model.py` and served as one JSON document at `GET /api/model`; `ledger.html` renders them.

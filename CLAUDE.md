@@ -17,7 +17,7 @@ Read this first, then `SPEC.md`. Bagholder is a local-first trading journal for 
 
 ## Verifying a change
 
-- Tests: `python3 -m unittest test_store test_model test_fixtures`. Add a test for every behaviour change; the suites are the contract for the model, store and server. `fixtures/cases` are the shared model cases every implementation (Python, Swift, Kotlin) runs; after an intended model change regenerate them with `python3 fixtures/make_fixtures.py` and review the diff (see `fixtures/README.md`).
+- Tests: `python3 -m unittest discover tests`. Add a test for every behaviour change; the suites are the contract for the model, store and server. `tests/cases` are the shared model cases every implementation (Python, Swift, Kotlin) runs; after an intended model change regenerate them with `python3 tests/make_cases.py` and review the diff (see `tests/README.md`).
 - The page has no automated tests, so render it. Run a second instance on a copy of the user's data, never on the live database:
   ```
   mkdir -p /tmp/bh-scratch && cp ~/.bagholder/bagholder.db /tmp/bh-scratch/
@@ -49,7 +49,7 @@ To release: bump `APP_VERSION` in `bagholder.py` in the last PR going into the r
 
 ## Mobile
 
-`MOBILE.md` holds the decision and the plan for the iOS and Android apps: native SwiftUI and Compose, each with its own model, kept in agreement by `fixtures/cases`. The iOS start is branch `ios-m1-shell` (PR #15, issue #14).
+`MOBILE.md` holds the decision, the plan and the record for the iOS and Android apps (`ios/`, `android/`, merged in PR #63): native SwiftUI and Compose, each with its own model, kept in agreement by `tests/cases`. Every change to the apps goes to both platforms in the same PR and is compared side by side on the simulator and the emulator before it is called the same.
 
 ## Do not
 
