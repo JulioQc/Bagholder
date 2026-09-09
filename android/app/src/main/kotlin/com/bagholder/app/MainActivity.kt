@@ -1095,8 +1095,8 @@ private fun CashflowTiles(cf: CashflowView) {
     val tiles = mutableListOf<@Composable (Modifier) -> Unit>()
     for (tile in ordered) {
         tiles.add { m ->
-            if (tile.label == "Yield on cost") Tile(tile.label, Fmt.pct(tile.yield, 2, false), Fmt.wholeMoney(tile.earned) + " on " + Fmt.wholeMoney(tile.book), modifier = m)
-            else Tile(tile.label, Fmt.money(tile.total), Fmt.money(tile.perMonth) + " / month", modifier = m)
+            if (tile.label == "Yield on cost") Tile(tile.label, Fmt.pct(tile.yield, 2, false), Fmt.money(tile.projected) + " / mo", modifier = m)
+            else Tile(tile.label, Fmt.money(tile.total), if (tile.label == "All time") "total earned" else Fmt.money(tile.perMonth) + " / month", modifier = m)
         }
     }
     TilePager(tiles)

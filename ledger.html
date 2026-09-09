@@ -1276,8 +1276,8 @@ function portfolioHtml(m) {
 function cashflowHtml(m) {
   const c = m.cashflow;
   const tiles = c.tiles.map((t) => {
-    if (t.label === "Yield on cost") return '<div class="card elev-sm kpi"><div class="lbl">Yield on cost</div><div class="tab v" style="color:var(--accent-300)">' + (t.yield == null ? "—" : pctPlain(t.yield, 2)) + '</div><div class="s">' + (t.book ? money0(t.earned) + " earned on " + money0(t.book) + " book cost" : "No income holdings in scope") + "</div></div>";
-    return '<div class="card elev-sm kpi"><div class="lbl">' + esc(String(t.label).replace(/^\d{4} YTD$/, "YTD")) + '</div><div class="tab v">' + money0(t.total) + '</div><div class="s">' + money0(t.perMonth) + "/mo avg</div></div>";
+    if (t.label === "Yield on cost") return '<div class="card elev-sm kpi"><div class="lbl">Yield on cost</div><div class="tab v" style="color:var(--accent-300)">' + (t.yield == null ? "—" : pctPlain(t.yield, 2)) + '</div><div class="s">' + money0(t.projected) + "/mo</div></div>";
+    return '<div class="card elev-sm kpi"><div class="lbl">' + esc(String(t.label).replace(/^\d{4} YTD$/, "YTD")) + '</div><div class="tab v">' + money0(t.total) + '</div><div class="s">' + (t.label === "All time" ? "total earned" : money0(t.perMonth) + "/mo avg") + "</div></div>";
   }).join("");
   const skipped = c.skippedFilters || [];
   const note = skipped.length ? skipped.join(", ") + (skipped.length > 1 ? " filters do not" : " filter does not") + " apply to distributions — only account, date and symbol narrow this page." : "";

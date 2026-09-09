@@ -679,7 +679,7 @@ extension BHModel {
         var monthsInScope = keys.filter { bucket[$0]!.n > 0 }.count
         if monthsInScope == 0 { monthsInScope = 1 }
         tiles.append(BHTile(label: "All time", total: total, perMonth: total / Double(monthsInScope), count: recs.count))
-        tiles.append(BHTile(label: "Yield on cost", yield: basisAll != 0 ? annualAll / basisAll : nil, earned: earnedAll, book: basisAll))
+        tiles.append(BHTile(label: "Yield on cost", yield: basisAll != 0 ? annualAll / basisAll : nil, projected: annualAll / 12, earned: earnedAll, book: basisAll))
         let other = everything.filter { $0.kind != "Dividend" }
         var v = BHCashflowView()
         v.tiles = tiles

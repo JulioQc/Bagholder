@@ -943,6 +943,7 @@ class CashflowTest(unittest.TestCase):
         self.assertAlmostEqual(tiles["2026 YTD"]["total"], 7600)
         self.assertAlmostEqual(tiles["2026 YTD"]["perMonth"], 3800)
         self.assertAlmostEqual(tiles["Yield on cost"]["yield"], (2.4 * 20000) / (20000 * 7.13))
+        self.assertAlmostEqual(tiles["Yield on cost"]["projected"], 2.4 * 20000 / 12)
         v = model.build_view(base, {"lists": {"grade": ["A"]}})
         self.assertIn("grade", v["cashflow"]["skippedFilters"])
         self.assertEqual(v["cashflow"]["count"], 2)

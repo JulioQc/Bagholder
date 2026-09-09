@@ -1145,9 +1145,9 @@ struct CashflowScreen: View {
     private func tiles(_ cf: BHCashflowView) -> some View {
         func tile(_ tile: BHTile) -> Tile {
             if tile.label == "Yield on cost" {
-                return Tile(label: tile.label, value: BHFmt.pct(tile.yield, digits: 2, signed: false), subtitle: BHFmt.wholeMoney(tile.earned) + " on " + BHFmt.wholeMoney(tile.book))
+                return Tile(label: tile.label, value: BHFmt.pct(tile.yield, digits: 2, signed: false), subtitle: BHFmt.money(tile.projected) + " / mo")
             }
-            return Tile(label: tile.label, value: BHFmt.money(tile.total), subtitle: BHFmt.money(tile.perMonth) + " / month")
+            return Tile(label: tile.label, value: BHFmt.money(tile.total), subtitle: tile.label == "All time" ? "total earned" : BHFmt.money(tile.perMonth) + " / month")
         }
         // YTD and Yield on cost first, then All time and the past years
         let ytd = cf.tiles.first { $0.label.hasSuffix("YTD") }

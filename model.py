@@ -2556,6 +2556,7 @@ def cashflow_view(base, f, positions_all):
         {
             "label": "Yield on cost",
             "yield": (annual_all / basis_all) if basis_all else None,
+            "projected": annual_all / 12,
             "earned": earned_all,
             "book": basis_all,
         }
