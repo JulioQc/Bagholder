@@ -9,11 +9,11 @@ Read this first, then `SPEC.md`. Bagholder is a local-first trading journal for 
 
 ## How changes land
 
-1. Never commit to `master`. Branch per change: `git checkout -b <topic>` from an up-to-date `master`.
+1. Never commit to `master`, and never run `git checkout` in the user's checkout: their live app serves from it and they test PRs there. Work in a detached worktree under the session scratchpad (`git worktree add --detach <dir> origin/master`), commit there, and push the commit straight to its topic branch without creating a local one: `git push origin HEAD:refs/heads/<topic>`. A branch checked out in any worktree locks that name, and the user's own checkout of it then fails.
 2. Verify before committing (see below). If something is wrong, stop and report before committing; do not commit and mention it afterwards.
-3. Commit with a message that says what changed and why, ending with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Push the branch and open a PR: `gh pr create --fill` (PR bodies end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`).
-4. Tell the user the branch name and how to try it: `git fetch && git checkout <branch>`, then restart `python3 bagholder.py`. The user tests the PR on their machine.
-5. Merge only when the user says so: `gh pr merge <n> --merge --delete-branch`, then `git checkout master && git pull`.
+3. Commit with a message that says what changed and why, ending with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Open the PR from the pushed branch: `gh pr create --head <topic> --fill` (PR bodies end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`).
+4. Before writing any command for the user, run `git worktree list` (no worktree may hold the branch, or `master`) and read their current branch with `git branch --show-current` in their checkout; then write the command for that exact state: `git fetch && git checkout <branch>`, and restart `python3 bagholder.py` when the server changed. The user tests the PR on their machine.
+5. Merge only when the user says so: `gh pr merge <n> --merge --delete-branch` (confirm the PR is MERGED before any branch deletion), then give the user `git checkout master && git pull` and remove the scratch worktree.
 6. A change to the apps goes to both platforms in the same PR. It is not "the same on both" until both apps have been captured on the same rows, screen by screen, and compared (`MOBILE.md` has the recipe); what cannot be the same is found on the simulator and the emulator and reported before the user meets it. Speed on a phone is judged from a home-screen launch, never from an Xcode run: the debugger makes the web engine ten times slower.
 
 ## Verifying a change
