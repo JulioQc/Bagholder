@@ -646,17 +646,36 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(again["skipped"], 1)
         self.assertEqual(store.activity_count(), 1)
 
-    def test_second_sync_does_not_replace_row(self):
+    def test_a_row_wealthsimple_revises_replaces_the_stored_copy(self):
         original = bagholder.map_activity(_ws_item())
         store.apply_wealthsimple_mapped([original])
+        stored_id = store.snapshot()["activities"][0]["id"]
         changed = bagholder.map_activity(_ws_item(amount=999, assetQuantity=10))
-        changed["description"] = "should not land"
-        store.apply_wealthsimple_mapped([changed])
+        changed["description"] = "revised by Wealthsimple"
+        result = store.apply_wealthsimple_mapped([changed])
+        self.assertEqual((result["inserted"], result["revised"], result["skipped"]), (0, 1, 0))
         stored = store.snapshot()["activities"]
         self.assertEqual(len(stored), 1)
         self.assertEqual(stored[0]["canonicalId"], "ws-cid-aaa-001")
-        self.assertNotEqual(stored[0]["description"], "should not land")
-        self.assertAlmostEqual(stored[0]["netCashAmount"], -100.0)
+        self.assertEqual(stored[0]["id"], stored_id, "the stored id, and so the journal key, survives the revision")
+        self.assertEqual(stored[0]["description"], "revised by Wealthsimple")
+        self.assertAlmostEqual(stored[0]["netCashAmount"], changed["netCashAmount"])
+        same_again = store.apply_wealthsimple_mapped([changed])
+        self.assertEqual((same_again["revised"], same_again["skipped"]), (0, 1), "an unchanged row is not rewritten")
+
+    def test_placeholder_dividend_becomes_the_paid_dividend(self):
+        """2026-09-08: EASY's dividend arrived on the record date as a zero-cash placeholder
+        dated August 31, then Wealthsimple revised the same row into the paid dividend on the 8th."""
+        placeholder = bagholder.map_activity(_ws_item(canonicalId="div_E002026619494", occurredAt="2026-08-31T04:00:00.000Z", amount=0, assetQuantity=4000))
+        store.apply_wealthsimple_mapped([placeholder])
+        paid = bagholder.map_activity(_ws_item(canonicalId="div_E002026619494", occurredAt="2026-09-08T14:02:11.000Z", amount=1020, assetQuantity=4000))
+        result = store.apply_wealthsimple_mapped([paid])
+        self.assertEqual(result["revised"], 1)
+        rows = store.snapshot()["activities"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["transactionDate"], "2026-09-08")
+        self.assertAlmostEqual(rows[0]["netCashAmount"], paid["netCashAmount"])
+        self.assertAlmostEqual(abs(rows[0]["netCashAmount"]), 1020.0)
 
     def test_manual_has_no_canonical_id(self):
         result = bagholder.append_manual(
@@ -744,7 +763,8 @@ class StoreTest(unittest.TestCase):
                             )
                         }
                     ],
-                    "pageInfo": {"hasNextPage": True, "endCursor": "cursor-keep-going"},
+                    # the server bounds the walk by startDate; every page it returns is read
+                    "pageInfo": {"hasNextPage": len(calls) < 2, "endCursor": "cursor-page-2"},
                 }
             }
 
@@ -756,7 +776,7 @@ class StoreTest(unittest.TestCase):
                 known_canonical_ids=store.canonical_ids(),
             )
 
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 2, "a page of known rows does not end the walk")
         cond = calls[0]["condition"]
         self.assertIn("startDate", cond)
         self.assertTrue(str(cond["startDate"]).startswith("2024-06-01"))
@@ -884,7 +904,7 @@ class StoreTest(unittest.TestCase):
         row = bagholder.map_activity(_ws_item(securityId="sec-s-abc123"))
         self.assertEqual(row["securityId"], "sec-s-abc123")
 
-    def test_second_sync_stamps_security_id_only(self):
+    def test_second_sync_stamps_security_id_and_takes_the_revision(self):
         row = bagholder.map_activity(_ws_item())
         store.apply_wealthsimple_mapped([row])
         later = dict(row)
@@ -892,12 +912,16 @@ class StoreTest(unittest.TestCase):
         later["quantity"] = 999
         later["netCashAmount"] = 1
         again = store.apply_wealthsimple_mapped([later])
-        self.assertEqual(again["inserted"], 0)
-        self.assertEqual(again["skipped"], 1)
+        self.assertEqual((again["inserted"], again["revised"], again["skipped"]), (0, 1, 0))
         got = store.snapshot()["activities"][0]
         self.assertEqual(got["securityId"], "sec-s-later")
-        self.assertEqual(got["quantity"], 10)
-        self.assertEqual(got["netCashAmount"], -100)
+        self.assertEqual(got["quantity"], 999)
+        unchanged = dict(later)
+        unchanged["securityId"] = "sec-s-other"
+        again = store.apply_wealthsimple_mapped([unchanged])
+        self.assertEqual((again["revised"], again["skipped"]), (0, 1))
+        self.assertEqual(store.snapshot()["activities"][0]["securityId"], "sec-s-later", "a security id already stored is kept")
+        self.assertEqual(got["netCashAmount"], 1)
 
     def test_snapshot_includes_securities(self):
         store.upsert_securities(

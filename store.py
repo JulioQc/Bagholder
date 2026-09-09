@@ -894,8 +894,61 @@ def stamp_canonical_id(activity_id, canonical_id):
             conn.close()
 
 
+_INSERT_COLUMNS = (
+    "id", "canonical_id", "occurred_at", "transaction_date", "settlement_date",
+    "account_id", "book_id", "fifo_id", "account_type", "activity_type",
+    "activity_sub_type", "description", "direction", "symbol", "name", "currency",
+    "quantity", "unit_price", "commission", "net_cash_amount", "category", "balance",
+    "source", "raw_type", "aft_type", "counter_symbol", "security_id",
+)
+# What Wealthsimple revises on a row of its own: a dividend announced as a
+# placeholder on the record date (no cash, dated that day) becomes the paid
+# dividend on pay day, under the same canonical id. Identity, account and the
+# stored id stay.
+_REVISABLE_COLUMNS = (
+    "occurred_at", "transaction_date", "settlement_date", "activity_type", "activity_sub_type",
+    "description", "direction", "symbol", "name", "currency", "quantity", "unit_price",
+    "commission", "net_cash_amount", "category", "raw_type", "aft_type", "counter_symbol",
+)
+
+
+def _differs(a, b):
+    if isinstance(a, float) or isinstance(b, float):
+        try:
+            return abs(float(a or 0) - float(b or 0)) > 1e-9
+        except (TypeError, ValueError):
+            return True
+    return (a or "") != (b or "")
+
+
+def _revise_wealthsimple_row(cid, row):
+    """Replace the stored copy of a Wealthsimple row with Wealthsimple's current
+    version when a revisable field changed. True when something was written."""
+    incoming = dict(zip(_INSERT_COLUMNS, _insert_params(row, "", cid)))
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            stored = conn.execute("SELECT * FROM activities WHERE canonical_id = ?", (cid,)).fetchone()
+            if not stored:
+                return False
+            changed = [c for c in _REVISABLE_COLUMNS if _differs(incoming[c], stored[c])]
+            if not changed:
+                return False
+            if incoming["security_id"] and not stored["security_id"]:
+                changed.append("security_id")
+            sets = ", ".join("%s = ?" % c for c in changed)
+            conn.execute("UPDATE activities SET %s WHERE canonical_id = ?" % sets, [incoming[c] for c in changed] + [cid])
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+
 def apply_wealthsimple_mapped(rows):
-    """Insert if canonicalId is new. Never replace an existing row.
+    """Insert if canonicalId is new. A known row is replaced only when
+    Wealthsimple itself has revised it (see _REVISABLE_COLUMNS); Bagholder
+    never edits a row on its own.
 
     Linking a typed/CSV row: exactly one field match stamps canonicalId.
     None → insert. Several → do not guess; insert the Wealthsimple row.
@@ -903,6 +956,7 @@ def apply_wealthsimple_mapped(rows):
     inserted = 0
     linked = 0
     skipped = 0
+    revised = 0
     known = canonical_ids()
     for raw in rows or []:
         if not raw:
@@ -913,6 +967,9 @@ def apply_wealthsimple_mapped(rows):
         if not cid or looks_like_homemade_id(cid):
             continue
         if cid in known:
+            if _revise_wealthsimple_row(cid, row):
+                revised += 1
+                continue
             sid = _s(row.get("securityId") or row.get("security_id")).strip()
             if sid:
                 with _lock:
@@ -939,7 +996,7 @@ def apply_wealthsimple_mapped(rows):
         insert_activity(row, canonical_id=cid)
         known.add(cid)
         inserted += 1
-    return {"inserted": inserted, "linked": linked, "skipped": skipped}
+    return {"inserted": inserted, "linked": linked, "skipped": skipped, "revised": revised}
 
 
 def merge_local_rows(rows):
