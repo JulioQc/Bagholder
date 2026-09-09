@@ -38,6 +38,7 @@
         "book": 0,
         "earned": 0,
         "label": "Yield on cost",
+        "projected": 0.0,
         "yield": null
       }
     ],

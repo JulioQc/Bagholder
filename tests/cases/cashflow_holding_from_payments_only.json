@@ -116,6 +116,7 @@
         "book": 10000.0,
         "earned": 184.0,
         "label": "Yield on cost",
+        "projected": 21.333333,
         "yield": 0.0256
       }
     ],

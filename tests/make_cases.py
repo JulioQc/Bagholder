@@ -25,7 +25,7 @@ MONTH_KEYS = ("key", "label", "value", "count")
 SYMBOL_KEYS = ("symbol", "pnl", "n", "legs", "winRate", "avgHold")
 QUEUE_KEYS = ("id", "symbol", "date", "pnl", "missing")
 HOLDING_KEYS = ("symbol", "qty", "per", "freq", "freqVerified", "annual", "yoc", "ytd", "ttm", "all", "nextExDate", "nextPayDate", "exPast", "payPast")
-TILE_KEYS = ("label", "total", "perMonth", "count", "yield", "earned", "book")
+TILE_KEYS = ("label", "total", "perMonth", "count", "yield", "projected", "earned", "book")
 
 
 def snapshot(acts, securities=None, nav=None, nav_by_account=None, accounts=None, balances=None, margin=None):

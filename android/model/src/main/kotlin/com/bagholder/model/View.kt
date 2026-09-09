@@ -565,7 +565,7 @@ object ModelView {
         var monthsInScope = keys.count { bucket[it]!![1] > 0.0 }
         if (monthsInScope == 0) monthsInScope = 1
         tiles.add(Tile(label = "All time", total = total, perMonth = total / monthsInScope, count = recs.size))
-        tiles.add(Tile(label = "Yield on cost", yield = if (basisAll != 0.0) annualAll / basisAll else null, earned = earnedAll, book = basisAll))
+        tiles.add(Tile(label = "Yield on cost", yield = if (basisAll != 0.0) annualAll / basisAll else null, projected = annualAll / 12, earned = earnedAll, book = basisAll))
         val other = everything.filter { it.kind != "Dividend" }
         return CashflowView(
             tiles = tiles, months = months, holdings = holdings, rows = recs, other = other, total = total, count = recs.size,

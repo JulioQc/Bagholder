@@ -223,8 +223,8 @@ Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
 |---|---|---|
 | Two years ago, last year, by calendar year, rolling over on January 1 | Sum received that year | Average per paying month |
 | YTD | Sum received this year | Average per paying month |
-| All time | Sum received | Average per paying month |
-| Yield on cost | Annual income of all rated holdings ÷ their book cost | Received in the last twelve months, on the book cost |
+| All time | Sum received | `total earned` |
+| Yield on cost | Annual income of all rated holdings ÷ their book cost | Projected monthly income, that annual income ÷ 12, as `$x/mo` |
 
 **Monthly distributions.** One bar per month from the first payment to the current month (or to the end of the date filter), CAD, an empty bar for a month with nothing paid yet, six axis labels, hover shows month and amount.
 

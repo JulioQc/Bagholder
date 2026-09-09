@@ -227,7 +227,7 @@ struct BHTile {
     var label = ""
     var total: Double?, perMonth: Double?
     var count: Int?
-    var yield: Double?, earned: Double?, book: Double?
+    var yield: Double?, projected: Double?, earned: Double?, book: Double?
 }
 
 struct BHMonth {

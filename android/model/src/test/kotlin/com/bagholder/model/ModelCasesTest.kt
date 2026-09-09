@@ -155,6 +155,7 @@ class ModelCasesTest {
             t.count?.let { d["count"] = it }
             if (t.label == "Yield on cost") {
                 d["yield"] = opt(t.yield)
+                d["projected"] = t.projected ?: 0.0
                 d["earned"] = t.earned ?: 0.0
                 d["book"] = t.book ?: 0.0
             }
