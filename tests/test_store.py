@@ -1359,6 +1359,58 @@ class InAppUpdateTest(unittest.TestCase):
             self.assertEqual((Path(app) / "b.py").read_text(), "old b")
             self.assertFalse((Path(home) / "update-pending").exists())
 
+    def test_a_container_copy_binds_wide_keeps_the_host_check_and_never_updates(self):
+        import bagholder
+        from unittest import mock
+        from datetime import datetime, timezone
+
+        class Peer:
+            def __init__(self, ip, host, port=8765):
+                self.client_address = (ip, 50000)
+                self.headers = {"Host": host}
+                self.server = type("S", (), {"server_address": ("0.0.0.0", port)})()
+        local, host_ok = bagholder.Handler._local, bagholder.Handler._host_ok
+        # the desktop: loopback peers only, the Host as bound
+        self.assertTrue(local(Peer("127.0.0.1", "127.0.0.1:8765")))
+        self.assertFalse(local(Peer("172.18.0.1", "127.0.0.1:8765")))
+        self.assertTrue(host_ok(Peer("127.0.0.1", "127.0.0.1:8765")))
+        self.assertFalse(host_ok(Peer("127.0.0.1", "127.0.0.1:8798")), "the desktop's Host names its own port")
+        with mock.patch.object(bagholder, "BIND_HOST", "0.0.0.0"):
+            # the container: the peer is the bridge; the name must still be 127.0.0.1, under any published port
+            self.assertTrue(local(Peer("172.18.0.1", "127.0.0.1:8798")))
+            self.assertTrue(host_ok(Peer("172.18.0.1", "127.0.0.1:8798")))
+            self.assertFalse(host_ok(Peer("172.18.0.1", "localhost:8765")))
+            self.assertFalse(host_ok(Peer("172.18.0.1", "bagholder.example:8765")))
+        with mock.patch.object(bagholder, "UPDATES_OFF", True), mock.patch.object(bagholder, "_http_json", side_effect=AssertionError("asked GitHub")):
+            rec = bagholder.check_for_update(datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc))
+            self.assertEqual((rec["ok"], rec["updateAvailable"]), (False, False))
+            out = bagholder.start_update()
+            self.assertEqual((out["ok"], out["error"]), (False, bagholder.UPDATES_OFF_MESSAGE))
+        self.assertEqual(bagholder.cli_mode(["bagholder.py"]), "serve")
+        self.assertEqual(bagholder.cli_mode(["bagholder.py", "--connect"]), "connect")
+        with self.assertRaises(SystemExit):
+            bagholder.cli_mode(["bagholder.py", "--serve-me"])
+
+    def test_connect_cli_waits_for_the_capture_and_reports(self):
+        import bagholder
+        from unittest import mock
+        with mock.patch.object(bagholder, "start_login_browser", return_value={"ok": False, "error": "Install Chrome."}), \
+             mock.patch.object(bagholder, "_close_login_browser"):
+            self.assertEqual(bagholder.connect_cli(), 1)
+        states = iter([(False, True, ""), (True, False, "")])
+        def tick(_):
+            connected, capturing, error = next(states)
+            bagholder._state["connected"], bagholder._state["capturing"], bagholder._state["error"] = connected, capturing, error
+        bagholder._state["connected"], bagholder._state["capturing"], bagholder._state["error"] = False, True, ""
+        with mock.patch.object(bagholder, "start_login_browser", return_value={"ok": True}), \
+             mock.patch.object(bagholder, "_close_login_browser") as closed, mock.patch.object(bagholder.time, "sleep", side_effect=tick):
+            self.assertEqual(bagholder.connect_cli(), 0, "the capture landed: saved, exit 0")
+        self.assertEqual(closed.call_count, 1, "the login window is closed on the way out")
+        bagholder._state["connected"], bagholder._state["capturing"], bagholder._state["error"] = False, False, "The Chrome window closed before a session showed up."
+        with mock.patch.object(bagholder, "start_login_browser", return_value={"ok": True}), mock.patch.object(bagholder, "_close_login_browser"):
+            self.assertEqual(bagholder.connect_cli(), 1, "the window closed: reported, exit 1")
+        bagholder._state["error"] = ""
+
     def test_update_button_refuses_during_a_sync(self):
         import bagholder
         from unittest import mock

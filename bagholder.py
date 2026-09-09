@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import ssl
 import struct
@@ -535,6 +536,12 @@ APP_DIR = Path(__file__).resolve().parent
 UPDATE_HEALTHY_SEC = 20          # a restarted server alive this long is a good update
 UPDATE_MAX_BYTES = 50 * 1024 * 1024
 UPDATE_CHECK_HOURS = 1   # a release is a click away now, so the check is hourly and at every start
+# A copy in a container (the Dockerfile): bound to every interface of the container while
+# compose publishes it on the host's loopback only, and never updating itself, since a new
+# release is a new image. Both empty for the app on a desktop.
+BIND_HOST = (os.environ.get("BAGHOLDER_BIND") or "").strip() or "127.0.0.1"
+UPDATES_OFF = bool((os.environ.get("BAGHOLDER_NO_UPDATE") or "").strip())
+UPDATES_OFF_MESSAGE = "Updates are off in this copy; a new release is a new image."
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
@@ -3527,8 +3534,11 @@ def parse_version(tag):
 
 def check_for_update(now=None):
     """Ask GitHub for the latest release and compare its tag with APP_VERSION.
-    Returns the record stored in meta: {checkedAt, ok, latest, url, updateAvailable}. Never raises."""
+    Returns the record stored in meta: {checkedAt, ok, latest, url, updateAvailable}. Never raises.
+    With updates off nothing is asked and nothing is stored."""
     now = now or datetime.now(timezone.utc)
+    if UPDATES_OFF:
+        return {"checkedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "ok": False, "latest": "", "url": REPO_URL + "/releases/latest", "updateAvailable": False}
     record = {"checkedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "ok": False, "latest": "", "url": REPO_URL + "/releases/latest", "updateAvailable": False}
     try:
         rel = _http_json("GET", RELEASE_URL, headers={"Accept": "application/vnd.github+json", "User-Agent": "Bagholder/" + APP_VERSION}, timeout=30)
@@ -3756,6 +3766,8 @@ def perform_update(tag, rec):
 
 def start_update():
     """Begin the update the page asked for; the work runs in the background."""
+    if UPDATES_OFF:
+        return {"ok": False, "error": UPDATES_OFF_MESSAGE}
     rec = update_status()
     with _lock:
         if _state.get("updating"):
@@ -3879,6 +3891,8 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write("bagholder %s - %s\n" % (self.address_string(), fmt % args))
 
     def _local(self):
+        if BIND_HOST != "127.0.0.1":
+            return True   # bound beyond loopback on purpose (a container); the peer is its bridge
         ip = self.client_address[0]
         return ip in ("127.0.0.1", "::1")
 
@@ -3886,6 +3900,9 @@ class Handler(BaseHTTPRequestHandler):
         raw = (self.headers.get("Host") or "").strip().lower()
         if not raw or "," in raw:
             return False
+        if BIND_HOST != "127.0.0.1":
+            # a container's port may be published under another number; the name must still be 127.0.0.1
+            return bool(re.fullmatch(r"127\.0\.0\.1:\d{1,5}", raw))
         port = self.server.server_address[1]
         return raw == "127.0.0.1:%s" % port
 
@@ -4239,12 +4256,12 @@ def bind_server():
     last = None
     for port in port_choices():
         try:
-            httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            httpd = ThreadingHTTPServer((BIND_HOST, port), Handler)
             return httpd, port
         except OSError as e:
             last = e
             continue
-    raise SystemExit("Could not bind 127.0.0.1:%s (%s)" % ("-".join(str(p) for p in port_choices()), last))
+    raise SystemExit("Could not bind %s:%s (%s)" % (BIND_HOST, "-".join(str(p) for p in port_choices()), last))
 
 
 def main():
@@ -4257,7 +4274,8 @@ def main():
     t = threading.Thread(target=auto_sync_loop, name="bagholder-auto-sync", daemon=True)
     t.start()
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
-    threading.Thread(target=check_for_update, name="bagholder-update-check", daemon=True).start()
+    if not UPDATES_OFF:
+        threading.Thread(target=check_for_update, name="bagholder-update-check", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
     threading.Thread(target=portfolio_loop, name="bagholder-portfolio-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
@@ -4282,6 +4300,13 @@ def main():
                 name="bagholder-listings",
                 daemon=True,
             ).start()
+    # a container stops its process with SIGTERM, which PID 1 would otherwise ignore: same exit as Ctrl-C
+    def _on_sigterm(*_):
+        raise KeyboardInterrupt
+    try:
+        signal.signal(signal.SIGTERM, _on_sigterm)
+    except (ValueError, OSError):
+        pass
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -4300,8 +4325,53 @@ def main():
         sys.exit(_exit_code[0])
 
 
+def connect_cli():
+    """`bagholder.py --connect`: sign in on this machine for a copy that runs elsewhere
+    (a container). The Chrome window opens here, the login lands in HOME/session.json,
+    and the command exits; that folder is what the container mounts as its data."""
+    _ensure_home()
+    store.ensure()
+    res = start_login_browser()
+    if not res.get("ok"):
+        sys.stderr.write("bagholder: %s\n" % (res.get("error") or "could not open the login"))
+        return 1
+    print("Sign in to Wealthsimple in the Chrome window…", flush=True)
+    deadline = time.time() + CAPTURE_WAIT_SEC + 15
+    try:
+        while time.time() < deadline:
+            with _lock:
+                connected = bool(_state.get("connected"))
+                capturing = bool(_state.get("capturing"))
+                error = str(_state.get("error") or "")
+            if connected:
+                print("Signed in. The login is saved in %s" % SESSION_PATH, flush=True)
+                return 0
+            if not capturing:
+                sys.stderr.write("bagholder: %s\n" % (error or "no session was captured"))
+                return 1
+            time.sleep(1)
+        sys.stderr.write("bagholder: no session yet; run it again and finish the login sooner\n")
+        return 1
+    finally:
+        _close_login_browser()
+
+
+def cli_mode(argv):
+    """'connect' for `--connect`, 'serve' otherwise; anything else is a usage error."""
+    args = [a for a in argv[1:] if a.strip()]
+    if not args:
+        return "serve"
+    if args == ["--connect"]:
+        return "connect"
+    raise SystemExit("usage: python3 bagholder.py [--connect]")
+
+
 if __name__ == "__main__":
-    if os.environ.get("BAGHOLDER_CHILD") == "1":
+    mode = cli_mode(sys.argv)
+    if mode == "connect":
+        sys.exit(connect_cli())
+    elif os.environ.get("BAGHOLDER_CHILD") == "1" or UPDATES_OFF:
+        # the supervisor exists to restart an updated server; a copy that never updates runs plain
         main()
     else:
         sys.exit(supervise())

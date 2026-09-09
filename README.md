@@ -64,6 +64,24 @@ python3 bagholder.py
 
 The app opens at `http://127.0.0.1:8765` in your browser. Use that address as written; `localhost` is refused on purpose, since the server only answers its own machine.
 
+## Docker
+
+For a copy that runs in the background on a machine you keep on. The image is Python's slim Debian image plus the app; the database and the login live in `./data` on the host.
+
+Sign in once on the host, where Chrome can open (this writes `data/session.json` and exits):
+
+```
+BAGHOLDER_HOME=./data python3 bagholder.py --connect
+```
+
+Then:
+
+```
+docker compose up -d
+```
+
+and open `http://127.0.0.1:8765`. The port is published on the host's loopback only, and the copy in the container never updates itself: on a new release, `git pull` and `docker compose up -d --build`.
+
 ## First use
 
 Connect Wealthsimple and sign in. Bagholder pulls your full history, then syncs every weekday after the close while it is running.
