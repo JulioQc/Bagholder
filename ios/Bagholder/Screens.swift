@@ -21,7 +21,7 @@ struct RootView: View {
                 switch tab {
                 case 0: NavigationStack { DashboardScreen(book: book, tab: $tab, chrome: chrome).ignoresSafeArea(.keyboard) }
                 case 1: NavigationStack { TradesScreen(book: book, chrome: chrome).ignoresSafeArea(.keyboard) }
-                case 2: NavigationStack { PositionsScreen(book: book, chrome: chrome).ignoresSafeArea(.keyboard) }
+                case 2: NavigationStack { PortfolioScreen(book: book, chrome: chrome).ignoresSafeArea(.keyboard) }
                 default: NavigationStack { CashflowScreen(book: book, chrome: chrome).ignoresSafeArea(.keyboard) }
                 }
             }
@@ -58,7 +58,7 @@ struct Chrome {
 private struct TabBar: View {
     @Environment(\.theme) private var t
     @Binding var tab: Int
-    private let items: [(String, String)] = [("Dashboard", "gauge.with.dots.needle.33percent"), ("Trades", "list.bullet.rectangle"), ("Positions", "briefcase"), ("Cashflow", "dollarsign.circle")]
+    private let items: [(String, String)] = [("Dashboard", "gauge.with.dots.needle.33percent"), ("Trades", "list.bullet.rectangle"), ("Portfolio", "briefcase"), ("Cashflow", "dollarsign.circle")]
 
     var body: some View {
         HStack(spacing: 0) {
@@ -825,35 +825,40 @@ struct TradeDetailScreen: View {
     }
 }
 
-// MARK: - Positions
+// MARK: - Portfolio
 
-struct PositionsScreen: View {
+/// A holding opens the page a trade opens, with the position standing in for the trade:
+/// no close date, the current price as the exit, the days so far as the hold.
+func holdingAsTrade(_ p: BHPosition) -> BHTrade {
+    var tr = BHTrade()
+    tr.id = p.id; tr.status = "open"; tr.symbol = p.symbol; tr.underlying = p.underlying; tr.name = p.name; tr.exchange = p.exchange; tr.kind = p.kind; tr.currency = p.currency
+    tr.account = p.account; tr.accountId = p.accountId; tr.securityId = p.securityId
+    tr.side = p.short ? "COVER" : "SELL"; tr.openDirection = p.short ? "SHORT" : "LONG"
+    tr.qty = p.qty; tr.mult = p.mult; tr.entry = p.avg; tr.exit = p.last
+    tr.entryDate = p.opened; tr.exitDate = BHModel.todayLocal(); tr.holdDays = p.held
+    tr.pnl = p.unreal; tr.pnlPct = p.unrealPct; tr.fills = p.fills
+    tr.grade = p.grade; tr.thesis = p.thesis; tr.tags = p.tags
+    return tr
+}
+
+struct PortfolioScreen: View {
     @Environment(\.theme) private var t
     @ObservedObject var book: Book
     let chrome: Chrome
+    @State private var picked: Int?
 
     var body: some View {
         VStack(spacing: 0) {
             Header(book: book, chrome: chrome)
             FilterChips(book: book)
             if let v = book.view {
-                let s = v.positionsSummary
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 0) {
-                        HStack(spacing: 0) {
-                            Text("\(s.count) open · Book " + BHFmt.wholeMoney(s.book) + " · P&L ").font(.system(size: 14)).foregroundStyle(t.ink60)
-                            Text(BHFmt.signedMoney(s.unreal, digits: 0)).font(.system(size: 14, weight: .medium)).monospacedDigit().foregroundStyle(t.signed(s.unreal))
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        ForEach(v.positions, id: \.id) { p in
-                            NavigationLink(value: p.id) { PositionCard(position: p) }.buttonStyle(.plain)
-                            Divider().overlay(t.hair).padding(.horizontal, 16)
-                        }
-                        if v.positions.isEmpty {
-                            Text("No open positions.").font(.system(size: 14)).foregroundStyle(t.ink55).padding(.top, 40)
-                        }
+                    VStack(spacing: 12) {
+                        tiles(v.portfolio)
+                        allocation(v.portfolio)
+                        holdings(v)
                     }
+                    .padding(.horizontal, 16)
                     .padding(.bottom, 90)
                 }
             } else {
@@ -862,45 +867,104 @@ struct PositionsScreen: View {
         }
         .background(t.bg)
         .toolbar(.hidden, for: .navigationBar)
-        .navigationDestination(for: String.self) { id in PositionDetailScreen(book: book, positionId: id) }
+        .navigationDestination(for: String.self) { id in HoldingDetailScreen(book: book, positionId: id) }
+    }
+
+    private func tiles(_ pf: BHPortfolio) -> some View {
+        let n = pf.positionCount
+        let positions = "\(n) position" + (n == 1 ? "" : "s")
+        let unavailable = pf.availableMarginUnavailable
+        let tiles: [Tile] = [
+            Tile(label: "Market value", value: BHFmt.wholeMoney(pf.marketValue), subtitle: "across \(n) open position" + (n == 1 ? "" : "s")),
+            Tile(label: "Net asset value", value: pf.nav.map { BHFmt.wholeMoney($0) } ?? BHFmt.dash,
+                 subtitle: pf.nav == nil ? BHFmt.dash : "\(pf.navAccounts) account" + (pf.navAccounts == 1 ? "" : "s") + ", " + positions),
+            Tile(label: "Cost basis", value: BHFmt.wholeMoney(pf.costBasis), subtitle: "Total book value"),
+            Tile(label: "Margin used", value: BHFmt.wholeMoney(pf.marginUsed), subtitle: pf.marginUsedPct.map { BHFmt.pct($0, signed: false) + " of market value" } ?? BHFmt.dash),
+            Tile(label: "Available margin", value: pf.availableMargin.map { BHFmt.wholeMoney($0) } ?? BHFmt.dash,
+                 subtitle: !unavailable.isEmpty ? "unavailable for " + unavailable.joined(separator: ", ") : (pf.availableMargin == nil ? BHFmt.dash : "buying power")),
+            Tile(label: "Unrealized P&L", value: BHFmt.signedMoney(pf.unrealized), subtitle: pf.unrealizedPct.map { BHFmt.pct($0) + (pf.unrealized >= 0 ? " gain" : " loss") } ?? BHFmt.dash, color: t.signed(pf.unrealized)),
+        ]
+        return TilePager(tiles: tiles)
+    }
+
+    private func allocation(_ pf: BHPortfolio) -> some View {
+        let top = pf.allocation.prefix(7), rest = pf.allocation.dropFirst(7)
+        var items: [(label: String, value: Double)] = top.map { ($0.symbol, $0.value) }
+        if !rest.isEmpty { items.append(("Other (\(rest.count))", rest.reduce(0.0) { $0 + $1.value })) }
+        let total = items.reduce(0.0) { $0 + $1.value }
+        return Card(title: "Allocation") {
+            if items.isEmpty { Text("No open positions in scope.").font(.system(size: 14)).foregroundStyle(t.ink55) }
+            else {
+                HStack(alignment: .center, spacing: 16) {
+                    DonutChart(slices: items, picked: picked, onPick: { picked = $0 }, size: 150, centre: pf.marketValue)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { i, s in
+                            HStack(spacing: 8) {
+                                Circle().fill(t.pie[i % t.pie.count]).frame(width: 8, height: 8)
+                                Text(s.label).font(.system(size: 13, weight: .medium)).foregroundStyle(t.ink).lineLimit(1)
+                                Spacer()
+                                Text(BHFmt.pct(total > 0 ? s.value / total : nil, signed: false)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.ink60)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func holdings(_ v: BHView) -> some View {
+        let rows = v.positions.sorted { $0.unreal > $1.unreal }
+        return Card(title: "Holdings") {
+            if rows.isEmpty { Text("No open positions match these filters.").font(.system(size: 14)).foregroundStyle(t.ink55) }
+            VStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.element.id) { i, p in
+                    NavigationLink(value: p.id) { HoldingRow(position: p) }.buttonStyle(.plain)
+                    if i < rows.count - 1 { Divider().overlay(t.hair) }
+                }
+            }
+        }
     }
 }
 
-struct PositionCard: View {
+struct HoldingRow: View {
     @Environment(\.theme) private var t
     let position: BHPosition
 
     var body: some View {
         let p = position
-        let line1 = (p.short ? "SHORT " : "") + BHFmt.qty(p.qty) + " · " + BHFmt.price(p.avg) + " → " + BHFmt.price(p.last) + " · " + p.currency
-        let line2 = "Book " + BHFmt.wholeMoney(p.cost) + " · Market " + BHFmt.wholeMoney(p.mv) + " · " + BHFmt.hold(p.held)
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(p.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(t.ink).lineLimit(1)
+                Text(p.symbol + (p.short ? " SHORT" : "")).font(.system(size: 16, weight: .semibold)).foregroundStyle(t.ink).lineLimit(1)
                 Spacer()
-                Text(BHFmt.signedMoney(p.unreal)).font(.system(size: 17, weight: .semibold)).monospacedDigit().foregroundStyle(t.signed(p.unreal))
+                Text(BHFmt.signedMoney(p.unreal)).font(.system(size: 16, weight: .semibold)).monospacedDigit().foregroundStyle(t.signed(p.unreal))
             }
             HStack {
-                Text(line1).font(.system(size: 14)).monospacedDigit().foregroundStyle(t.ink60)
+                Text(p.account + " · Book " + BHFmt.wholeMoney(p.cost) + " · Market " + BHFmt.wholeMoney(p.mv)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.ink60).lineLimit(1)
                 Spacer()
-                Text(BHFmt.pct(p.unrealPct, digits: 2)).font(.system(size: 14)).monospacedDigit().foregroundStyle(t.signed(p.unreal))
+                Text(BHFmt.pct(p.unrealPct)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.signed(p.unreal))
             }
             HStack {
-                Text(line2).font(.system(size: 14)).monospacedDigit().foregroundStyle(t.ink60)
+                Text("Today").font(.system(size: 13)).foregroundStyle(t.ink55)
                 Spacer()
-                Text(BHFmt.pct(p.alloc, signed: false)).font(.system(size: 13, weight: .medium)).foregroundStyle(t.chipFg)
-                    .padding(.horizontal, 8).padding(.vertical, 4).background(RoundedRectangle(cornerRadius: 6).fill(t.chipBg))
+                if let dc = p.dayChange {
+                    Text(BHFmt.signedMoney(dc) + " · " + BHFmt.pct((p.percentChange ?? 0) / 100, digits: 2)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.signed(dc))
+                } else {
+                    Text(BHFmt.dash).font(.system(size: 13)).foregroundStyle(t.ink55)
+                }
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
 }
 
-struct PositionDetailScreen: View {
+struct HoldingDetailScreen: View {
     @Environment(\.theme) private var t
     @ObservedObject var book: Book
     let positionId: String
+    @State private var chart: (bars: [BHBar], reason: String, timeframe: String)? = nil
+    @State private var timeframe: String? = nil
+    @State private var grade = ""
     @State private var thesis = ""
     @State private var tags = ""
     @State private var loaded = false
@@ -908,82 +972,135 @@ struct PositionDetailScreen: View {
     var body: some View {
         Group {
             if let p = book.position(id: positionId) {
+                let tr = holdingAsTrade(p)
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(p.symbol).font(.system(size: 22, weight: .bold)).foregroundStyle(t.ink)
-                            Text([p.name != p.symbol ? p.name : "", p.exchange].filter { !$0.isEmpty }.joined(separator: " · ")).font(.system(size: 14)).foregroundStyle(t.ink60)
+                            Text(tr.symbol).font(.system(size: 22, weight: .bold)).foregroundStyle(t.ink)
+                            Text(listingLine(tr)).font(.system(size: 14)).foregroundStyle(t.ink60)
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text(BHFmt.signedMoney(p.unreal)).font(.system(size: 28, weight: .semibold)).monospacedDigit().foregroundStyle(t.signed(p.unreal))
-                            Text(BHFmt.pct(p.unrealPct, digits: 2)).font(.system(size: 17, weight: .medium)).monospacedDigit().foregroundStyle(t.signed(p.unreal))
-                            Text(p.currency).font(.system(size: 13)).foregroundStyle(t.ink55)
+                            Text(BHFmt.money(tr.pnl)).font(.system(size: 28, weight: .semibold)).monospacedDigit().foregroundStyle(t.signed(tr.pnl))
+                            Text(BHFmt.pct(tr.pnlPct)).font(.system(size: 17, weight: .medium)).monospacedDigit().foregroundStyle(t.signed(tr.pnl))
+                            Text(tr.currency).font(.system(size: 13)).foregroundStyle(t.ink55)
                         }
                         Card {
-                            let rows: [(String, String)] = [
-                                ("Qty", BHFmt.qty(p.qty)), ("Hold", BHFmt.hold(p.held)), ("Avg cost", BHFmt.price(p.avg)),
-                                ("Price", BHFmt.price(p.last) + (p.priceSource == "quote" ? "" : " · last fill " + p.lastAt)),
-                                ("Book value", BHFmt.money(p.cost)), ("Market value", BHFmt.money(p.mv)), ("FX", p.currency),
-                                ("Allocation", BHFmt.pct(p.alloc, signed: false)), ("Account", p.account),
-                            ]
+                            HStack(spacing: 6) {
+                                ForEach(["1d", "1w", "1M"], id: \.self) { tf in
+                                    let on = (chart?.timeframe ?? timeframe) == tf
+                                    Button(tf.uppercased()) { timeframe = tf }
+                                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(on ? t.chipFg : t.ink55)
+                                        .padding(.horizontal, 9).padding(.vertical, 5)
+                                        .background(RoundedRectangle(cornerRadius: 6).fill(on ? t.chipBg : t.well))
+                                        .buttonStyle(.plain)
+                                }
+                                Spacer()
+                            }
+                            if let c = chart, !c.bars.isEmpty {
+                                CandleChart(bars: c.bars, fills: tr.fills, atClose: tr.kind == "Options")
+                            } else {
+                                Text(chart?.reason ?? "Fetching bars…").font(.system(size: 14)).foregroundStyle(t.ink55).frame(maxWidth: .infinity, minHeight: 120)
+                            }
+                        }
+                        Card {
+                            facts(tr)
+                        }
+                        Card(title: "Executions") {
                             VStack(spacing: 0) {
-                                ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
-                                    HStack {
-                                        Text(r.0).font(.system(size: 14)).foregroundStyle(t.ink60)
+                                ForEach(Array(tr.fills.enumerated()), id: \.element.id) { i, f in
+                                    HStack(alignment: .center) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(f.date + (f.time.isEmpty ? "" : " " + f.time)).font(.system(size: 14)).monospacedDigit().foregroundStyle(t.ink)
+                                            Text(f.sub + " · " + BHFmt.qty(abs(f.qty)) + " · " + f.currency + " " + BHFmt.price(f.price)).font(.system(size: 13)).monospacedDigit().foregroundStyle(t.ink60)
+                                        }
                                         Spacer()
-                                        Text(r.1).font(.system(size: 14, weight: .medium)).monospacedDigit().foregroundStyle(t.ink).multilineTextAlignment(.trailing)
+                                        Text(BHFmt.money(f.amount)).font(.system(size: 15, weight: .medium)).monospacedDigit().foregroundStyle(t.signed(f.amount))
                                     }
-                                    .padding(.vertical, 7)
-                                    if i < rows.count - 1 { Divider().overlay(t.hair) }
+                                    .padding(.vertical, 8)
+                                    if i < tr.fills.count - 1 { Divider().overlay(t.hair) }
                                 }
                             }
                         }
-                        Card(title: "Lots") {
-                            VStack(spacing: 0) {
-                                ForEach(Array(p.lots.enumerated()), id: \.offset) { i, l in
-                                    HStack {
-                                        Text(l.opened).font(.system(size: 14)).monospacedDigit().foregroundStyle(t.ink)
-                                        Spacer()
-                                        Text(BHFmt.qty(l.qty) + " · " + BHFmt.price(l.price)).font(.system(size: 14)).monospacedDigit().foregroundStyle(t.ink60)
-                                        Text(BHFmt.money(l.basis)).font(.system(size: 14, weight: .medium)).monospacedDigit().foregroundStyle(t.ink).frame(width: 110, alignment: .trailing)
-                                    }
-                                    .padding(.vertical, 7)
-                                    if i < p.lots.count - 1 { Divider().overlay(t.hair) }
-                                }
-                            }
-                        }
-                        Card(title: "Note") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                TextField("Thesis", text: $thesis, axis: .vertical).lineLimit(2...6)
-                                    .font(.system(size: 15)).foregroundStyle(t.ink).padding(10).background(RoundedRectangle(cornerRadius: 8).fill(t.well))
-                                    .onChange(of: thesis) { _, _ in save() }
-                                TextField("Tags, comma separated", text: $tags)
-                                    .font(.system(size: 15)).foregroundStyle(t.ink).autocorrectionDisabled().textInputAutocapitalization(.never)
-                                    .padding(10).background(RoundedRectangle(cornerRadius: 8).fill(t.well))
-                                    .onChange(of: tags) { _, _ in save() }
-                            }
+                        Card(title: "Journal") {
+                            journal()
                         }
                     }
                     .padding(16)
                     .padding(.bottom, 90)
                 }
-                .task(id: positionId) {
-                    if !loaded { thesis = p.thesis; tags = p.tags.joined(separator: ", "); loaded = true }
+                .task(id: positionId + "|" + (timeframe ?? "")) {
+                    if !loaded { grade = p.grade; thesis = p.thesis; tags = p.tags.joined(separator: ", "); loaded = true }
+                    chart = await MarketData.bars(for: tr, timeframe: timeframe)
                 }
             } else {
                 Text("This position is no longer open.").foregroundStyle(t.ink55)
             }
         }
         .background(t.bg)
-        .navigationTitle("Position")
+        .navigationTitle("Holding")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(t.bg, for: .navigationBar)
     }
 
+    private func listingLine(_ tr: BHTrade) -> String {
+        var parts: [String] = []
+        if !tr.name.isEmpty && tr.name != tr.symbol { parts.append(tr.name) }
+        let ticker = BHModel.listingTicker(tr.underlying)
+        if !tr.exchange.isEmpty { parts.append(tr.exchange.uppercased() + ": " + ticker) } else if tr.underlying != tr.symbol { parts.append(ticker) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func facts(_ tr: BHTrade) -> some View {
+        let rows: [(String, String)] = [
+            ("Open", tr.entryDate), ("Close", ""), ("Entry", BHFmt.price(tr.entry)), ("Exit", BHFmt.price(tr.exit)),
+            ("Qty", BHFmt.qty(tr.qty) + (tr.mult > 1 ? " × \(Int(tr.mult))" : "")), ("Hold", BHFmt.hold(tr.holdDays)), ("Account", tr.account),
+        ]
+        return VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
+                HStack {
+                    Text(r.0).font(.system(size: 14)).foregroundStyle(t.ink60)
+                    Spacer()
+                    Text(r.1).font(.system(size: 14, weight: .medium)).monospacedDigit().foregroundStyle(t.ink)
+                }
+                .padding(.vertical, 7)
+                if i < rows.count - 1 { Divider().overlay(t.hair) }
+            }
+        }
+    }
+
+    private func journal() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ForEach(BHModel.grades, id: \.self) { g in
+                    Button {
+                        grade = grade == g ? "" : g
+                        save()
+                    } label: {
+                        Text(g).font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(grade == g ? t.chipFg : t.ink75)
+                            .frame(width: 44, height: 36)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(grade == g ? t.chipBg : t.well))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+            }
+            TextField("Thesis", text: $thesis, axis: .vertical)
+                .lineLimit(2...6)
+                .font(.system(size: 15)).foregroundStyle(t.ink)
+                .padding(10).background(RoundedRectangle(cornerRadius: 8).fill(t.well))
+                .onChange(of: thesis) { _, _ in save() }
+            TextField("Tags, comma separated", text: $tags)
+                .font(.system(size: 15)).foregroundStyle(t.ink)
+                .autocorrectionDisabled().textInputAutocapitalization(.never)
+                .padding(10).background(RoundedRectangle(cornerRadius: 8).fill(t.well))
+                .onChange(of: tags) { _, _ in save() }
+        }
+    }
+
     private func save() {
         let list = tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        let old = book.journal[positionId] ?? BHJournalEntry()
-        book.saveJournal(id: positionId, BHJournalEntry(grade: old.grade, thesis: thesis, tags: list))
+        book.saveJournal(id: positionId, BHJournalEntry(grade: grade, thesis: thesis, tags: list))
     }
 }
 

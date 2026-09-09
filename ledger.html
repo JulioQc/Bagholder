@@ -169,10 +169,9 @@ const state = {
   loading: false,
   loadError: "",
   sel: null,
-  posSel: null,
   sort: {
     trades: { key: "exitDate", dir: "desc" },
-    positions: { key: "alloc", dir: "desc" },
+    positions: { key: "unreal", dir: "desc" },
     bySymbol: { key: "pnl", dir: "desc" },
     execs: { key: "when", dir: "desc" },
     yoc: { key: "ttm", dir: "desc" },
@@ -197,7 +196,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-08.6"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-09.1"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -216,7 +215,7 @@ function chartTfFor(t, available) {
   const coarser = order.slice(from + 1).find((x) => available.indexOf(x) >= 0);
   return coarser || available[available.length - 1] || "";
 }
-function chartTf() { const t = state.sel ? tradeById(state.sel) : null; return t ? chartTfFor(t) : "1d"; }
+function chartTf() { const t = state.sel ? selById(state.sel) : null; return t ? chartTfFor(t) : "1d"; }
 function setChartTf(tf) { if (state.sel) _tfByTrade[state.sel] = tf; }
 // The index the yearly returns are compared against: a preference, not a filter
 const BENCHMARKS = [["SP500", "S&P 500"], ["TSX", "S&P/TSX"], ["TSX60", "TSX 60"]];
@@ -337,6 +336,13 @@ function api(method, path, body) {
 }
 function tradeById(id) { return (state.model && state.model.trades || []).find((t) => t.id === id) || null; }
 function positionById(id) { return (state.model && state.model.positions || []).find((p) => p.id === id) || null; }
+// A holding opens the page a trade opens, with the position standing in for the trade:
+// no close date, the current price as the exit, the days so far as the hold.
+function holdingAsTrade(p) {
+  if (!p) return null;
+  return Object.assign({}, p, { pnl: p.unreal, pnlPct: p.unrealPct, entryDate: p.opened, exitDate: "", entry: p.avg, exit: p.last, holdDays: p.held, status: "open", legs: [] });
+}
+function selById(id) { return tradeById(id) || holdingAsTrade(positionById(id)); }
 function filtersActive() {
   const f = state.filters;
   return Object.keys(f.lists).some((k) => f.lists[k].length) || Object.keys(f.ranges).some((k) => f.ranges[k].v != null && f.ranges[k].v !== "") ||
@@ -361,8 +367,7 @@ function loadModel() {
       state.loadError = "";
       state.model = m;
       if (m.status) applyStatus(m.status);
-      if (state.sel && !tradeById(state.sel)) { state.sel = null; if (state.page === "trades") history.replaceState(null, "", "#trades"); }
-      if (state.posSel && !positionById(state.posSel)) state.posSel = null;
+      if (state.sel && !selById(state.sel)) { state.sel = null; if (state.page === "trades" || state.page === "portfolio") history.replaceState(null, "", "#" + state.page); }
       render();
     })
     .catch((e) => { if (seq !== _loadSeq) return; state.loading = false; state.loadError = String(e); render(); });
@@ -636,7 +641,7 @@ function clearData() {
   api("POST", "/api/data/clear", { journal: true, market: true }).then((r) => {
     state.busy = "";
     if (!r || !r.ok) { state.notice = (r && r.error) || "Could not clear data."; state.noticeKind = "err"; render(); return; }
-    state.confirmOpen = ""; state.sel = null; state.posSel = null; state.filters = EMPTY_FILTERS();
+    state.confirmOpen = ""; state.sel = null; state.filters = EMPTY_FILTERS();
     state.status.lastSync = "";
     loadModel(); pollStatus();
   });
@@ -672,10 +677,10 @@ function chips() {
   return out;
 }
 function tabsHtml() {
-  const t = (id, label) => '<button class="tabbtn' + (state.page === id && !(id === "trades" && state.sel) ? " on" : "") + '" data-act="page" data-arg=\'' + attr({ page: id }) + "'>" + label + "</button>";
-  const sel = state.page === "trades" && state.sel ? tradeById(state.sel) : null;
+  const t = (id, label) => '<button class="tabbtn' + (state.page === id && !((id === "trades" || id === "portfolio") && state.sel) ? " on" : "") + '" data-act="page" data-arg=\'' + attr({ page: id }) + "'>" + label + "</button>";
+  const sel = (state.page === "trades" || state.page === "portfolio") && state.sel ? selById(state.sel) : null;
   return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
-    t("dashboard", "Dashboard") + t("trades", "Trades") + t("positions", "Positions") + t("cashflow", "Cashflow") +
+    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("cashflow", "Cashflow") +
     (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(sel.symbol) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(sel.symbol) + "</span></div>" : "") +
     '<div style="margin-left:auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 0"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;overflow-x:auto;padding-bottom:1px">' +
     chips().map((c) => '<span class="chip"><span class="cf">' + esc(c.field) + '</span><button class="cv" data-act="chipEdit" data-arg=\'' + attr({ key: c.key }) + "'>" + esc(c.value) + '</button><button class="cx" aria-label="Remove filter" data-act="chipRemove" data-arg=\'' + attr({ key: c.key }) + "'>×</button></span>").join("") +
@@ -995,7 +1000,7 @@ function chartColors() {
 function chartSpan(t) {
   const day = 86400000;
   const from = new Date(Date.parse(t.entryDate) - 10 * day).toISOString().slice(0, 10);
-  const to = new Date(Math.min(Date.now(), Date.parse(t.exitDate) + 10 * day)).toISOString().slice(0, 10);
+  const to = new Date(t.exitDate ? Math.min(Date.now(), Date.parse(t.exitDate) + 10 * day) : Date.now()).toISOString().slice(0, 10);
   return { from, to };
 }
 function loadHistory(t, tf, basis) {
@@ -1043,7 +1048,7 @@ function mountTradeChart() {
   const host = document.getElementById("tradeChart");
   const seq = ++_mountSeq;
   if (!host || !window.LightweightCharts) { if (_chart) { _chart.remove(); _chart = null; } return; }
-  const t = state.sel ? tradeById(state.sel) : null;
+  const t = state.sel ? selById(state.sel) : null;
   if (!t) return;
   const c = chartColors();
   const LW = window.LightweightCharts;
@@ -1157,7 +1162,7 @@ function tradeDetailHtml(t, m) {
     "</div></div></div></div>";
 }
 function tagMenuHtml() {
-  const t = state.sel ? tradeById(state.sel) : null;
+  const t = state.sel ? selById(state.sel) : null;
   if (!t) return "";
   const draft = (state.tagDraft || "").trim().toLowerCase();
   if (!draft) return "";
@@ -1169,7 +1174,7 @@ function tagMenuHtml() {
     known.map((tg, i) => '<button data-act="addTag" data-arg=\'' + attr({ id: t.id, tag: tg }) + "' data-mousedown=\"1\" style=\"display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer;border:0;font:400 12.5px Inter,system-ui;padding:6px 8px;border-radius:6px;background:" + (i === hi ? "var(--chip-hi)" : "transparent") + ";color:" + (i === hi ? "var(--chip-fg)" : "rgba(var(--ink-rgb),.85)") + '">' + esc(tg) + '<span class="muted" style="margin-left:auto;font-size:10px">' + (i === hi ? "Tab ↵" : "") + "</span></button>").join("") + "</div>";
 }
 function tagMatches() {
-  const t = state.sel ? tradeById(state.sel) : null;
+  const t = state.sel ? selById(state.sel) : null;
   const draft = (state.tagDraft || "").trim().toLowerCase();
   if (!t || !draft) return [];
   return ((state.model.options && state.model.options.tags) || []).filter((x) => (t.tags || []).indexOf(x) < 0 && x.toLowerCase().indexOf(draft) >= 0)
@@ -1183,37 +1188,85 @@ function tradesHtml(m) {
 // ---------------------------------------------------------------------------
 // positions
 // ---------------------------------------------------------------------------
-function posSortValue(p, key) { if (key === "pnl") return p.unreal; if (key === "held") return p.held; return p[key]; }
-function positionsHtml(m) {
-  const cols = [{ key: "symbol", label: "Symbol" }, { key: "qty", label: "Qty", align: "right" }, { key: "avg", label: "Avg cost", align: "right" }, { key: "last", label: "Price", align: "right" }, { key: "currency", label: "FX", align: "center", padLeft: "8px", padRight: "8px" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "pnl", label: "P&L", align: "right" }, { key: "held", label: "Hold", align: "right" }, { key: "alloc", label: "Allocation", align: "right" }];
+function posSortValue(p, key) {
+  if (key === "unreal") return p.unreal;
+  if (key === "day") return p.dayChange == null ? -Infinity : p.dayChange;
+  if (key === "dayPct") return p.percentChange == null ? -Infinity : p.percentChange;
+  return p[key];
+}
+function portfolioTilesHtml(pf) {
+  const tile = (label, value, sub, vcls) => '<div class="card elev-sm kpi"><div class="lbl">' + label + '</div><div class="v ' + (vcls || "") + '">' + value + '</div><div class="s">' + sub + "</div></div>";
+  const n = pf.positionCount || 0;
+  const positions = n + (n === 1 ? " position" : " positions");
+  const unavailable = pf.availableMarginUnavailable || [];
+  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px">' +
+    tile("Market value", money0(pf.marketValue), "across " + n + (n === 1 ? " open position" : " open positions")) +
+    tile("Net asset value", pf.nav == null ? "—" : money0(pf.nav), pf.nav == null ? "—" : pf.navAccounts + (pf.navAccounts === 1 ? " account, " : " accounts, ") + positions) +
+    tile("Cost basis", money0(pf.costBasis), "Total book value") +
+    tile("Margin used", money0(pf.marginUsed), pf.marginUsedPct == null ? "—" : pctPlain(pf.marginUsedPct) + " of market value") +
+    tile("Available margin", pf.availableMargin == null ? "—" : money0(pf.availableMargin), unavailable.length ? "unavailable for " + esc(unavailable.join(", ")) : pf.availableMargin == null ? "—" : "buying power") +
+    tile("Unrealized P&amp;L", signedMoney(pf.unrealized, null, 2), pf.unrealizedPct == null ? "—" : pct(pf.unrealizedPct) + (pf.unrealized >= 0 ? " gain" : " loss"), cls(pf.unrealized)) +
+    "</div>";
+}
+function portfolioSlices(pf) {
+  const all = pf.allocation || [];
+  const top = all.slice(0, 7), rest = all.slice(7);
+  const items = top.map((x) => ({ label: x.symbol, v: x.value, share: x.share }));
+  if (rest.length) items.push({ label: "Other (" + rest.length + ")", v: rest.reduce((a, x) => a + x.value, 0), share: rest.reduce((a, x) => a + x.share, 0) });
+  items.forEach((x, i) => { x.color = "var(--pie-" + ((i % 8) + 1) + ")"; });
+  return { total: pf.marketValue || 0, items };
+}
+function portfolioPieHtml(pf) {
+  const p = portfolioSlices(pf);
+  const R = 44, W = 14, C = 60, SIZE = 236;
+  let acc = 0;
+  const arcs = p.items.map((x, i) => {
+    const a0 = acc * 2 * Math.PI - Math.PI / 2, a1 = (acc + x.share) * 2 * Math.PI - Math.PI / 2;
+    acc += x.share;
+    if (x.share >= 0.9999) return '<circle cx="' + C + '" cy="' + C + '" r="' + R + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '"/>';
+    const large = x.share > 0.5 ? 1 : 0;
+    const d = "M" + (C + R * Math.cos(a0)).toFixed(2) + " " + (C + R * Math.sin(a0)).toFixed(2) + " A" + R + " " + R + " 0 " + large + " 1 " + (C + R * Math.cos(a1)).toFixed(2) + " " + (C + R * Math.sin(a1)).toFixed(2);
+    return '<path d="' + d + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '" style="cursor:default"/>';
+  }).join("");
+  return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5></div>' +
+    (p.items.length ? '<div id="ppiePlot" data-hover="ppie" style="display:flex;gap:22px;align-items:center;flex:1;min-height:0">' +
+      '<div style="position:relative;width:' + SIZE + 'px;height:' + SIZE + 'px;flex:none"><svg viewBox="0 0 120 120" style="width:' + SIZE + 'px;height:' + SIZE + 'px;display:block">' + arcs + "</svg>" +
+      '<div id="ppieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">Market value</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(p.total) + "</div></div></div>" +
+      '<div id="ppieLegend" class="scroll" style="flex:1;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
+      p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.label) + "</span></span>").join("") +
+      "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No open positions in scope.</div>') + "</div>";
+}
+function ppieHover(e) {
+  const el = e.target.closest("[data-slice]"); const plot = document.getElementById("ppiePlot"); if (!plot) return;
+  const i = el ? +el.dataset.slice : -1;
+  plot.querySelectorAll("svg [data-slice]").forEach((s) => { s.style.opacity = i < 0 || +s.dataset.slice === i ? "1" : ".35"; });
+  plot.querySelectorAll("#ppieLegend [data-slice]").forEach((s) => { const on = i < 0 || +s.dataset.slice === i; [...s.children].forEach((c) => { c.style.opacity = on ? "1" : ".45"; }); });
+  const centre = document.getElementById("ppieCentre"); if (!centre || !state.model) return;
+  const p = portfolioSlices(state.model.portfolio || {});
+  const x = i >= 0 ? p.items[i] : null;
+  centre.innerHTML = x ? '<div class="lbl">' + esc(x.label) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(x.v) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + pctPlain(x.share) + "</div>"
+    : '<div class="lbl">Market value</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(p.total) + "</div>";
+}
+function ppieLeave() { ppieHover({ target: document.body }); }
+function portfolioHtml(m) {
+  const p = state.sel ? positionById(state.sel) : null;
+  if (p) return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + tradeDetailHtml(holdingAsTrade(p), m) + "</div>";
+  const pf = m.portfolio || {};
+  const cols = [{ key: "symbol", label: "Symbol" }, { key: "cost", label: "Book", align: "right" }, { key: "mv", label: "Market", align: "right" }, { key: "unreal", label: "Unrealized", align: "right" }, { key: "day", label: "Change ($)", align: "right" }, { key: "dayPct", label: "Change (%)", align: "right", padRight: "0" }];
   const s = state.sort.positions;
   const rows = sortRows(m.positions || [], s.key, s.dir, posSortValue);
-  const p = state.posSel ? positionById(state.posSel) : null;
-  const sum = m.positionsSummary || {};
-  return '<div style="padding:20px;min-height:380px"><div style="display:flex;gap:14px;align-items:flex-start">' +
-    '<div class="card elev-sm" style="flex:1;min-width:0;padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:620px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Positions</h5></div>' +
-    '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0"><table class="table" style="min-width:680px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
-    rows.map((r) => '<tr class="tab' + (state.posSel === r.id ? " sel" : "") + '" style="cursor:pointer" data-act="selectPos" data-arg=\'' + attr({ id: r.id }) + "'>" +
-      '<td title="' + esc(r.symbol) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:115px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
-      '<td style="text-align:right">' + qty(r.qty) + '</td><td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right" title="' + (r.priceSource === "quote" ? "Live quote" : "Last fill in your history; no quote available") + '">' + px(r.last) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center;padding:7px 8px">' + esc(r.currency) + '</td><td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
-      '<td style="text-align:right;white-space:nowrap;font-weight:500;color:' + color(r.unreal) + '">' + signedMoney(r.unreal, r.currency) + " (" + pct(r.unrealPct, 2) + ")</td>" +
-      '<td style="text-align:right" class="dim">' + hold(r.held) + '</td><td style="text-align:right;color:rgba(var(--ink-rgb),.85)">' + pctPlain(r.alloc) + "</td></tr>").join("") +
-    "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No open positions match these filters.</div>') + "</div></div>" +
-    (p ? positionPanelHtml(p) : '<div style="width:360px;flex:none;padding:22px 18px;border-radius:8px;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.09);font-size:12px;color:var(--ink55);line-height:1.6">Select a position to see its lots and running note.</div>') +
-    "</div></div>";
-}
-function positionPanelHtml(p) {
-  const fact = (l, v) => '<div><div class="lbl">' + l + '</div><div class="tab" style="font-size:13px">' + v + "</div></div>";
-  return '<div class="card elev-md" style="width:360px;flex:none;padding:16px 18px;display:flex;flex-direction:column;min-height:0;max-height:660px"><div style="display:flex;align-items:flex-start;gap:10px"><div style="min-width:0"><h4 style="font-size:19px">' + esc(p.symbol) + '</h4><div class="muted" style="font-size:11px">' + esc(p.name || "") + (p.exchange ? " · " + esc(p.exchange) : "") + "</div></div>" +
-    '<button class="btn btn-icon btn-secondary" data-act="clearPos" aria-label="Close panel" style="margin-left:auto;width:28px;height:28px;font-size:15px;line-height:1">×</button></div>' +
-    '<div style="display:flex;align-items:baseline;gap:10px;margin:14px 0 12px"><span class="tab" style="font-size:28px;font-weight:500;color:' + color(p.unreal) + '">' + signedMoney(p.unreal, p.currency) + '</span><span class="tab" style="font-size:13px;color:' + color(p.unreal) + '">' + pct(p.unrealPct) + "</span></div>" +
-    '<div class="rule-t rule-b" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:12px 0;background:linear-gradient(to right,transparent,rgba(var(--ink-rgb),.14) 20px,rgba(var(--ink-rgb),.14) calc(100% - 20px),transparent) no-repeat top/100% 1px,linear-gradient(to right,transparent,rgba(var(--ink-rgb),.14) 20px,rgba(var(--ink-rgb),.14) calc(100% - 20px),transparent) no-repeat bottom/100% 1px">' +
-    fact("Qty", qty(p.qty) + (p.wsQty != null && Math.abs(p.wsQty - p.qty) > 1e-6 ? ' <span class="muted" title="Wealthsimple reports a different balance">WS ' + qty(p.wsQty) + "</span>" : "")) + fact("Hold", hold(p.held)) + fact("Avg cost", px(p.avg)) + fact("Price", px(p.last)) +
-    fact("Book value", money0(p.cost, p.currency)) + fact("Market value", money0(p.mv, p.currency)) + fact("FX", esc(p.currency)) + fact("Allocation", pctPlain(p.alloc)) + "</div>" +
-    '<div class="scroll" style="flex:1;min-height:0;max-height:300px;margin-top:14px"><table class="table" style="font-size:12px;width:100%"><thead><tr><th style="padding-left:0;position:sticky;top:0;z-index:1">Date</th><th style="text-align:right;position:sticky;top:0;z-index:1">Qty</th><th style="text-align:right;position:sticky;top:0;z-index:1">Price</th><th style="text-align:right;padding-right:0;position:sticky;top:0;z-index:1">Amount</th></tr></thead><tbody>' +
-    p.lots.map((l) => '<tr class="tab"><td style="padding-left:0;color:var(--ink75);white-space:nowrap">' + esc(l.opened) + (l.flags && l.flags.indexOf("reward") >= 0 ? ' <span class="muted" style="font-size:10px">reward</span>' : "") + '</td><td style="text-align:right">' + qty(l.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + px(l.price) + '</td><td style="text-align:right;padding-right:0">' + money0(l.basis, p.currency) + "</td></tr>").join("") +
-    "</tbody></table></div>" +
-    '<div class="lbl" style="margin:14px 0 6px">Thesis / notes</div><textarea class="input" id="posThesis" data-id="' + esc(p.id) + '" placeholder="Why do you hold this?" style="min-height:70px;font-size:13px">' + esc(p.thesis || "") + "</textarea></div>";
+  return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + portfolioTilesHtml(pf) +
+    '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:14px;align-items:stretch">' + portfolioPieHtml(pf) +
+    '<div class="card elev-sm" style="padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0;max-height:640px"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Holdings</h5></div>' +
+    '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0"><table class="table" style="min-width:560px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
+    rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="openHolding" data-arg=\'' + attr({ id: r.id }) + "'>" +
+      '<td title="' + esc(r.symbol) + ' · ' + esc(r.account) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + ' <span class="muted" style="font-size:11px;font-weight:400">' + esc(r.account) + "</span></td>" +
+      '<td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
+      '<td style="text-align:right;white-space:nowrap;font-weight:500;color:' + color(r.unreal) + '">' + signedMoney(r.unreal, r.currency) + " (" + pct(r.unrealPct) + ")</td>" +
+      '<td style="text-align:right;white-space:nowrap;color:' + (r.dayChange == null ? "var(--ink55)" : color(r.dayChange)) + '">' + (r.dayChange == null ? "—" : signedMoney(r.dayChange, r.currency)) + "</td>" +
+      '<td style="text-align:right;padding-right:0;color:' + (r.percentChange == null ? "var(--ink55)" : color(r.percentChange)) + '">' + (r.percentChange == null ? "—" : pct(r.percentChange / 100, 2)) + "</td></tr>").join("") +
+    "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No open positions match these filters.</div>') + "</div></div></div></div>";
 }
 
 // ---------------------------------------------------------------------------
@@ -1356,7 +1409,7 @@ function pageHtml() {
   if (!m) return '<div class="empty muted"><span class="spin"></span>Loading…</div>';
   if (!m.activityCount) return emptyHtml();
   if (state.page === "trades") return tradesHtml(m);
-  if (state.page === "positions") return positionsHtml(m);
+  if (state.page === "portfolio") return portfolioHtml(m);
   if (state.page === "cashflow") return cashflowHtml(m);
   return dashboardHtml(m);
 }
@@ -1389,22 +1442,23 @@ function renderHeaderOnly() {
   tmp.innerHTML = headerHtml();
   hdr.replaceWith(tmp.firstElementChild);
 }
-const PAGES = ["dashboard", "trades", "positions", "cashflow"];
+const PAGES = ["dashboard", "trades", "portfolio", "cashflow"];
 function hashState() {
   const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
   const parts = raw.split("/");
+  if (parts[0] === "positions") parts[0] = "portfolio";   // the tab's old name, still in bookmarks
   const page = PAGES.indexOf(parts[0]) >= 0 ? parts[0] : "dashboard";
-  return { page, sel: page === "trades" && parts.length > 1 ? parts.slice(1).join("/") : null };
+  return { page, sel: (page === "trades" || page === "portfolio") && parts.length > 1 ? parts.slice(1).join("/") : null };
 }
 function applyHash() {
   const h = hashState();
   if (h.page === state.page && (h.sel || null) === (state.sel || null)) return;
   state.page = h.page;
-  state.sel = h.sel && state.model && tradeById(h.sel) ? h.sel : (h.sel ? h.sel : null);
+  state.sel = h.sel && state.model && selById(h.sel) ? h.sel : (h.sel ? h.sel : null);
   state.picker = null;
   state.menuOpen = false;
   state.tagDraft = "";
-  const backToList = h.page === "trades" && !h.sel;
+  const backToList = (h.page === "trades" || h.page === "portfolio") && !h.sel;
   render();
   if (backToList) window.scrollTo(0, _listScrollY);
   if (state.derivedStale && !state.sel) { state.derivedStale = false; loadModel(); }
@@ -1426,6 +1480,16 @@ function openTrade(id) {
   state.page = "trades";
   state.picker = null;
   location.hash = "trades/" + encodeURIComponent(id);
+  render();
+  window.scrollTo(0, 0);
+}
+function openHolding(id) {
+  _listScrollY = window.scrollY;
+  state.sel = id;
+  state.tagDraft = "";
+  state.page = "portfolio";
+  state.picker = null;
+  location.hash = "portfolio/" + encodeURIComponent(id);
   render();
   window.scrollTo(0, 0);
 }
@@ -1540,8 +1604,7 @@ function act(name, arg, ev) {
     case "page": go(arg.page); break;
     case "reload": loadModel(); break;
     case "selectTrade": openTrade(arg.id); break;
-    case "selectPos": state.posSel = state.posSel === arg.id ? null : arg.id; render(); break;
-    case "clearPos": state.posSel = null; render(); break;
+    case "openHolding": openHolding(arg.id); break;
     case "sort": { const s = state.sort[arg.table]; if (s.key === arg.key) s.dir = s.dir === "desc" ? "asc" : "desc"; else { s.key = arg.key; s.dir = "desc"; } try { localStorage.setItem("bh2.sort", JSON.stringify(state.sort)); } catch (e) {} render(); break; }
     case "openFields": state.picker = state.picker === "fields" ? null : "fields"; state.fieldQuery = null; state.valueHi = 0; state.menuOpen = false; render(); if (state.picker) { const si = document.getElementById("searchInput"); if (si) si.focus(); } break;
     case "pickField": state.picker = arg.key; state.valueQuery = ""; state.valueHi = 0; render(); { const vq = document.getElementById("valueQuery"); if (vq) vq.focus(); } break;
@@ -1589,9 +1652,9 @@ function act(name, arg, ev) {
     case "closeConfirm": state.confirmOpen = ""; render(); break;
     case "clearData": clearData(); break;
     case "disconnectNow": disconnectNow(); break;
-    case "grade": { const t = tradeById(arg.id); if (!t) break; saveJournal(arg.id, { grade: t.grade === arg.grade ? "" : arg.grade }); render(); break; }
-    case "removeTag": { const t = tradeById(arg.id); if (!t) break; saveJournal(arg.id, { tags: (t.tags || []).filter((x) => x !== arg.tag) }); render(); break; }
-    case "addTag": { const t = tradeById(arg.id); if (!t) break; _tagPick = true; if ((t.tags || []).indexOf(arg.tag) < 0) saveJournal(arg.id, { tags: (t.tags || []).concat([arg.tag]) }); state.tagDraft = ""; render(); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); _tagPick = false; break; }
+    case "grade": { const t = selById(arg.id); if (!t) break; saveJournal(arg.id, { grade: t.grade === arg.grade ? "" : arg.grade }); render(); break; }
+    case "removeTag": { const t = selById(arg.id); if (!t) break; saveJournal(arg.id, { tags: (t.tags || []).filter((x) => x !== arg.tag) }); render(); break; }
+    case "addTag": { const t = selById(arg.id); if (!t) break; _tagPick = true; if ((t.tags || []).indexOf(arg.tag) < 0) saveJournal(arg.id, { tags: (t.tags || []).concat([arg.tag]) }); state.tagDraft = ""; render(); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); _tagPick = false; break; }
     case "focusTag": { const ti = document.getElementById("tagInput"); if (ti) ti.focus(); break; }
     case "symbolOpen": { const r = (state.model.bySymbol || []).find((x) => x.symbol === arg.symbol); if (!r) break; if (r.tradeIds.length === 1) { openTrade(r.tradeIds[0]); break; } f.lists.symbol = [arg.symbol]; state.page = "trades"; state.sel = null; location.hash = "trades"; setFilters({}); break; }
     case "monthOpen": { const b = state.model.monthly[arg.i]; if (!b) break; if (b.tradeIds.length === 1) { openTrade(b.tradeIds[0]); break; } const y = +b.key.slice(0, 4), mo = +b.key.slice(5, 7); const last = new Date(y, mo, 0).getDate(); state.page = "trades"; location.hash = "trades"; setFilters({ preset: "all", years: [], from: b.key + "-01", to: b.key + "-" + String(last).padStart(2, "0") }); break; }
@@ -1607,7 +1670,7 @@ function clearField(key) {
   setFilters({});
 }
 function commitTag() {
-  const t = state.sel ? tradeById(state.sel) : null;
+  const t = state.sel ? selById(state.sel) : null;
   const v = (state.tagDraft || "").trim().replace(/,$/, "");
   state.tagDraft = "";
   if (t && v && (t.tags || []).indexOf(v) < 0) { saveJournal(t.id, { tags: (t.tags || []).concat([v]) }); render(); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); }
@@ -1644,7 +1707,7 @@ function bind() {
     // Left and Right move between the tabs when nothing else has the keyboard
     if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.metaKey && !e.ctrlKey && !e.altKey && !state.picker && !state.menuOpen && !state.modal && !state.confirmOpen &&
         !(document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].indexOf(document.activeElement.tagName) >= 0)) {
-      const pages = ["dashboard", "trades", "positions", "cashflow"];
+      const pages = PAGES;
       const j = pages.indexOf(state.page) + (e.key === "ArrowRight" ? 1 : -1);
       if (j >= 0 && j < pages.length) { e.preventDefault(); go(pages[j]); }
       return;
@@ -1655,7 +1718,7 @@ function bind() {
       return; }
     if (e.target && e.target.id === "tagInput") {
       const matches = tagMatches();
-      if (e.key === "Backspace" && e.target.value === "") { const t = tradeById(e.target.dataset.id); if (t && t.tags && t.tags.length) { e.preventDefault(); act("removeTag", { id: t.id, tag: t.tags[t.tags.length - 1] }); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); } return; }
+      if (e.key === "Backspace" && e.target.value === "") { const t = selById(e.target.dataset.id); if (t && t.tags && t.tags.length) { e.preventDefault(); act("removeTag", { id: t.id, tag: t.tags[t.tags.length - 1] }); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); } return; }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") { if (!matches.length) return; e.preventDefault(); state.tagHi = (Math.min(state.tagHi, matches.length - 1) + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length; document.getElementById("tagMenu").innerHTML = tagMenuHtml(); return; }
       if (e.key === "Enter" || e.key === "Tab" || e.key === ",") {
         if (matches.length && e.key !== ",") { e.preventDefault(); act("addTag", { id: e.target.dataset.id, tag: matches[Math.min(state.tagHi, matches.length - 1)] }); return; }
@@ -1743,18 +1806,18 @@ function bind() {
       const typed = t.value;
       setTimeout(() => { const live = document.getElementById("tagInput"); if (_tagPick || !live || live !== t || live.value !== typed) return; state.tagDraft = typed; commitTag(); }, 120);
     }
-    if (t.id === "thesis" || t.id === "posThesis") { clearTimeout(_thesisTimer); const o = tradeById(t.dataset.id) || positionById(t.dataset.id); if (o && o.thesis !== t.value) saveJournal(t.dataset.id, { thesis: t.value }); }
+    if (t.id === "thesis" || t.id === "posThesis") { clearTimeout(_thesisTimer); const o = selById(t.dataset.id) || positionById(t.dataset.id); if (o && o.thesis !== t.value) saveJournal(t.dataset.id, { thesis: t.value }); }
   });
   document.addEventListener("mousemove", (e) => {
     const h = e.target.closest("[data-hover]");
     if (!h) return;
-    if (h.dataset.hover === "eq") eqHover(e); else if (h.dataset.hover === "mo") moHover(e); else if (h.dataset.hover === "cf") cfHover(e); else if (h.dataset.hover === "pie") pieHover(e);
+    if (h.dataset.hover === "eq") eqHover(e); else if (h.dataset.hover === "mo") moHover(e); else if (h.dataset.hover === "cf") cfHover(e); else if (h.dataset.hover === "pie") pieHover(e); else if (h.dataset.hover === "ppie") ppieHover(e);
   });
   document.addEventListener("mouseout", (e) => {
     const h = e.target.closest("[data-hover]");
     if (!h) return;
     if (e.relatedTarget && h.contains(e.relatedTarget)) return;
-    if (h.dataset.hover === "eq") eqLeave(); else if (h.dataset.hover === "mo") moLeave(); else if (h.dataset.hover === "cf") cfLeave(); else if (h.dataset.hover === "pie") pieLeave();
+    if (h.dataset.hover === "eq") eqLeave(); else if (h.dataset.hover === "mo") moLeave(); else if (h.dataset.hover === "cf") cfLeave(); else if (h.dataset.hover === "pie") pieLeave(); else if (h.dataset.hover === "ppie") ppieLeave();
     else if (h.dataset.hover === "theme" && state.themeOpen) { state.themeOpen = false; renderHeaderOnly(); }
   });
   // the Theme row opens its list on hover, as a submenu does; the click stays for touch

@@ -135,6 +135,30 @@
         "2025"
       ]
     },
+    "portfolio": {
+      "accountCount": 1,
+      "allocation": [
+        {
+          "account": "Trading",
+          "id": "rt:assign-shares:asg",
+          "share": 1.0,
+          "symbol": "BBAI",
+          "value": 675.0
+        }
+      ],
+      "availableMargin": null,
+      "availableMarginUnavailable": [],
+      "costBasis": 675.0,
+      "marginUsed": 0,
+      "marginUsedBy": {},
+      "marginUsedPct": 0.0,
+      "marketValue": 675.0,
+      "nav": null,
+      "navAccounts": 0,
+      "positionCount": 1,
+      "unrealized": 0.0,
+      "unrealizedPct": 0.0
+    },
     "positions": [
       {
         "account": "Trading",
@@ -142,7 +166,12 @@
         "avg": 5.0,
         "cost": 500.0,
         "currency": "USD",
+        "dayChange": null,
         "exchange": "",
+        "fills": [
+          "BUY"
+        ],
+        "grade": "",
         "held": 27,
         "id": "rt:assign-shares:asg",
         "kind": "Shares",
@@ -246,6 +275,7 @@
       }
     ],
     "balances": [],
+    "margin": [],
     "navByAccount": {},
     "navHistory": [],
     "notes": {},

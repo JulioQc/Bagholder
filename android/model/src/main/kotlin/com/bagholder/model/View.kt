@@ -89,7 +89,7 @@ data class View(
     val today: String, val filters: Filters, val options: Options, val kpi: KPI, val equity: EquityView, val years: List<YearRow>,
     val benchmarkKey: String, val benchmarkLabel: String, val monthly: List<MonthBucket>, val bySymbol: List<SymbolRow>, val grades: Grades,
     val queue: List<QueueRow>, val trades: List<Trade>, val tradeTotal: Int, val positions: List<Position>, val positionsSummary: PositionsSummary,
-    val cashflow: CashflowView, val unmatched: List<Unmatched>,
+    val portfolio: Portfolio, val cashflow: CashflowView, val unmatched: List<Unmatched>,
 )
 
 object ModelView {
@@ -622,7 +622,50 @@ object ModelView {
             monthly = monthly(trades), bySymbol = bySymbol(trades), grades = gradeBuckets(trades), queue = reviewQueue(trades),
             trades = trades, tradeTotal = tradesAll.size, positions = positions,
             positionsSummary = PositionsSummary(positions.size, positions.sumOf { abs(it.cost) }, positions.sumOf { if (it.short) -it.mv else it.mv }, positions.sumOf { it.unreal }),
+            portfolio = portfolioView(base, f, positions),
             cashflow = cashflowView(base, f, positionsAll), unmatched = base.unmatched,
         )
+    }
+
+    /** model.py portfolio_view: CAD aggregates over the accounts the filter has on, every account when it has none. */
+    fun portfolioView(base: Base, f: Filters, positions: List<Position>): Portfolio {
+        val fx = base.fx; val today = base.today
+        fun cad(amount: Double, currency: String) = Model.toCad(fx, amount, currency, today)
+        val names = f.lists["account"] ?: emptyList()
+        val accounts = base.accounts.filter { names.isEmpty() || names.contains(it.name) }
+        val ids = accounts.map { it.id }.toSet()
+        val nameOf = accounts.associate { it.id to it.name }
+        val out = Portfolio()
+        out.marketValue = positions.sumOf { cad(if (it.short) -it.mv else it.mv, it.currency) }
+        out.costBasis = positions.sumOf { cad(abs(it.cost), it.currency) }
+        out.unrealized = positions.sumOf { cad(it.unreal, it.currency) }
+        out.unrealizedPct = if (out.costBasis != 0.0) out.unrealized / out.costBasis else null
+        out.positionCount = positions.size
+        out.accountCount = positions.map { it.account }.toSet().size
+        val navs = accounts.mapNotNull { a -> a.nav?.let { cad(it, a.currency) } }
+        out.nav = if (navs.isEmpty()) null else navs.sum()
+        out.navAccounts = navs.size
+        val used = LinkedHashMap<String, Double>()
+        for (b in base.balances) {
+            val ccy = base.cashCurrencies[b.securityId] ?: continue
+            if (b.accountId in ids && b.quantity < 0) used[ccy] = (used[ccy] ?: 0.0) + (-b.quantity)
+        }
+        out.marginUsed = used.entries.sumOf { cad(it.value, it.key) }
+        out.marginUsedBy = used.entries.sortedBy { it.key }.associate { it.key to Math.round(it.value * 100) / 100.0 }
+        out.marginUsedPct = if (out.marketValue != 0.0) out.marginUsed / out.marketValue else null
+        val avail = mutableListOf<Double>()
+        val unavailable = mutableListOf<String>()
+        for (m in base.margin) {
+            if (m.accountId !in ids) continue
+            val bp = m.buyingPower
+            if (bp != null) avail.add(cad(bp, m.currency.ifEmpty { "CAD" })) else unavailable.add(nameOf[m.accountId] ?: m.accountId)
+        }
+        out.availableMargin = if (avail.isEmpty()) null else avail.sum()
+        out.availableMarginUnavailable = unavailable.sorted()
+        val alloc = positions.mapNotNull { p -> val v = cad(p.mv, p.currency); if (v > 0) AllocationRow(p.id, p.symbol, p.account, v) else null }.sortedByDescending { it.value }
+        val total = alloc.sumOf { it.value }
+        for (a in alloc) a.share = if (total != 0.0) a.value / total else 0.0
+        out.allocation = alloc
+        return out
     }
 }

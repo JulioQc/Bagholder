@@ -15,6 +15,7 @@ import java.io.File
 class StoredPull(
     val activities: List<WSActivity>, val listings: List<WSSecurityListing>, val syncedAt: String,
     val nav: List<WSNavPoint> = emptyList(), val navByAccount: Map<String, List<WSNavPoint>> = emptyMap(),
+    val accounts: List<WSAccountRow> = emptyList(), val balances: List<WSBalanceRow> = emptyList(), val margin: List<WSMarginRow> = emptyList(),
 )
 
 object Store {
@@ -76,10 +77,16 @@ object Store {
             val lists = doc.optJSONArray("listings") ?: JSONArray()
             val navBy = HashMap<String, List<WSNavPoint>>()
             doc.optJSONObject("navByAccount")?.let { o -> for (k in o.keys()) navBy[k] = navList(o.optJSONArray(k)) }
+            val accRows = doc.optJSONArray("accounts") ?: JSONArray()
+            val balRows = doc.optJSONArray("balances") ?: JSONArray()
+            val marginRows = doc.optJSONArray("margin") ?: JSONArray()
             StoredPull(
                 (0 until acts.length()).map { WSActivity.fromJson(acts.getJSONObject(it)) },
                 (0 until lists.length()).map { WSSecurityListing.fromJson(lists.getJSONObject(it)) },
                 doc.optString("syncedAt"), navList(doc.optJSONArray("nav")), navBy,
+                (0 until accRows.length()).map { WSAccountRow.fromJson(accRows.getJSONObject(it)) },
+                (0 until balRows.length()).map { WSBalanceRow.fromJson(balRows.getJSONObject(it)) },
+                (0 until marginRows.length()).map { WSMarginRow.fromJson(marginRows.getJSONObject(it)) },
             )
         } catch (e: Exception) {
             null
@@ -95,6 +102,9 @@ object Store {
             .put("nav", JSONArray(pull.nav.map { it.toJson() }))
             .put("navByAccount", navBy)
             .put("syncedAt", pull.syncedAt)
+            .put("accounts", JSONArray(pull.accounts.map { it.toJson() }))
+            .put("balances", JSONArray(pull.balances.map { it.toJson() }))
+            .put("margin", JSONArray(pull.margin.map { it.toJson() }))
         writeJSON("last-pull.json", doc)
     }
 

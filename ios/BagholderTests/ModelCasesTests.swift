@@ -100,9 +100,17 @@ final class ModelCasesTests: XCTestCase {
             },
             "positions": v.positions.sorted { ($0.symbol, $0.account) < ($1.symbol, $1.account) }.map { p -> [String: Any] in
                 ["id": p.id, "symbol": p.symbol, "kind": p.kind, "currency": p.currency, "account": p.account, "exchange": p.exchange,
-                 "qty": p.qty, "avg": p.avg, "cost": p.cost, "held": p.held, "alloc": p.alloc, "short": p.short]
+                 "qty": p.qty, "avg": p.avg, "cost": p.cost, "held": p.held, "alloc": p.alloc, "short": p.short,
+                 "dayChange": opt(p.dayChange), "grade": p.grade, "fills": p.fills.sorted { $0.when < $1.when }.map { $0.sub }]
             },
             "positionsSummary": ["count": v.positionsSummary.count, "book": v.positionsSummary.book, "mv": v.positionsSummary.mv, "unreal": v.positionsSummary.unreal] as [String: Any],
+            "portfolio": [
+                "marketValue": v.portfolio.marketValue, "costBasis": v.portfolio.costBasis, "unrealized": v.portfolio.unrealized, "unrealizedPct": opt(v.portfolio.unrealizedPct),
+                "positionCount": v.portfolio.positionCount, "accountCount": v.portfolio.accountCount, "nav": opt(v.portfolio.nav), "navAccounts": v.portfolio.navAccounts,
+                "marginUsed": v.portfolio.marginUsed, "marginUsedBy": v.portfolio.marginUsedBy, "marginUsedPct": opt(v.portfolio.marginUsedPct),
+                "availableMargin": opt(v.portfolio.availableMargin), "availableMarginUnavailable": v.portfolio.availableMarginUnavailable,
+                "allocation": v.portfolio.allocation.map { ["id": $0.id, "symbol": $0.symbol, "account": $0.account, "value": $0.value, "share": $0.share] as [String: Any] },
+            ] as [String: Any],
             "equity": [
                 "label": v.equity.label,
                 "series": v.equity.series.map { ["d": $0.d, "v": $0.v] as [String: Any] },
@@ -199,8 +207,18 @@ final class ModelCasesTests: XCTestCase {
             for (nick, pts) in (snapshot["navByAccount"] as? [String: Any]) ?? [:] {
                 navByAccount[nick] = ((pts as? [[String: Any]]) ?? []).map(navPoint)
             }
+            let accounts = ((snapshot["accounts"] as? [[String: Any]]) ?? []).map { a in
+                BHAccountInfo(id: str(a, "id"), name: str(a, "nickname"), currency: str(a, "currency"), nav: numOpt(a, "netLiquidationValue"))
+            }
+            let balances = ((snapshot["balances"] as? [[String: Any]]) ?? []).map { b in
+                BHBalanceRow(accountId: str(b, "accountId"), securityId: str(b, "securityId"), quantity: num(b, "quantity"))
+            }
+            let margin = ((snapshot["margin"] as? [[String: Any]]) ?? []).map { m in
+                BHMarginRow(accountId: str(m, "accountId"), buyingPower: numOpt(m, "buyingPower"), currency: str(m, "currency"), unavailable: str(m, "unavailable"))
+            }
             let base = BHModel.buildBase(activities: acts, securities: secs, market: market(doc["market"] as! [String: Any]), today: doc["today"] as! String,
-                                         navHistory: nav, navByAccount: navByAccount, journal: journal((doc["journal"] as? [String: Any]) ?? [:]))
+                                         navHistory: nav, navByAccount: navByAccount, journal: journal((doc["journal"] as? [String: Any]) ?? [:]),
+                                         accounts: accounts, balances: balances, margin: margin)
             let view = BHModel.buildView(base, BHFilters(json: (doc["filters"] as? [String: Any]) ?? [:]))
             var problems: [String] = []
             diff(expect(view), doc["expect"] as! [String: Any], file.lastPathComponent, &problems)

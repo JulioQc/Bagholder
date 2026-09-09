@@ -172,6 +172,7 @@ struct BHView {
     var tradeTotal = 0
     var positions: [BHPosition] = []
     var positionsSummary = BHPositionsSummary()
+    var portfolio = BHPortfolio()
     var cashflow = BHCashflowView()
     var unmatched: [BHUnmatched] = []
 }
@@ -758,8 +759,56 @@ extension BHModel {
             book: positions.reduce(0.0) { $0 + abs($1.cost) },
             mv: positions.reduce(0.0) { $0 + ($1.short ? -$1.mv : $1.mv) },
             unreal: positions.reduce(0.0) { $0 + $1.unreal })
+        v.portfolio = portfolioView(base, f, positions)
         v.cashflow = cashflowView(base, f, positionsAll)
         v.unmatched = base.unmatched
         return v
+    }
+
+    /// model.py portfolio_view: CAD aggregates over the accounts the filter has on, every account when it has none.
+    static func portfolioView(_ base: BHBase, _ f: BHFilters, _ positions: [BHPosition]) -> BHPortfolio {
+        let fx = base.fx, today = base.today
+        func cad(_ amount: Double, _ currency: String) -> Double { toCad(fx, amount, currency, today) }
+        let names = f.lists["account"] ?? []
+        let accounts = base.accounts.filter { names.isEmpty || names.contains($0.name) }
+        let ids = Set(accounts.map { $0.id })
+        var nameOf: [String: String] = [:]
+        for a in accounts { nameOf[a.id] = a.name }
+        var out = BHPortfolio()
+        out.marketValue = positions.reduce(0.0) { $0 + cad($1.short ? -$1.mv : $1.mv, $1.currency) }
+        out.costBasis = positions.reduce(0.0) { $0 + cad(abs($1.cost), $1.currency) }
+        out.unrealized = positions.reduce(0.0) { $0 + cad($1.unreal, $1.currency) }
+        out.unrealizedPct = out.costBasis != 0 ? out.unrealized / out.costBasis : nil
+        out.positionCount = positions.count
+        out.accountCount = Set(positions.map { $0.account }).count
+        let navs = accounts.compactMap { a in a.nav.map { cad($0, a.currency) } }
+        out.nav = navs.isEmpty ? nil : navs.reduce(0.0, +)
+        out.navAccounts = navs.count
+        var used: [String: Double] = [:]
+        for b in base.balances {
+            guard ids.contains(b.accountId), let ccy = base.cashCurrencies[b.securityId], b.quantity < 0 else { continue }
+            used[ccy, default: 0.0] += -b.quantity
+        }
+        out.marginUsed = used.reduce(0.0) { $0 + cad($1.value, $1.key) }
+        out.marginUsedBy = used.mapValues { ($0 * 100).rounded() / 100 }
+        out.marginUsedPct = out.marketValue != 0 ? out.marginUsed / out.marketValue : nil
+        var avail: [Double] = []
+        var unavailable: [String] = []
+        for m in base.margin where ids.contains(m.accountId) {
+            if let bp = m.buyingPower { avail.append(cad(bp, m.currency.isEmpty ? "CAD" : m.currency)) }
+            else { unavailable.append(nameOf[m.accountId] ?? m.accountId) }
+        }
+        out.availableMargin = avail.isEmpty ? nil : avail.reduce(0.0, +)
+        out.availableMarginUnavailable = unavailable.sorted()
+        var alloc: [BHAllocationRow] = []
+        for p in positions {
+            let v = cad(p.mv, p.currency)
+            if v > 0 { alloc.append(BHAllocationRow(id: p.id, symbol: p.symbol, account: p.account, value: v, share: 0)) }
+        }
+        alloc.sort { $0.value > $1.value }
+        let total = alloc.reduce(0.0) { $0 + $1.value }
+        for i in alloc.indices { alloc[i].share = total != 0 ? alloc[i].value / total : 0 }
+        out.allocation = alloc
+        return out
     }
 }

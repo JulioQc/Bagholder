@@ -113,9 +113,18 @@ class ModelCasesTest {
         }
         out["positions"] = v.positions.sortedWith(compareBy({ it.symbol }, { it.account })).map { p ->
             mapOf("id" to p.id, "symbol" to p.symbol, "kind" to p.kind, "currency" to p.currency, "account" to p.account, "exchange" to p.exchange,
-                "qty" to p.qty, "avg" to p.avg, "cost" to p.cost, "held" to p.held, "alloc" to p.alloc, "short" to p.short)
+                "qty" to p.qty, "avg" to p.avg, "cost" to p.cost, "held" to p.held, "alloc" to p.alloc, "short" to p.short,
+                "dayChange" to opt(p.dayChange), "grade" to p.grade, "fills" to p.fills.sortedBy { it.whenAt }.map { it.sub })
         }
         out["positionsSummary"] = mapOf("count" to v.positionsSummary.count, "book" to v.positionsSummary.book, "mv" to v.positionsSummary.mv, "unreal" to v.positionsSummary.unreal)
+        val pf = v.portfolio
+        out["portfolio"] = mapOf(
+            "marketValue" to pf.marketValue, "costBasis" to pf.costBasis, "unrealized" to pf.unrealized, "unrealizedPct" to opt(pf.unrealizedPct),
+            "positionCount" to pf.positionCount, "accountCount" to pf.accountCount, "nav" to opt(pf.nav), "navAccounts" to pf.navAccounts,
+            "marginUsed" to pf.marginUsed, "marginUsedBy" to pf.marginUsedBy, "marginUsedPct" to opt(pf.marginUsedPct),
+            "availableMargin" to opt(pf.availableMargin), "availableMarginUnavailable" to pf.availableMarginUnavailable,
+            "allocation" to pf.allocation.map { mapOf("id" to it.id, "symbol" to it.symbol, "account" to it.account, "value" to it.value, "share" to it.share) },
+        )
         out["equity"] = mapOf(
             "label" to v.equity.label,
             "series" to v.equity.series.map { mapOf("d" to it.d, "v" to it.v) },
@@ -207,7 +216,13 @@ class ModelCasesTest {
                     navByAccount[nick] = (0 until pts.length()).map { navPoint(pts.getJSONObject(it)) }
                 }
             }
-            val base = Model.buildBase(acts, secs, market(doc.getJSONObject("market")), doc.getString("today"), nav, navByAccount, journal(doc.optJSONObject("journal")))
+            val accRows = snapshot.optJSONArray("accounts") ?: JSONArray()
+            val accounts = (0 until accRows.length()).map { i -> val a = accRows.getJSONObject(i); AccountInfo(a.optString("id"), a.optString("nickname"), a.optString("currency"), if (a.isNull("netLiquidationValue")) null else a.optDouble("netLiquidationValue")) }
+            val balRows = snapshot.optJSONArray("balances") ?: JSONArray()
+            val balances = (0 until balRows.length()).map { i -> val b = balRows.getJSONObject(i); BalanceRow(b.optString("accountId"), b.optString("securityId"), b.optDouble("quantity", 0.0)) }
+            val marginRows = snapshot.optJSONArray("margin") ?: JSONArray()
+            val margin = (0 until marginRows.length()).map { i -> val m = marginRows.getJSONObject(i); MarginRow(m.optString("accountId"), if (m.isNull("buyingPower")) null else m.optDouble("buyingPower"), m.optString("currency", "CAD"), m.optString("unavailable")) }
+            val base = Model.buildBase(acts, secs, market(doc.getJSONObject("market")), doc.getString("today"), nav, navByAccount, journal(doc.optJSONObject("journal")), accounts, balances, margin)
             @Suppress("UNCHECKED_CAST")
             val filters = Filters.clean(loose(doc.optJSONObject("filters")) as? Map<String, Any?>)
             val view = ModelView.buildView(base, filters)

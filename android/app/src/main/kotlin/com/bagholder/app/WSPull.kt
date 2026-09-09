@@ -54,7 +54,22 @@ data class WSActivity(
     }
 }
 
-data class WSSecurityListing(
+data class WSAccountRow(val id: String, val nickname: String, val currency: String, val netLiquidationValue: Double?) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("nickname", nickname).put("currency", currency).put("netLiquidationValue", netLiquidationValue ?: JSONObject.NULL)
+    companion object { fun fromJson(o: JSONObject) = WSAccountRow(o.optString("id"), o.optString("nickname"), o.optString("currency"), if (o.isNull("netLiquidationValue")) null else o.optDouble("netLiquidationValue")) }
+}
+
+class WSBalanceRow(val accountId: String, val securityId: String, val quantity: Double) {
+    fun toJson(): JSONObject = JSONObject().put("accountId", accountId).put("securityId", securityId).put("quantity", quantity)
+    companion object { fun fromJson(o: JSONObject) = WSBalanceRow(o.optString("accountId"), o.optString("securityId"), o.optDouble("quantity", 0.0)) }
+}
+
+class WSMarginRow(val accountId: String, val buyingPower: Double?, val currency: String, val unavailable: String) {
+    fun toJson(): JSONObject = JSONObject().put("accountId", accountId).put("buyingPower", buyingPower ?: JSONObject.NULL).put("currency", currency).put("unavailable", unavailable)
+    companion object { fun fromJson(o: JSONObject) = WSMarginRow(o.optString("accountId"), if (o.isNull("buyingPower")) null else o.optDouble("buyingPower"), o.optString("currency", "CAD"), o.optString("unavailable")) }
+}
+
+class WSSecurityListing(
     val id: String, val symbol: String, val name: String, val primaryExchange: String, val primaryMic: String,
     val currency: String, val underlyingId: String,
 ) {
@@ -396,7 +411,97 @@ object WSPull {
     // MARK: the pull
 
     class PullResult(val activities: List<WSActivity>, val listings: List<WSSecurityListing>, val newRows: Boolean,
-                     val nav: List<WSNavPoint>, val navByAccount: Map<String, List<WSNavPoint>>)
+                     val nav: List<WSNavPoint>, val navByAccount: Map<String, List<WSNavPoint>>,
+                     val accounts: List<WSAccountRow> = emptyList(), val balances: List<WSBalanceRow> = emptyList(), val margin: List<WSMarginRow> = emptyList())
+
+    /** What Wealthsimple states per account and per cash row, read on every sync and every few minutes between. */
+    class PortfolioSnapshot(val accounts: List<WSAccountRow>, val balances: List<WSBalanceRow>, val margin: List<WSMarginRow>)
+
+    private fun slimAccounts(accounts: List<JSONObject>): List<WSAccountRow> = accounts.mapNotNull { a ->
+        val id = str(a, "id")
+        if (id.isEmpty()) null
+        else {
+            val fin = dict(dict(a.opt("financials")).opt("currentCombined"))
+            val (amt, _) = moneyAmount(fin, listOf("netLiquidationValue", "netLiquidationValueV2"))
+            WSAccountRow(id, str(a, "nickname"), str(a, "currency"), amt)
+        }
+    }
+
+    private fun fetchBalances(box: TokenBox, accountIds: List<String>): List<WSBalanceRow> {
+        val out = mutableListOf<WSBalanceRow>()
+        val ids = accountIds.filter { it.isNotEmpty() }
+        for (chunk in ids.chunked(20)) {
+            val variables = JSONObject().put("ids", JSONArray(chunk)).put("type", "TRADING")
+            val data = graphql(box, "FetchAccountsWithBalance", variables, Queries.FETCH_ACCOUNTS_WITH_BALANCE)
+            val accounts = arr(data.opt("accounts"))
+            for (i in 0 until accounts.length()) {
+                val acc = dict(accounts.opt(i))
+                val aid = str(acc, "id")
+                val cas = arr(acc.opt("custodianAccounts"))
+                for (j in 0 until cas.length()) {
+                    val fin = dict(dict(cas.opt(j)).opt("financials"))
+                    val raw = fin.opt("balance")
+                    val bals = if (raw is JSONArray) raw else JSONArray().apply { if (raw is JSONObject) put(raw) }
+                    for (k in 0 until bals.length()) {
+                        val b = dict(bals.opt(k))
+                        out.add(WSBalanceRow(aid, str(b, "securityId"), b.optDouble("quantity", 0.0)))
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /** bagholder.parse_margin: a Money when available, the reason when not, null when the account has no margin figures. */
+    private fun parseMargin(data: JSONObject): WSMarginRow? {
+        val trading = dict(dict(dict(dict(dict(data.opt("account")).opt("financials")).opt("current")).opt("marginV3")).opt("trading"))
+        val bp = trading.opt("buyingPower") as? JSONObject ?: return null
+        if (bp.optString("__typename") == "BuyingPowerMetricAvailable") {
+            val total = dict(bp.opt("total"))
+            val amount = total.optString("amount").toDoubleOrNull() ?: return null
+            return WSMarginRow("", amount, total.optString("currency").ifEmpty { "CAD" }, "")
+        }
+        val reason = dict(bp.opt("reason"))
+        var why = reason.optString("__typename").ifEmpty { bp.optString("__typename").ifEmpty { "unavailable" } }
+        val n = arr(reason.opt("securities")).length()
+        if (n > 0) why += " ($n securities)"
+        return WSMarginRow("", null, "CAD", why)
+    }
+
+    private fun fetchMargin(box: TokenBox, accountIds: List<String>): List<WSMarginRow> {
+        val out = mutableListOf<WSMarginRow>()
+        for (aid in accountIds.filter { it.isNotEmpty() }) {
+            val data = try {
+                graphql(box, "FetchAccountCurrentMarginBuyingPowerV2", JSONObject().put("accountId", aid).put("currency", "CAD"), Queries.FETCH_ACCOUNT_MARGIN_BUYING_POWER)
+            } catch (e: Exception) { continue }
+            val row = parseMargin(data) ?: continue
+            out.add(WSMarginRow(aid, row.buyingPower, row.currency, row.unavailable))
+        }
+        return out
+    }
+
+    private fun portfolioSnapshot(box: TokenBox, accounts: List<JSONObject>): PortfolioSnapshot {
+        val rows = slimAccounts(accounts)
+        val ids = rows.map { it.id }
+        val balances = try { fetchBalances(box, ids) } catch (e: Exception) { emptyList() }
+        return PortfolioSnapshot(rows, balances, fetchMargin(box, ids))
+    }
+
+    /** The Portfolio figures between syncs: net liquidation values, cash balances and buying power. */
+    fun refreshPortfolio(oauthCookie: String, wssdi: String?): PortfolioSnapshot {
+        val oauthObj = jsonWithAccessToken(oauthCookie) ?: throw PullException("No Wealthsimple session")
+        val built = session(oauthCookie, wssdi) ?: throw PullException("No Wealthsimple session")
+        val box = TokenBox(built, oauthObj)
+        ensureClientId(box)
+        if (tokenNeedsRefresh(box.sess)) refreshSession(box)
+        if (box.sess.identityCanonicalId.isEmpty()) {
+            val info = try { tokenInfo(box.sess) } catch (e: UnauthorizedException) { refreshSession(box); tokenInfo(box.sess) }
+            box.sess.identityCanonicalId = identityFrom(info)
+        }
+        if (box.sess.identityCanonicalId.isEmpty()) throw PullException("Wealthsimple session has no identity")
+        val accounts = fetchAllAccounts(box, box.sess.identityCanonicalId)
+        return portfolioSnapshot(box, accounts)
+    }
 
     fun run(
         oauthCookie: String, wssdi: String?, storedActivities: List<WSActivity>, storedListings: List<WSSecurityListing>,
@@ -429,6 +534,8 @@ object WSPull {
 
         onProgress("Fetching accounts…")
         val accounts = fetchAllAccounts(box, box.sess.identityCanonicalId)
+        onProgress("Fetching balances…")
+        val portfolio = portfolioSnapshot(box, accounts)
         onProgress("Checking for new rows…")
         val accById = HashMap<String, JSONObject>()
         for (a in accounts) {
@@ -489,7 +596,7 @@ object WSPull {
         }
         onProgress("Fetching listings…")
         val listings = storedListings + fetchListings(box, merged, storedListings)
-        return PullResult(merged, listings, work.isNotEmpty(), nav, navByAccount)
+        return PullResult(merged, listings, work.isNotEmpty(), nav, navByAccount, portfolio.accounts, portfolio.balances, portfolio.margin)
     }
 
     // MARK: NAV history

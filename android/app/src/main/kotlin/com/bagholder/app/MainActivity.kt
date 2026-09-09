@@ -143,10 +143,10 @@ fun App() {
             val t0 = trade; val p0 = position
             when {
                 t0 != null -> { BackHandler { trade = null }; TradeDetailScreen(t0, onBack = { trade = null }) }
-                p0 != null -> { BackHandler { position = null }; PositionDetailScreen(p0, onBack = { position = null }) }
+                p0 != null -> { BackHandler { position = null }; HoldingDetailScreen(p0, onBack = { position = null }) }
                 tab == 0 -> DashboardScreen(chrome, onTrade = { trade = it }, onTrades = { tab = 1 })
                 tab == 1 -> TradesScreen(chrome, onTrade = { trade = it })
-                tab == 2 -> PositionsScreen(chrome, onPosition = { position = it })
+                tab == 2 -> PortfolioScreen(chrome, onHolding = { position = it })
                 else -> CashflowScreen(chrome)
             }
         }
@@ -208,7 +208,7 @@ object TabIcons {
 @Composable
 private fun TabBar(tab: Int, onTab: (Int) -> Unit) {
     val t = LocalTheme.current
-    val items = listOf("Dashboard" to TabIcons.gauge, "Trades" to TabIcons.list, "Positions" to TabIcons.briefcase, "Cashflow" to TabIcons.dollar)
+    val items = listOf("Dashboard" to TabIcons.gauge, "Trades" to TabIcons.list, "Portfolio" to TabIcons.briefcase, "Cashflow" to TabIcons.dollar)
     Column(Modifier.fillMaxWidth().background(t.surface)) {
         HorizontalDivider(color = t.hair)
         Row(Modifier.fillMaxWidth()) {
@@ -791,103 +791,184 @@ fun TradeDetailScreen(tradeId: String, onBack: () -> Unit) {
     }
 }
 
-// MARK: - Positions
+// MARK: - Portfolio
+
+/** A holding opens the page a trade opens, with the position standing in for the trade:
+ *  no close date, the current price as the exit, the days so far as the hold. */
+fun holdingAsTrade(p: Position): Trade = Trade().apply {
+    id = p.id; status = "open"; symbol = p.symbol; underlying = p.underlying; name = p.name; exchange = p.exchange; kind = p.kind; currency = p.currency
+    account = p.account; accountId = p.accountId; securityId = p.securityId
+    side = if (p.short) "COVER" else "SELL"; openDirection = if (p.short) "SHORT" else "LONG"
+    qty = p.qty; mult = p.mult; entry = p.avg; exit = p.last
+    entryDate = p.opened; exitDate = Model.todayLocal(); holdDays = p.held
+    pnl = p.unreal; pnlPct = p.unrealPct; fills = p.fills
+    grade = p.grade; thesis = p.thesis; tags = p.tags
+}
 
 @Composable
-fun PositionsScreen(chrome: Chrome, onPosition: (String) -> Unit) {
+private fun PortfolioTiles(pf: com.bagholder.model.Portfolio) {
+    val t = LocalTheme.current
+    val n = pf.positionCount
+    val positions = "$n position" + if (n == 1) "" else "s"
+    val unavailable = pf.availableMarginUnavailable
+    val tiles = listOf<@Composable (Modifier) -> Unit>(
+        { m -> Tile("Market value", Fmt.wholeMoney(pf.marketValue), "across $n open position" + (if (n == 1) "" else "s"), modifier = m) },
+        { m -> Tile("Net asset value", pf.nav?.let { Fmt.wholeMoney(it) } ?: "—", if (pf.nav == null) "—" else "${pf.navAccounts} account" + (if (pf.navAccounts == 1) "" else "s") + ", " + positions, modifier = m) },
+        { m -> Tile("Cost basis", Fmt.wholeMoney(pf.costBasis), "Total book value", modifier = m) },
+        { m -> Tile("Margin used", Fmt.wholeMoney(pf.marginUsed), pf.marginUsedPct?.let { Fmt.pct(it, 1, false) + " of market value" } ?: "—", modifier = m) },
+        { m -> Tile("Available margin", pf.availableMargin?.let { Fmt.wholeMoney(it) } ?: "—",
+            if (unavailable.isNotEmpty()) "unavailable for " + unavailable.joinToString(", ") else if (pf.availableMargin == null) "—" else "buying power", modifier = m) },
+        { m -> Tile("Unrealized P&L", Fmt.signedMoney(pf.unrealized), pf.unrealizedPct?.let { Fmt.pct(it) + if (pf.unrealized >= 0) " gain" else " loss" } ?: "—", color = t.signed(pf.unrealized), modifier = m) },
+    )
+    TilePager(tiles)
+}
+
+@Composable
+fun PortfolioScreen(chrome: Chrome, onHolding: (String) -> Unit) {
     val t = LocalTheme.current
     val v = Book.view
+    var picked by remember { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxSize()) {
         Header(chrome)
         FilterChips()
         if (v == null) { EmptyPage(chrome); return }
-        val s = v.positionsSummary
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        val pf = v.portfolio
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { PortfolioTiles(pf) }
             item {
-                Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                    Text("${s.count} open · Book " + Fmt.wholeMoney(s.book) + " · P&L ", fontSize = 14.sp, color = t.ink60)
-                    Text(Fmt.signedMoney(s.unreal, 0), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = t.signed(s.unreal))
-                }
-            }
-            items(v.positions, key = { it.id }) { p ->
-                PositionCard(p) { onPosition(p.id) }
-                HorizontalDivider(color = t.hair, modifier = Modifier.padding(horizontal = 16.dp))
-            }
-            if (v.positions.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) { Muted("No open positions.") } }
-        }
-    }
-}
-
-@Composable
-fun PositionCard(p: Position, onClick: () -> Unit) {
-    val t = LocalTheme.current
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Row(Modifier.fillMaxWidth()) {
-            Text(p.symbol, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = t.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Text(Fmt.signedMoney(p.unreal), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = t.signed(p.unreal))
-        }
-        Row(Modifier.fillMaxWidth()) {
-            Text((if (p.short) "SHORT " else "") + Fmt.qty(p.qty) + " · " + Fmt.price(p.avg) + " → " + Fmt.price(p.last) + " · " + p.currency, fontSize = 14.sp, color = t.ink60, modifier = Modifier.weight(1f))
-            Text(Fmt.pct(p.unrealPct, 2), fontSize = 14.sp, color = t.signed(p.unreal))
-        }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Book " + Fmt.wholeMoney(p.cost) + " · Market " + Fmt.wholeMoney(p.mv) + " · " + Fmt.hold(p.held), fontSize = 14.sp, color = t.ink60, modifier = Modifier.weight(1f))
-            Text(Fmt.pct(p.alloc, signed = false), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = t.chipFg, modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(t.chipBg).padding(horizontal = 8.dp, vertical = 4.dp))
-        }
-    }
-}
-
-@Composable
-fun PositionDetailScreen(positionId: String, onBack: () -> Unit) {
-    val t = LocalTheme.current
-    val p = Book.position(positionId)
-    if (p == null) { Column(Modifier.fillMaxSize()) { DetailBar("Position", onBack); Muted("This position is no longer open.") }; return }
-    var thesis by remember { mutableStateOf(p.thesis) }
-    var tags by remember { mutableStateOf(p.tags.joinToString(", ")) }
-    fun save() {
-        val old = Book.journal[positionId]
-        Book.saveJournal(positionId, JournalEntry(old?.grade ?: "", thesis, tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }))
-    }
-    Column(Modifier.fillMaxSize()) {
-        DetailBar("Position", onBack)
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item {
-                Text(p.symbol, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = t.ink)
-                Text(listOf(if (p.name != p.symbol) p.name else "", p.exchange).filter { it.isNotEmpty() }.joinToString(" · "), fontSize = 14.sp, color = t.ink60)
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(Fmt.signedMoney(p.unreal), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = t.signed(p.unreal))
-                    Text(Fmt.pct(p.unrealPct, 2), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = t.signed(p.unreal), modifier = Modifier.padding(bottom = 4.dp))
-                    Text(p.currency, fontSize = 13.sp, color = t.ink55, modifier = Modifier.padding(bottom = 6.dp))
-                }
-            }
-            item {
-                Card {
-                    Facts(listOf(
-                        "Qty" to Fmt.qty(p.qty), "Hold" to Fmt.hold(p.held), "Avg cost" to Fmt.price(p.avg),
-                        "Price" to (Fmt.price(p.last) + if (p.priceSource == "quote") "" else " · last fill " + p.lastAt),
-                        "Book value" to Fmt.money(p.cost), "Market value" to Fmt.money(p.mv), "FX" to p.currency,
-                        "Allocation" to Fmt.pct(p.alloc, signed = false), "Account" to p.account,
-                    ))
-                }
-            }
-            item {
-                Card("Lots") {
-                    Column {
-                        for ((i, l) in p.lots.withIndex()) {
-                            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
-                                Text(l.opened, fontSize = 14.sp, color = t.ink, modifier = Modifier.weight(1f))
-                                Text(Fmt.qty(l.qty) + " · " + Fmt.price(l.price), fontSize = 14.sp, color = t.ink60)
-                                Spacer(Modifier.width(12.dp))
-                                Text(Fmt.money(l.basis), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = t.ink, modifier = Modifier.width(110.dp), textAlign = TextAlign.End)
+                val top = pf.allocation.take(7)
+                val rest = pf.allocation.drop(7)
+                val items = top.map { Pair(it.symbol, it.value) } + (if (rest.isNotEmpty()) listOf(Pair("Other (${rest.size})", rest.sumOf { it.value })) else emptyList())
+                val total = items.sumOf { it.second }
+                Card("Allocation") {
+                    if (items.isEmpty()) Muted("No open positions in scope.")
+                    else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        DonutChart(items, picked, { picked = it }, centre = pf.marketValue)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for ((i, s) in items.withIndex()) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(t.pie[i % t.pie.size]))
+                                    Text(s.first, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = t.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Text(Fmt.pct(if (total > 0) s.second / total else null, signed = false), fontSize = 13.sp, color = t.ink60)
+                                }
                             }
-                            if (i < p.lots.size - 1) HorizontalDivider(color = t.hair)
                         }
                     }
                 }
             }
             item {
-                Card("Note") {
+                val rows = v.positions.sortedByDescending { it.unreal }
+                Card("Holdings") {
+                    if (rows.isEmpty()) Muted("No open positions match these filters.")
+                    Column {
+                        for ((i, p) in rows.withIndex()) {
+                            HoldingRow(p) { onHolding(p.id) }
+                            if (i < rows.size - 1) HorizontalDivider(color = t.hair)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HoldingRow(p: Position, onClick: () -> Unit) {
+    val t = LocalTheme.current
+    val dc = p.dayChange
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(p.symbol + (if (p.short) " SHORT" else ""), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = t.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(Fmt.signedMoney(p.unreal), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = t.signed(p.unreal))
+        }
+        Row(Modifier.fillMaxWidth()) {
+            Text(p.account + " · Book " + Fmt.wholeMoney(p.cost) + " · Market " + Fmt.wholeMoney(p.mv), fontSize = 13.sp, color = t.ink60, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(Fmt.pct(p.unrealPct), fontSize = 13.sp, color = t.signed(p.unreal))
+        }
+        Row(Modifier.fillMaxWidth()) {
+            Text("Today", fontSize = 13.sp, color = t.ink55, modifier = Modifier.weight(1f))
+            Text(if (dc == null) "—" else Fmt.signedMoney(dc) + " · " + Fmt.pct((p.percentChange ?: 0.0) / 100, 2), fontSize = 13.sp, color = if (dc == null) t.ink55 else t.signed(dc))
+        }
+    }
+}
+
+@Composable
+fun HoldingDetailScreen(positionId: String, onBack: () -> Unit) {
+    val t = LocalTheme.current
+    val p = Book.position(positionId)
+    if (p == null) { Column(Modifier.fillMaxSize()) { DetailBar("Holding", onBack); Muted("This position is no longer open.") }; return }
+    val tr = holdingAsTrade(p)
+    var chart by remember { mutableStateOf<Triple<List<Bar>, String, String>?>(null) }
+    var timeframe by remember { mutableStateOf<String?>(null) }
+    var grade by remember { mutableStateOf(p.grade) }
+    var thesis by remember { mutableStateOf(p.thesis) }
+    var tags by remember { mutableStateOf(p.tags.joinToString(", ")) }
+    fun save() { Book.saveJournal(positionId, JournalEntry(grade, thesis, tags.split(",").map { it.trim() }.filter { it.isNotEmpty() })) }
+    LaunchedEffect(positionId, timeframe) { chart = withContext(Dispatchers.IO) { MarketData.bars(tr, timeframe) } }
+    Column(Modifier.fillMaxSize()) {
+        DetailBar("Holding", onBack)
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item {
+                Text(tr.symbol, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = t.ink)
+                val parts = mutableListOf<String>()
+                if (tr.name.isNotEmpty() && tr.name != tr.symbol) parts.add(tr.name)
+                val ticker = Model.listingTicker(tr.underlying)
+                if (tr.exchange.isNotEmpty()) parts.add(tr.exchange.uppercase() + ": " + ticker) else if (tr.underlying != tr.symbol) parts.add(ticker)
+                Text(parts.joinToString(" · "), fontSize = 14.sp, color = t.ink60)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(Fmt.money(tr.pnl), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = t.signed(tr.pnl))
+                    Text(Fmt.pct(tr.pnlPct), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = t.signed(tr.pnl), modifier = Modifier.padding(bottom = 4.dp))
+                    Text(tr.currency, fontSize = 13.sp, color = t.ink55, modifier = Modifier.padding(bottom = 6.dp))
+                }
+            }
+            item {
+                Card {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (tf in listOf("1d", "1w", "1M")) {
+                            val on = (chart?.third ?: timeframe) == tf
+                            Text(tf.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (on) t.chipFg else t.ink55,
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (on) t.chipBg else t.well).clickable { timeframe = tf }.padding(horizontal = 9.dp, vertical = 5.dp))
+                        }
+                    }
+                    val c = chart
+                    if (c != null && c.first.isNotEmpty()) CandleChart(c.first, tr.fills, atClose = tr.kind == "Options")
+                    else Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { Muted(c?.second ?: "Fetching bars…") }
+                }
+            }
+            item {
+                Card {
+                    Facts(listOf(
+                        "Open" to tr.entryDate, "Close" to "", "Entry" to Fmt.price(tr.entry), "Exit" to Fmt.price(tr.exit),
+                        "Qty" to (Fmt.qty(tr.qty) + if (tr.mult > 1) " × ${tr.mult.toInt()}" else ""), "Hold" to Fmt.hold(tr.holdDays), "Account" to tr.account,
+                    ))
+                }
+            }
+            item {
+                Card("Executions") {
+                    Column {
+                        for ((i, f) in tr.fills.withIndex()) {
+                            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(f.date + if (f.time.isEmpty()) "" else " " + f.time, fontSize = 14.sp, color = t.ink)
+                                    Text(f.sub + " · " + Fmt.qty(abs(f.qty)) + " · " + f.currency + " " + Fmt.price(f.price), fontSize = 13.sp, color = t.ink60)
+                                }
+                                Text(Fmt.money(f.amount), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.signed(f.amount))
+                            }
+                            if (i < tr.fills.size - 1) HorizontalDivider(color = t.hair)
+                        }
+                    }
+                }
+            }
+            item {
+                Card("Journal") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (g in Model.GRADES) {
+                            Box(Modifier.size(44.dp, 36.dp).clip(RoundedCornerShape(8.dp)).background(if (grade == g) t.chipBg else t.well).clickable { grade = if (grade == g) "" else g; save() }, contentAlignment = Alignment.Center) {
+                                Text(g, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (grade == g) t.chipFg else t.ink75)
+                            }
+                        }
+                    }
                     NoteField(thesis, "Thesis", { thesis = it; save() }, capitalize = true)
                     NoteField(tags, "Tags, comma separated", { tags = it; save() }, single = true)
                 }

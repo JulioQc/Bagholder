@@ -145,6 +145,30 @@
       "tags": [],
       "years": []
     },
+    "portfolio": {
+      "accountCount": 1,
+      "allocation": [
+        {
+          "account": "Cashflow",
+          "id": "rt:b1",
+          "share": 1.0,
+          "symbol": "RDDY",
+          "value": 46560.0
+        }
+      ],
+      "availableMargin": null,
+      "availableMarginUnavailable": [],
+      "costBasis": 46560.0,
+      "marginUsed": 0,
+      "marginUsedBy": {},
+      "marginUsedPct": 0.0,
+      "marketValue": 46560.0,
+      "nav": null,
+      "navAccounts": 0,
+      "positionCount": 1,
+      "unrealized": 0.0,
+      "unrealizedPct": 0.0
+    },
     "positions": [
       {
         "account": "Cashflow",
@@ -152,7 +176,12 @@
         "avg": 11.64,
         "cost": 46560.0,
         "currency": "CAD",
+        "dayChange": null,
         "exchange": "",
+        "fills": [
+          "BUY"
+        ],
+        "grade": "",
         "held": 129,
         "id": "rt:b1",
         "kind": "Shares",
@@ -261,6 +290,7 @@
       }
     ],
     "balances": [],
+    "margin": [],
     "navByAccount": {},
     "navHistory": [],
     "notes": {},

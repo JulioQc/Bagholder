@@ -11,8 +11,8 @@ Use at your own risk. The app has you sign in to the real Wealthsimple website i
 | Trades | A trade |
 |---|---|
 | ![Trades](docs/screenshots/desktop-trades.png) | ![A trade](docs/screenshots/desktop-trade.png) |
-| **Positions** | **Cashflow** |
-| ![Positions](docs/screenshots/desktop-positions.png) | ![Cashflow](docs/screenshots/desktop-cashflow.png) |
+| **Portfolio** | **Cashflow** |
+| ![Portfolio](docs/screenshots/desktop-portfolio.png) | ![Cashflow](docs/screenshots/desktop-cashflow.png) |
 
 On iOS and Android:
 
@@ -20,13 +20,13 @@ On iOS and Android:
 <tr>
 <td><img src="docs/screenshots/ios-dashboard.png" width="200" alt="iOS dashboard"></td>
 <td><img src="docs/screenshots/ios-trades.png" width="200" alt="iOS trades"></td>
-<td><img src="docs/screenshots/ios-positions.png" width="200" alt="iOS positions"></td>
+<td><img src="docs/screenshots/ios-portfolio.png" width="200" alt="iOS portfolio"></td>
 <td><img src="docs/screenshots/ios-cashflow.png" width="200" alt="iOS cashflow"></td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/android-dashboard.png" width="200" alt="Android dashboard"></td>
 <td><img src="docs/screenshots/android-trades.png" width="200" alt="Android trades"></td>
-<td><img src="docs/screenshots/android-positions.png" width="200" alt="Android positions"></td>
+<td><img src="docs/screenshots/android-portfolio.png" width="200" alt="Android portfolio"></td>
 <td><img src="docs/screenshots/android-cashflow.png" width="200" alt="Android cashflow"></td>
 </tr>
 </table>
@@ -72,7 +72,7 @@ Trades can also be imported from Wealthsimple's CSV exports, or entered by hand.
 
 - **Dashboard**: realized P&L, win rate, profit factor, expectancy, max drawdown net of deposits and withdrawals, annualized returns vs the S&P 500 or the S&P/TSX Composite, equity curve, monthly P&L, P&L by grade, P&L by symbol, and a review queue of ungraded trades.
 - **Trades**: every closed trade with its executions, a price path across the fills, and a journal with a thesis, a grade and tags. Shares, options and crypto are all matched FIFO per account; covered calls, rolls, expiries and assignments are handled.
-- **Positions**: open positions with live prices, unrealized P&L, allocation, the lots still held, and a running note that carries over to the trade when the position closes.
+- **Portfolio**: market value, net asset value, cost basis, margin used, available margin and unrealized P&L across the accounts you choose; allocation; every open holding with the day's change, each opening on its own page with the chart, the fills and the journal that becomes the trade's when it closes.
 - **Cashflow**: distributions by month and by holding, with yield on cost and current yield from each fund's declared distributions.
 
 A filter icon next to the menu narrows every page at once by date, account, symbol, grade, tag, side, kind, exchange, price, hold time, P&L or quantity.

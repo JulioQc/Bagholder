@@ -1347,6 +1347,15 @@ class Securities:
         sec = self.listing(security_id)
         return _s((sec or {}).get("name")) or fallback
 
+    def cash_currencies(self):
+        """Security id -> currency for the cash rows Wealthsimple lists as securities (CAD, USD)."""
+        out = {}
+        for sid, sec in self.by_id.items():
+            sym = _s(sec.get("symbol")).upper()
+            if sym in ("CAD", "USD") or _s(sid).startswith("sec-c-"):
+                out[sid] = _s(sec.get("currency")).upper() or sym
+        return out
+
     def known_exchanges(self):
         out = set()
         for sec in self.by_id.values():
@@ -1532,8 +1541,9 @@ def last_fill_prices(activities):
     return out
 
 
-def build_positions(open_lots, last_prices, balances, accounts, securities, journal, today, quotes=None):
+def build_positions(open_lots, last_prices, balances, accounts, securities, journal, today, quotes=None, acts_by_id=None):
     quotes = quotes or {}
+    acts_by_id = acts_by_id or {}
     nick_ids = {}
     for acc in accounts or []:
         nick = norm_account_name(acc.get("nickname") or acc.get("unifiedAccountType") or acc.get("type"))
@@ -1589,6 +1599,9 @@ def build_positions(open_lots, last_prices, balances, accounts, securities, jour
         legacy_pid = "pos:" + "|".join([account, symbol, currency])
         pid = lots[0].get("rt") or legacy_pid
         entry_j = journal.get(pid) or journal.get(legacy_pid) or {}
+        price_change = _num(quote.get("priceChange"), None) if quote else None
+        fills = [_fill_row(acts_by_id[l["activityId"]]) for l in lots if l.get("activityId") in acts_by_id]
+        fills.sort(key=lambda f: f["when"], reverse=True)
         rows.append(
             {
                 "id": pid,
@@ -1610,8 +1623,10 @@ def build_positions(open_lots, last_prices, balances, accounts, securities, jour
                 "last": last_px,
                 "lastAt": last_at,
                 "priceSource": price_source,
-                "priceChange": _num(quote.get("priceChange"), None) if quote else None,
+                "priceChange": price_change,
                 "percentChange": _num(quote.get("percentChange"), None) if quote else None,
+                # the day's move on the whole position, in its own currency, from the quote's change
+                "dayChange": (qty * price_change * mult * (-1 if direction == "SHORT" else 1)) if price_change is not None else None,
                 "mv": mv,
                 "unreal": unreal,
                 "unrealPct": (unreal / cost) if cost else None,
@@ -1631,6 +1646,8 @@ def build_positions(open_lots, last_prices, balances, accounts, securities, jour
                     }
                     for l in lots
                 ],
+                "fills": fills,
+                "grade": entry_j.get("grade", ""),
                 "thesis": entry_j.get("thesis", ""),
                 "tags": list(entry_j.get("tags", [])),
             }
@@ -1990,7 +2007,7 @@ def build_base(snapshot, market, journal, today=None):
     saved = snapshot.get("tradeGroups") or []
     trades = build_trades(fifo["closed"], fifo["open"], saved, acts_by_id, securities, journal)
     last_prices = last_fill_prices(acts)
-    positions = build_positions(fifo["open"], last_prices, snapshot.get("balances"), snapshot.get("accounts"), securities, journal, today, market.get("quotes") or {})
+    positions = build_positions(fifo["open"], last_prices, snapshot.get("balances"), snapshot.get("accounts"), securities, journal, today, market.get("quotes") or {}, acts_by_id)
     cashflow = build_cashflow(acts, securities, fx)
     equity = equity_series(snapshot.get("navHistory"))
     by_account = {}
@@ -2033,6 +2050,9 @@ def build_base(snapshot, market, journal, today=None):
         "equity": equity,
         "equityByAccount": by_account,
         "accounts": accounts,
+        "balances": [dict(b) for b in (snapshot.get("balances") or []) if isinstance(b, dict)],
+        "margin": [dict(m) for m in (snapshot.get("margin") or []) if isinstance(m, dict)],
+        "cashCurrencies": securities.cash_currencies(),
         "activityCount": len(raw_acts),
     }
 
@@ -2145,6 +2165,71 @@ def trade_matches(t, f, today):
         if r["op"] == "<" and not val < r["v"]:
             return False
     return in_date_scope(f, today, t["exitDate"])
+
+
+def portfolio_view(base, f, positions):
+    """The Portfolio tiles: CAD aggregates over the accounts in scope. Market value,
+    cost basis and unrealized P&L come from the open positions in scope, converted
+    at today's rate. Net asset value is the sum of Wealthsimple's net liquidation
+    value per account, margin used the negative cash balances per currency, available
+    margin Wealthsimple's buying power; each over the accounts the filter has on, every
+    account when it has none, and None when no account in scope reports it."""
+    fx = base["fx"]
+    today = base["today"]
+    cad = lambda amount, currency: to_cad(fx, amount, currency, today)
+    names = f["lists"]["account"]
+    accounts = [a for a in base["accounts"] if not names or a["name"] in names]
+    ids = {a["id"] for a in accounts}
+    name_of = {a["id"]: a["name"] for a in accounts}
+    mv = sum(cad(p["mv"] if not p["short"] else -p["mv"], p["currency"]) for p in positions)
+    cost = sum(cad(abs(p["cost"]), p["currency"]) for p in positions)
+    unreal = sum(cad(p["unreal"], p["currency"]) for p in positions)
+    navs = [cad(a["nav"], a["currency"]) for a in accounts if a.get("nav") is not None]
+    cash_ccy = base.get("cashCurrencies") or {}
+    used = {}
+    for b in base.get("balances") or []:
+        aid = _s(b.get("accountId"))
+        ccy = cash_ccy.get(_s(b.get("securityId")))
+        q = _num(b.get("quantity"), 0.0)
+        if aid in ids and ccy and q < 0:
+            used[ccy] = used.get(ccy, 0.0) + (-q)
+    margin_used = sum(cad(v, c) for c, v in used.items())
+    avail = []
+    unavailable = []
+    for m in base.get("margin") or []:
+        aid = _s(m.get("accountId"))
+        if aid not in ids:
+            continue
+        bp = _num(m.get("buyingPower"), None)
+        if bp is None:
+            unavailable.append(name_of.get(aid, aid))
+        else:
+            avail.append(cad(bp, m.get("currency") or "CAD"))
+    alloc = []
+    for p in positions:
+        v = cad(p["mv"], p["currency"])
+        if v > 0:
+            alloc.append({"id": p["id"], "symbol": p["symbol"], "account": p["account"], "value": v})
+    alloc.sort(key=lambda x: -x["value"])
+    total = sum(x["value"] for x in alloc)
+    for x in alloc:
+        x["share"] = (x["value"] / total) if total else 0.0
+    return {
+        "allocation": alloc,
+        "marketValue": mv,
+        "costBasis": cost,
+        "unrealized": unreal,
+        "unrealizedPct": (unreal / cost) if cost else None,
+        "positionCount": len(positions),
+        "accountCount": len({p["account"] for p in positions}),
+        "nav": sum(navs) if navs else None,
+        "navAccounts": len(navs),
+        "marginUsed": margin_used,
+        "marginUsedBy": {c: round(v, 2) for c, v in sorted(used.items())},
+        "marginUsedPct": (margin_used / mv) if mv else None,
+        "availableMargin": sum(avail) if avail else None,
+        "availableMarginUnavailable": sorted(unavailable),
+    }
 
 
 def position_matches(p, f):
@@ -2563,6 +2648,7 @@ def build_view(base, filters=None):
         "tradeTotal": len(trades_all),
         "positions": positions,
         "positionsSummary": {"count": len(positions), "book": book, "mv": mv, "unreal": unreal},
+        "portfolio": portfolio_view(base, f, positions),
         "cashflow": cashflow_view(base, f, positions_all),
         "unmatched": base["unmatched"],
         "accounts": base["accounts"],
@@ -2673,6 +2759,7 @@ def apply_journal(entries):
             t["tags"] = list(e.get("tags", []))
         for p in base["positions"]:
             e = entries.get(p["id"]) or {}
+            p["grade"] = e.get("grade", "")
             p["thesis"] = e.get("thesis", "")
             p["tags"] = list(e.get("tags", []))
         _cache["version"] = store.data_version()

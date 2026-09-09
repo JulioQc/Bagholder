@@ -156,8 +156,49 @@ struct BHPosition {
     var rt: String?
     var lots: [BHPositionLot] = []
     var alloc = 0.0
-    var thesis = ""
+    var dayChange: Double?
+    var fills: [BHFillRow] = []
+    var grade = "", thesis = ""
     var tags: [String] = []
+}
+
+/// What Wealthsimple states per account: its net liquidation value, in its currency.
+struct BHAccountInfo {
+    var id = "", name = "", currency = ""
+    var nav: Double?
+}
+
+struct BHBalanceRow {
+    var accountId = "", securityId = ""
+    var quantity = 0.0
+}
+
+/// Wealthsimple's buying power for an account, or why it has none.
+struct BHMarginRow {
+    var accountId = ""
+    var buyingPower: Double?
+    var currency = "CAD"
+    var unavailable = ""
+}
+
+struct BHAllocationRow {
+    var id = "", symbol = "", account = ""
+    var value = 0.0, share = 0.0
+}
+
+/// The Portfolio tiles: CAD aggregates over the accounts in scope (model.py portfolio_view).
+struct BHPortfolio {
+    var allocation: [BHAllocationRow] = []
+    var marketValue = 0.0, costBasis = 0.0, unrealized = 0.0
+    var unrealizedPct: Double?
+    var positionCount = 0, accountCount = 0
+    var nav: Double?
+    var navAccounts = 0
+    var marginUsed = 0.0
+    var marginUsedBy: [String: Double] = [:]
+    var marginUsedPct: Double?
+    var availableMargin: Double?
+    var availableMarginUnavailable: [String] = []
 }
 
 struct BHCashRow {
@@ -234,6 +275,10 @@ struct BHBase {
     var trades: [BHTrade] = []
     var positions: [BHPosition] = []
     var cashflow: [BHCashRow] = []
+    var accounts: [BHAccountInfo] = []
+    var balances: [BHBalanceRow] = []
+    var margin: [BHMarginRow] = []
+    var cashCurrencies: [String: String] = [:]
 }
 
 // MARK: - the model
@@ -1562,6 +1607,18 @@ enum BHModel {
             }
         }
 
+        /// Security id -> currency for the cash rows Wealthsimple lists as securities (CAD, USD).
+        func cashCurrencies() -> [String: String] {
+            var out: [String: String] = [:]
+            for (sid, sec) in byId {
+                let sym = sec.symbol.uppercased()
+                if sym == "CAD" || sym == "USD" || sid.hasPrefix("sec-c-") {
+                    out[sid] = sec.currency.uppercased().isEmpty ? sym : sec.currency.uppercased()
+                }
+            }
+            return out
+        }
+
         func preferred(_ sec: BHSecurity?) -> BHSecurity? {
             guard let sec = sec, isAlphaVenue(sec) else { return sec }
             let sym = listingTicker(sec.symbol)
@@ -1723,7 +1780,7 @@ enum BHModel {
         return out
     }
 
-    static func buildPositions(_ openLots: [BHLot], lastPrices: [String: (price: Double, date: String)], securities: Securities, today: String, quotes: [String: BHQuote], journal: [String: BHJournalEntry] = [:]) -> [BHPosition] {
+    static func buildPositions(_ openLots: [BHLot], lastPrices: [String: (price: Double, date: String)], securities: Securities, today: String, quotes: [String: BHQuote], journal: [String: BHJournalEntry] = [:], actsById: [String: BHAct] = [:]) -> [BHPosition] {
         var groups: [String: [BHLot]] = [:]
         var order: [String] = []
         for lot in openLots {
@@ -1781,6 +1838,8 @@ enum BHModel {
             p.priceSource = priceSource
             p.priceChange = quote?.priceChange
             p.percentChange = quote?.percentChange
+            // the day's move on the whole position, in its own currency, from the quote's change
+            p.dayChange = quote?.priceChange.map { qty * $0 * mult * (direction == "SHORT" ? -1 : 1) }
             p.mv = mv
             p.unreal = unreal
             p.unrealPct = cost != 0 ? unreal / cost : nil
@@ -1793,8 +1852,10 @@ enum BHModel {
             // A position and the trade it becomes when it closes share one journal
             // entry: both are keyed by the round trip that opened the position.
             let note = journal[p.id] ?? journal[legacyPid]
+            p.grade = note?.grade ?? ""
             p.thesis = note?.thesis ?? ""
             p.tags = note?.tags ?? []
+            p.fills = lots.compactMap { actsById[$0.activityId] }.map(fillRow).sorted { $0.when > $1.when }
             rows.append(p)
         }
         let book = rows.reduce(0.0) { $0 + abs($1.cost) }
@@ -1850,7 +1911,7 @@ enum BHModel {
 
     // MARK: build
 
-    static func buildBase(activities raw: [BHAct], securities secRows: [BHSecurity], market: BHMarket, today: String, navHistory: [BHNavPoint] = [], navByAccount: [String: [BHNavPoint]] = [:], journal: [String: BHJournalEntry] = [:]) -> BHBase {
+    static func buildBase(activities raw: [BHAct], securities secRows: [BHSecurity], market: BHMarket, today: String, navHistory: [BHNavPoint] = [], navByAccount: [String: [BHNavPoint]] = [:], journal: [String: BHJournalEntry] = [:], accounts: [BHAccountInfo] = [], balances: [BHBalanceRow] = [], margin: [BHMarginRow] = []) -> BHBase {
         var acts = normalizeActivities(raw)
         let securities = Securities(secRows)
         let delivered = synthesizeAssignmentShares(acts, securities)
@@ -1880,8 +1941,12 @@ enum BHModel {
         base.openLots = fifo.open
         base.unmatched = fifo.unmatched
         base.trades = buildTrades(fifo.closed, actsById: actsById, securities: securities, journal: journal)
-        base.positions = buildPositions(fifo.open, lastPrices: lastFillPrices(acts), securities: securities, today: today, quotes: market.quotes, journal: journal)
+        base.positions = buildPositions(fifo.open, lastPrices: lastFillPrices(acts), securities: securities, today: today, quotes: market.quotes, journal: journal, actsById: actsById)
         base.cashflow = buildCashflow(acts, securities: securities, fx: market.fx)
+        base.accounts = accounts.map { a in BHAccountInfo(id: a.id, name: normAccountName(a.name), currency: a.currency, nav: a.nav) }
+        base.balances = balances
+        base.margin = margin
+        base.cashCurrencies = securities.cashCurrencies()
         return base
     }
 

@@ -190,6 +190,79 @@ fragment SimpleReturns on SimpleReturns {
 }
 """.trimIndent()
 
+    val FETCH_ACCOUNTS_WITH_BALANCE = """
+query FetchAccountsWithBalance(${'$'}ids: [String!]!, ${'$'}type: BalanceType!) {
+  accounts(ids: ${'$'}ids) {
+    ...AccountWithBalance
+    __typename
+  }
+}
+
+fragment AccountWithBalance on Account {
+  id
+  custodianAccounts {
+    id
+    financials {
+      ... on CustodianAccountFinancialsSo {
+        balance(type: ${'$'}type) {
+          ...Balance
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment Balance on Balance {
+  quantity
+  securityId
+  __typename
+}
+""".trimIndent()
+
+    val FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
+query FetchAccountCurrentMarginBuyingPowerV2(${'$'}accountId: ID!, ${'$'}currency: Currency = CAD) {
+  account(id: ${'$'}accountId) {
+    id
+    financials {
+      current {
+        id
+        marginV3 {
+          trading {
+            buyingPower(asCurrency: ${'$'}currency) {
+              __typename
+              ... on BuyingPowerMetricAvailable {
+                total { amount currency __typename }
+                __typename
+              }
+              ... on BuyingPowerMetricUnavailable {
+                reason {
+                  __typename
+                  ... on UnavailableSecurities {
+                    securities { securityId status __typename }
+                    __typename
+                  }
+                }
+                __typename
+              }
+            }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}
+""".trimIndent()
+
     val FETCH_ACTIVITY_FEED_ITEMS = """
 query FetchActivityFeedItems(${'$'}first: Int, ${'$'}cursor: Cursor, ${'$'}condition: ActivityCondition, ${'$'}orderBy: [ActivitiesOrderBy!] = OCCURRED_AT_DESC) {
   activityFeedItems(

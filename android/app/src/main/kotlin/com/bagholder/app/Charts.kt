@@ -360,7 +360,7 @@ fun GradeBarsChart(grades: Grades, height: Int = 150) {
 
 /** The allocation donut: slices largest first from the theme's palette, the total or the picked slice in the centre. */
 @Composable
-fun DonutChart(slices: List<Pair<String, Double>>, picked: Int?, onPick: (Int?) -> Unit, size: Int = 150) {
+fun DonutChart(slices: List<Pair<String, Double>>, picked: Int?, onPick: (Int?) -> Unit, size: Int = 150, centre: Double? = null) {
     val t = LocalTheme.current
     val total = slices.sumOf { it.second }
     Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) {
@@ -398,7 +398,7 @@ fun DonutChart(slices: List<Pair<String, Double>>, picked: Int?, onPick: (Int?) 
                 Text(Fmt.money(slices[picked].second), fontSize = 13.sp, color = t.ink75)
                 Text(Fmt.pct(if (total > 0) slices[picked].second / total else null, signed = false), fontSize = 12.sp, color = t.ink55)
             } else {
-                Text(Fmt.money(total), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
+                Text(if (centre != null) Fmt.wholeMoney(centre) else Fmt.money(total), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.ink)
             }
         }
     }

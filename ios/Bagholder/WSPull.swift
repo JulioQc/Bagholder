@@ -155,6 +155,25 @@ struct WSActivity: Equatable, Codable {
     }
 }
 
+/// What Wealthsimple states per account: its net liquidation value, in its currency.
+struct WSAccountRow: Equatable, Codable {
+    var id = "", nickname = "", currency = ""
+    var netLiquidationValue: Double?
+}
+
+struct WSBalanceRow: Equatable, Codable {
+    var accountId = "", securityId = ""
+    var quantity = 0.0
+}
+
+/// Wealthsimple's buying power for an account, or why it has none.
+struct WSMarginRow: Equatable, Codable {
+    var accountId = ""
+    var buyingPower: Double?
+    var currency = "CAD"
+    var unavailable = ""
+}
+
 struct WSSecurityListing: Equatable, Codable {
     var id: String
     var symbol: String
@@ -298,9 +317,13 @@ struct WSPullResult: Codable {
     var listings: [WSSecurityListing] = []
     var transferredNew: Bool = true
     var navByAccount: [String: [WSNavPoint]] = [:]
+    // optional so a pull file written before these existed still decodes
+    var accounts: [WSAccountRow]? = nil
+    var balances: [WSBalanceRow]? = nil
+    var margin: [WSMarginRow]? = nil
 
     enum CodingKeys: String, CodingKey {
-        case closed, metrics, nav, monthly, years, avgAnnualized, avgAnnualizedSubtitle, activities, listings, navByAccount
+        case closed, metrics, nav, monthly, years, avgAnnualized, avgAnnualizedSubtitle, activities, listings, navByAccount, accounts, balances, margin
     }
 
     init(
@@ -314,7 +337,10 @@ struct WSPullResult: Codable {
         activities: [WSActivity] = [],
         listings: [WSSecurityListing] = [],
         transferredNew: Bool = true,
-        navByAccount: [String: [WSNavPoint]] = [:]
+        navByAccount: [String: [WSNavPoint]] = [:],
+        accounts: [WSAccountRow]? = nil,
+        balances: [WSBalanceRow]? = nil,
+        margin: [WSMarginRow]? = nil
     ) {
         self.closed = closed
         self.metrics = metrics
@@ -327,6 +353,9 @@ struct WSPullResult: Codable {
         self.listings = listings
         self.transferredNew = transferredNew
         self.navByAccount = navByAccount
+        self.accounts = accounts
+        self.balances = balances
+        self.margin = margin
     }
 
     init(from decoder: Decoder) throws {
@@ -342,6 +371,9 @@ struct WSPullResult: Codable {
         listings = try c.decodeIfPresent([WSSecurityListing].self, forKey: .listings) ?? []
         transferredNew = true
         navByAccount = try c.decodeIfPresent([String: [WSNavPoint]].self, forKey: .navByAccount) ?? [:]
+        accounts = try c.decodeIfPresent([WSAccountRow].self, forKey: .accounts)
+        balances = try c.decodeIfPresent([WSBalanceRow].self, forKey: .balances)
+        margin = try c.decodeIfPresent([WSMarginRow].self, forKey: .margin)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -552,6 +584,79 @@ fragment SimpleReturns on SimpleReturns {
   rate
   referenceDate
   __typename
+}
+"""
+
+    static let qFetchAccountsWithBalance = """
+query FetchAccountsWithBalance($ids: [String!]!, $type: BalanceType!) {
+  accounts(ids: $ids) {
+    ...AccountWithBalance
+    __typename
+  }
+}
+
+fragment AccountWithBalance on Account {
+  id
+  custodianAccounts {
+    id
+    financials {
+      ... on CustodianAccountFinancialsSo {
+        balance(type: $type) {
+          ...Balance
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment Balance on Balance {
+  quantity
+  securityId
+  __typename
+}
+"""
+
+    static let qFetchAccountMarginBuyingPower = """
+query FetchAccountCurrentMarginBuyingPowerV2($accountId: ID!, $currency: Currency = CAD) {
+  account(id: $accountId) {
+    id
+    financials {
+      current {
+        id
+        marginV3 {
+          trading {
+            buyingPower(asCurrency: $currency) {
+              __typename
+              ... on BuyingPowerMetricAvailable {
+                total { amount currency __typename }
+                __typename
+              }
+              ... on BuyingPowerMetricUnavailable {
+                reason {
+                  __typename
+                  ... on UnavailableSecurities {
+                    securities { securityId status __typename }
+                    __typename
+                  }
+                }
+                __typename
+              }
+            }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
 }
 """
 
@@ -1145,6 +1250,8 @@ query FetchAccountHistoricalFinancials(
 
         progress("Fetching accounts…")
         let accounts = try await fetchAllAccounts(box, identityId: box.sess.identityCanonicalId)
+        progress("Fetching balances…")
+        let portfolio = await portfolioSnapshot(box, accounts)
         progress("Checking for new rows…")
         var accById: [String: [String: Any]] = [:]
         for a in accounts {
@@ -1277,7 +1384,10 @@ query FetchAccountHistoricalFinancials(
             activities: activities,
             listings: storedListings,
             transferredNew: !work.isEmpty,
-            navByAccount: navByAccount
+            navByAccount: navByAccount,
+            accounts: portfolio.accounts,
+            balances: portfolio.balances,
+            margin: portfolio.margin
         )
     }
 
@@ -1301,11 +1411,110 @@ query FetchAccountHistoricalFinancials(
             activities: snap.activities,
             listings: snap.listings,
             transferredNew: false,
-            navByAccount: snap.navByAccount
+            navByAccount: snap.navByAccount,
+            accounts: snap.accounts,
+            balances: snap.balances,
+            margin: snap.margin
         )
     }
 
     // MARK: - Fetch
+
+    /// What Wealthsimple states per account and per cash row, read on every sync and every few minutes between.
+    struct PortfolioSnapshot {
+        var accounts: [WSAccountRow] = []
+        var balances: [WSBalanceRow] = []
+        var margin: [WSMarginRow] = []
+    }
+
+    private static func slimAccounts(_ accounts: [[String: Any]]) -> [WSAccountRow] {
+        accounts.compactMap { a in
+            let id = J.str(a, "id")
+            if id.isEmpty { return nil }
+            let fin = J.dict(J.dict(a["financials"])["currentCombined"])
+            let (amt, _) = moneyAmount(fin, keys: ["netLiquidationValue", "netLiquidationValueV2"])
+            return WSAccountRow(id: id, nickname: J.str(a, "nickname"), currency: J.str(a, "currency"), netLiquidationValue: amt)
+        }
+    }
+
+    private static func fetchBalances(_ box: TokenBox, accountIds: [String]) async throws -> [WSBalanceRow] {
+        var out: [WSBalanceRow] = []
+        let ids = accountIds.filter { !$0.isEmpty }
+        var i = 0
+        while i < ids.count {
+            let chunk = Array(ids[i..<min(i + 20, ids.count)])
+            i += 20
+            let data = try await graphql(box, operation: "FetchAccountsWithBalance", variables: ["ids": chunk, "type": "TRADING"], query: qFetchAccountsWithBalance)
+            for acc in J.arr(data["accounts"]) {
+                let a = J.dict(acc)
+                let aid = J.str(a, "id")
+                for ca in J.arr(a["custodianAccounts"]) {
+                    let fin = J.dict(J.dict(ca)["financials"])
+                    let raw = fin["balance"]
+                    let bals: [Any] = (raw as? [Any]) ?? ((raw as? [String: Any]).map { [$0] } ?? [])
+                    for b in bals {
+                        let d = J.dict(b)
+                        out.append(WSBalanceRow(accountId: aid, securityId: J.str(d, "securityId"), quantity: J.num(d["quantity"], default: 0)))
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /// bagholder.parse_margin: a Money when available, the reason when not, nil when the account has no margin figures.
+    static func parseMargin(_ data: [String: Any]) -> WSMarginRow? {
+        let trading = J.dict(J.dict(J.dict(J.dict(J.dict(data["account"])["financials"])["current"])["marginV3"])["trading"])
+        guard let bp = trading["buyingPower"] as? [String: Any] else { return nil }
+        if J.str(bp, "__typename") == "BuyingPowerMetricAvailable" {
+            let total = J.dict(bp["total"])
+            let amount = J.num(total["amount"], default: Double.nan)
+            if amount.isNaN { return nil }
+            let ccy = J.str(total, "currency")
+            return WSMarginRow(accountId: "", buyingPower: amount, currency: ccy.isEmpty ? "CAD" : ccy, unavailable: "")
+        }
+        let reason = J.dict(bp["reason"])
+        var why = J.str(reason, "__typename")
+        if why.isEmpty { why = J.str(bp, "__typename") }
+        if why.isEmpty { why = "unavailable" }
+        let n = J.arr(reason["securities"]).count
+        if n > 0 { why += " (\(n) securities)" }
+        return WSMarginRow(accountId: "", buyingPower: nil, currency: "CAD", unavailable: why)
+    }
+
+    private static func fetchMargin(_ box: TokenBox, accountIds: [String]) async -> [WSMarginRow] {
+        var out: [WSMarginRow] = []
+        for aid in accountIds where !aid.isEmpty {
+            guard let data = try? await graphql(box, operation: "FetchAccountCurrentMarginBuyingPowerV2", variables: ["accountId": aid, "currency": "CAD"], query: qFetchAccountMarginBuyingPower),
+                  var row = parseMargin(data) else { continue }
+            row.accountId = aid
+            out.append(row)
+        }
+        return out
+    }
+
+    private static func portfolioSnapshot(_ box: TokenBox, _ accounts: [[String: Any]]) async -> PortfolioSnapshot {
+        let rows = slimAccounts(accounts)
+        let ids = rows.map(\.id)
+        let balances = (try? await fetchBalances(box, accountIds: ids)) ?? []
+        return PortfolioSnapshot(accounts: rows, balances: balances, margin: await fetchMargin(box, accountIds: ids))
+    }
+
+    /// The Portfolio figures between syncs: net liquidation values, cash balances and buying power.
+    static func refreshPortfolio(oauthCookie: String, wssdi: String?) async throws -> PortfolioSnapshot {
+        guard let oauthObj = jsonWithAccessToken(oauthCookie), let built = session(fromCookie: oauthCookie, wssdi: wssdi) else { throw WSPullError.noSession }
+        let box = TokenBox(sess: built, oauth: oauthObj)
+        await ensureClientId(box)
+        if tokenNeedsRefresh(box.sess) { try await refreshSession(box) }
+        if box.sess.identityCanonicalId.isEmpty {
+            var info: [String: Any]
+            do { info = try await tokenInfo(box.sess) } catch WSPullError.unauthorized { try await refreshSession(box); info = try await tokenInfo(box.sess) }
+            box.sess.identityCanonicalId = identityFrom(info)
+        }
+        if box.sess.identityCanonicalId.isEmpty { throw WSPullError.noSession }
+        let accounts = try await fetchAllAccounts(box, identityId: box.sess.identityCanonicalId)
+        return await portfolioSnapshot(box, accounts)
+    }
 
     private static func fetchAllAccounts(_ box: TokenBox, identityId: String) async throws -> [[String: Any]] {
         var accounts: [[String: Any]] = []

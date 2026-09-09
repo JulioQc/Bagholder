@@ -538,10 +538,50 @@ UPDATE_CHECK_HOURS = 1   # a release is a click away now, so the check is hourly
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-08.6"
+PROTOCOL = "2026-09-09.1"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
+query FetchAccountCurrentMarginBuyingPowerV2($accountId: ID!, $currency: Currency = CAD) {
+  account(id: $accountId) {
+    id
+    financials {
+      current {
+        id
+        marginV3 {
+          trading {
+            buyingPower(asCurrency: $currency) {
+              __typename
+              ... on BuyingPowerMetricAvailable {
+                total { amount currency __typename }
+                __typename
+              }
+              ... on BuyingPowerMetricUnavailable {
+                reason {
+                  __typename
+                  ... on UnavailableSecurities {
+                    securities { securityId status __typename }
+                    __typename
+                  }
+                }
+                __typename
+              }
+            }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}
+""".strip()
+
 QUERIES = {
+    "FetchAccountCurrentMarginBuyingPowerV2": Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER,
     "FetchSecurities": Q_FETCH_SECURITIES,
     "IdentityHistoricalFinancialsQuery": Q_IDENTITY_HISTORICAL_FINANCIALS,
     "FetchAccountHistoricalFinancials": Q_FETCH_ACCOUNT_HISTORICAL_FINANCIALS,
@@ -1258,6 +1298,8 @@ def save_accounts_snapshot(book):
     """Write accounts / balances / NAV. Never rebuilds the activity table."""
     store.replace_accounts(book.get("accounts") or [])
     store.replace_balances(book.get("balances") or [])
+    if "margin" in book:
+        store.replace_margin(book.get("margin") or [])
     store.upsert_nav(book.get("navHistory") or [])
     if book.get("syncedAt"):
         store.set_meta("synced_at", book["syncedAt"])
@@ -1995,6 +2037,85 @@ def fetch_balances(sess, account_ids):
     return balances
 
 
+def parse_margin(data):
+    """Wealthsimple's buying power for one account, as it answers: a Money when
+    available, the reason when not, None when the account has no margin figures."""
+    try:
+        trading = (((((data or {}).get("account") or {}).get("financials") or {}).get("current") or {}).get("marginV3") or {}).get("trading") or {}
+    except AttributeError:
+        return None
+    bp = trading.get("buyingPower")
+    if not isinstance(bp, dict):
+        return None
+    if bp.get("__typename") == "BuyingPowerMetricAvailable":
+        total = bp.get("total") or {}
+        amount = _num(total.get("amount"), None)
+        if amount is None:
+            return None
+        return {"buyingPower": amount, "currency": _s(total.get("currency")) or "CAD", "unavailable": ""}
+    reason = (bp.get("reason") or {})
+    why = _s(reason.get("__typename")) or _s(bp.get("__typename")) or "unavailable"
+    n = len(reason.get("securities") or []) if isinstance(reason.get("securities"), list) else 0
+    if n:
+        why += " (%d securities)" % n
+    return {"buyingPower": None, "currency": "CAD", "unavailable": why}
+
+
+def fetch_margin(sess, account_ids):
+    """One buying-power request per account; only accounts that answer are rows."""
+    rows = []
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for aid in account_ids or []:
+        if not aid:
+            continue
+        try:
+            data = graphql(sess, "FetchAccountCurrentMarginBuyingPowerV2", {"accountId": aid, "currency": "CAD"})
+        except Exception:
+            continue
+        parsed = parse_margin(data)
+        if parsed is None:
+            continue
+        parsed["accountId"] = aid
+        parsed["fetchedAt"] = now
+        rows.append(parsed)
+    return rows
+
+
+PORTFOLIO_REFRESH_MINUTES = 5
+
+
+def refresh_portfolio():
+    """Net liquidation values, cash balances and buying power, read again between
+    syncs so the Portfolio tiles move with the day. Never raises."""
+    with _lock:
+        if _state["syncing"] or not _state["connected"]:
+            return {"ok": False, "skipped": True}
+    try:
+        sess = load_session()
+        identity = _identity_from(sess or {})
+        if not sess or not sess.get("access_token") or not identity:
+            return {"ok": False, "skipped": True}
+        accounts = fetch_all_accounts(sess, identity)
+        ids = [a.get("id") for a in accounts if a.get("id")]
+        if not ids:
+            return {"ok": False, "skipped": True}
+        balances = fetch_balances(sess, ids)
+        margin = fetch_margin(sess, ids)
+        store.replace_accounts([slim_account(a) for a in accounts])
+        store.replace_balances(balances)
+        store.replace_margin(margin)
+        model.invalidate()
+        return {"ok": True, "accounts": len(ids), "balances": len(balances), "margin": len(margin)}
+    except Exception:
+        return {"ok": False, "skipped": True}
+
+
+def portfolio_loop():
+    """The Portfolio figures Wealthsimple states, every PORTFOLIO_REFRESH_MINUTES while connected."""
+    while not _stop.wait(60 * PORTFOLIO_REFRESH_MINUTES):
+        refresh_portfolio()
+
+
 def fetch_security(sess, security_id):
     sid = _s(security_id).strip()
     if not sid:
@@ -2335,6 +2456,7 @@ def run_sync(allow_refresh=True, force_activity=True):
             row["fifoId"] = pools.get(aid, aid)
         _set_sync_step("Fetching balances…")
         balances = fetch_balances(sess, list(acc_by_id.keys()))
+        margin = fetch_margin(sess, list(acc_by_id.keys()))
         _set_sync_step("Fetching equity history…")
         last_by = store.nav_last_dates()
         try:
@@ -2355,6 +2477,7 @@ def run_sync(allow_refresh=True, force_activity=True):
             {
                 "accounts": [slim_account(a) for a in accounts],
                 "balances": balances,
+                "margin": margin,
                 "navHistory": combined,
                 "syncedAt": synced,
             }
@@ -4108,6 +4231,7 @@ def main():
     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
     threading.Thread(target=check_for_update, name="bagholder-update-check", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
+    threading.Thread(target=portfolio_loop, name="bagholder-portfolio-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()
