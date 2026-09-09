@@ -488,7 +488,7 @@ function icon(name, opacity) {
 }
 function menuHtml() {
   const s = state.status;
-  const item = (name, label, act, o) => '<button' + (act ? ' data-act="' + act + '"' : "") + (o && o.disabled ? ' disabled title="Coming soon"' : "") + (o && o.cls ? ' class="' + o.cls + '"' : "") + (o && o.style ? ' style="' + o.style + '"' : "") + ">" + icon(name, o && o.cls === "primary" ? "1" : ".7") + esc(label) + "</button>";
+  const item = (name, label, act, o) => '<button' + (act ? ' data-act="' + act + '"' : "") + (o && o.disabled ? " disabled" : "") + (o && o.cls ? ' class="' + o.cls + '"' : "") + (o && o.style ? ' style="' + o.style + '"' : "") + ">" + icon(name, o && o.cls === "primary" ? "1" : ".7") + esc(label) + "</button>";
   return '<div class="menu elev-md">' +
     (s.connected ? item("sync", "Sync now", "sync", { cls: "primary" }) : item("link", "Connect Wealthsimple", "connect", { cls: "primary" })) +
     (s.connected ? item("key", "Refresh session", "refreshSession") : "") +
@@ -501,7 +501,7 @@ function menuHtml() {
     '<button data-act="themeMenu"' + (state.themeOpen ? ' class="open"' : "") + ">" + icon("palette") + 'Theme<span style="margin-left:auto;padding-left:28px;opacity:.6">' + esc((THEMES.find((t) => t[0] === state.theme) || THEMES[0])[1]) + "</span>" + icon("caret", ".5") + "</button>" +
     (state.themeOpen ? '<div class="menu sub">' + THEMES.map((t) => '<button data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "'" + (state.theme === t[0] ? ' class="primary"' : "") + '><span class="swatch" style="background:' + t[2] + '"></span>' + esc(t[1]) + (state.theme === t[0] ? '<span style="margin-left:auto;padding-left:24px">' + icon("check", "1") + "</span>" : "") + "</button>").join("") + "</div>" : "") +
     "</div>" +
-    (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
+    '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", s.connected || s.email ? { style: "color:var(--neg)" } : { disabled: true }) +
     "</div>";
 }
 function confirmDialogHtml() {
