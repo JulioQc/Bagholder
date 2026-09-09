@@ -728,7 +728,7 @@ class StoreTest(unittest.TestCase):
         bounds = bagholder.activity_sync_bounds()
         self.assertFalse(bounds["full_history"])
         self.assertTrue(bounds["start_date"])
-        self.assertEqual(bounds["start_date"][:10], "2024-06-15")
+        self.assertEqual(bounds["start_date"][:10], "2024-06-01", "fourteen days before the newest stored row")
 
         calls = []
 
@@ -759,7 +759,20 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         cond = calls[0]["condition"]
         self.assertIn("startDate", cond)
-        self.assertTrue(str(cond["startDate"]).startswith("2024-06-15"))
+        self.assertTrue(str(cond["startDate"]).startswith("2024-06-01"))
+
+    def test_daily_window_reaches_back_past_rows_filed_under_a_later_day(self):
+        """2026-09-08: a card purchase from the evening of the 8th was stored under the 9th (UTC),
+        so a window starting at the newest stored day skipped the dividend paid on the 8th."""
+        late = _ws_item()
+        late["occurredAt"] = "2026-09-09T01:11:38.000Z"
+        late["canonicalId"] = "ws-cid-card-0909"
+        late["id"] = "ws-card-0909"
+        store.apply_wealthsimple_mapped([bagholder.map_activity(late)])
+        bounds = bagholder.activity_sync_bounds()
+        self.assertEqual(bounds["start_date"], "2026-08-26")
+        cond = bagholder.activity_fetch_condition("acct-1", start_date=bounds["start_date"])
+        self.assertLess(cond["startDate"], "2026-09-08T04:00:00.000Z", "a dividend filed under the 8th is inside the window")
 
     def test_empty_table_full_history_omits_start_date(self):
         self.assertEqual(store.activity_count(), 0)
