@@ -184,7 +184,7 @@ const state = {
   status: { connected: false, syncing: false, capturing: false, lastSync: "", error: "", syncStep: "", email: "", activityCount: 0 },
   busy: "",
   notice: "",
-  dataOpen: false,
+  confirmOpen: "",
   modal: null,
   importReport: null,
   watch: null,
@@ -495,12 +495,14 @@ function menuHtml() {
     (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
     "</div>";
 }
-function dataDialogHtml() {
-  return '<div id="dataDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="data"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Clear data</h5>' +
-    '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">Deletes everything synced from Wealthsimple, your journal and the downloaded market data from this machine. Your Wealthsimple login stays.</div>' +
-    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeData">Cancel</button><button class="btn" data-act="clearData" style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (state.busy === "clearing" ? "disabled" : "") + ">" + (state.busy === "clearing" ? "Clearing…" : "Clear data") + "</button></div></div></div>";
+function confirmDialogHtml() {
+  const clear = state.confirmOpen === "clear";
+  const busy = state.busy === "clearing";
+  return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>' + (clear ? "Clear data" : "Disconnect") + "</h5>" +
+    '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (clear ? "Deletes everything synced from Wealthsimple, your journal and the downloaded market data from this machine. Your Wealthsimple login stays." : "Signs out of Wealthsimple on this machine. Your synced history stays.") + "</div>" +
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Cancel</button><button class="btn" data-act="' + (clear ? "clearData" : "disconnectNow") + '" style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (clear ? (busy ? "Clearing…" : "Clear data") : "Disconnect") + "</button></div></div></div>";
 }
-function openData() { state.menuOpen = false; state.dataOpen = true; render(); }
+function openData() { state.menuOpen = false; state.confirmOpen = "clear"; render(); }
 function modalShell(title, body, width) {
   return '<div id="modalDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="modal"><div class="card elev-md" style="width:' + (width || 440) + 'px;max-width:100%;padding:18px 20px;max-height:90vh;overflow:auto"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><h5>' + title + '</h5><button class="btn btn-icon btn-secondary" data-act="closeModal" aria-label="Close" style="margin-left:auto;width:28px;height:28px">×</button></div>' + body + "</div></div>";
 }
@@ -624,7 +626,7 @@ function clearData() {
   api("POST", "/api/data/clear", { journal: true, market: true }).then((r) => {
     state.busy = "";
     if (!r || !r.ok) { state.notice = (r && r.error) || "Could not clear data."; state.noticeKind = "err"; render(); return; }
-    state.dataOpen = false; state.sel = null; state.posSel = null; state.filters = EMPTY_FILTERS();
+    state.confirmOpen = ""; state.sel = null; state.posSel = null; state.filters = EMPTY_FILTERS();
     state.status.lastSync = "";
     loadModel(); pollStatus();
   });
@@ -1358,7 +1360,7 @@ function render() {
   const boxes = [...root.querySelectorAll(".scroll, .scroll-xy")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
   const focusId = document.activeElement ? document.activeElement.id : "";
   const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
-  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.dataOpen ? dataDialogHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
+  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
   if (focusId === "valueQuery" || focusId === "searchInput") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
@@ -1513,9 +1515,9 @@ function refreshSession() {
   state.menuOpen = false; state.busy = "refresh"; renderHeaderOnly();
   api("POST", "/api/refresh").then((r) => { state.busy = ""; state.notice = r && r.ok ? "Session refreshed" : ((r && r.error) || "Refresh failed"); state.noticeKind = r && r.ok ? "ok" : "err"; renderHeaderOnly(); pollStatus(); setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000); });
 }
-function disconnect() {
-  state.menuOpen = false;
-  if (!confirm("Disconnect Wealthsimple? Your synced history stays on this machine.")) { render(); return; }
+function disconnect() { state.menuOpen = false; state.confirmOpen = "disconnect"; render(); }
+function disconnectNow() {
+  state.confirmOpen = "";
   api("POST", "/api/disconnect").then(() => { state.status.connected = false; state.status.email = ""; pollStatus(); render(); });
 }
 
@@ -1573,8 +1575,9 @@ function act(name, arg, ev) {
     case "scanFolder": watchFolder(true); break;
     case "stopWatch": stopWatch(); break;
     case "theme": applyTheme(arg.theme); render(); break;
-    case "closeData": state.dataOpen = false; render(); break;
+    case "closeConfirm": state.confirmOpen = ""; render(); break;
     case "clearData": clearData(); break;
+    case "disconnectNow": disconnectNow(); break;
     case "grade": { const t = tradeById(arg.id); if (!t) break; saveJournal(arg.id, { grade: t.grade === arg.grade ? "" : arg.grade }); render(); break; }
     case "removeTag": { const t = tradeById(arg.id); if (!t) break; saveJournal(arg.id, { tags: (t.tags || []).filter((x) => x !== arg.tag) }); render(); break; }
     case "addTag": { const t = tradeById(arg.id); if (!t) break; _tagPick = true; if ((t.tags || []).indexOf(arg.tag) < 0) saveJournal(arg.id, { tags: (t.tags || []).concat([arg.tag]) }); state.tagDraft = ""; render(); const ti = document.getElementById("tagInput"); if (ti) ti.focus(); _tagPick = false; break; }
@@ -1611,7 +1614,7 @@ function bind() {
       act(el.dataset.act, arg, e);
       return;
     }
-    if (state.dataOpen && e.target.id === "dataDlg") { state.dataOpen = false; render(); return; }
+    if (state.confirmOpen && e.target.id === "confirmDlg") { state.confirmOpen = ""; render(); return; }
     if (state.modal && e.target.id === "modalDlg") { state.modal = null; render(); return; }
     if ((state.picker || state.menuOpen) && !e.target.closest("[data-pop]")) { state.picker = null; state.menuOpen = false; render(); }
   });
@@ -1628,14 +1631,14 @@ function bind() {
       return;
     }
     // Left and Right move between the tabs when nothing else has the keyboard
-    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.metaKey && !e.ctrlKey && !e.altKey && !state.picker && !state.menuOpen && !state.modal && !state.dataOpen &&
+    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.metaKey && !e.ctrlKey && !e.altKey && !state.picker && !state.menuOpen && !state.modal && !state.confirmOpen &&
         !(document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].indexOf(document.activeElement.tagName) >= 0)) {
       const pages = ["dashboard", "trades", "positions", "cashflow"];
       const j = pages.indexOf(state.page) + (e.key === "ArrowRight" ? 1 : -1);
       if (j >= 0 && j < pages.length) { e.preventDefault(); go(pages[j]); }
       return;
     }
-    if (e.key === "Escape") { if (state.dataOpen) { state.dataOpen = false; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); }
+    if (e.key === "Escape") { if (state.confirmOpen) { state.confirmOpen = ""; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); }
       // nothing open, nothing being typed: Escape clears the filters
       else if (filtersActive() && !(document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA"))) { act("clearAll"); }
       return; }
