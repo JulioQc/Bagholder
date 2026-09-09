@@ -1180,29 +1180,28 @@ struct CashflowScreen: View {
                     PnlBarsChart(months: cf.months.map { BHMonthBucket(key: $0.key, label: $0.label, value: $0.value, count: $0.count) }, pick: $distPick, color: t.accent,
                                  overlay: cf.months.map { interest[$0.key] ?? 0 })
                     if let m = picked {
+                        // as small as its four lines: labels in one column, values in the next
                         let intr = interest[m.key] ?? 0
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(m.label).font(.system(size: 11, weight: .medium)).foregroundStyle(t.ink55)
-                            readout("Distributions", BHFmt.money(m.value), t.ink)
-                            readout("Margin interest", BHFmt.money(intr > 0 ? -intr : 0), t.neg)
-                            readout("Net", BHFmt.signedMoney(m.value - intr), t.signed(m.value - intr))
+                        let rows: [(String, String, Color)] = [
+                            ("Distributions", BHFmt.money(m.value), t.accent300),
+                            ("Margin interest", BHFmt.money(intr > 0 ? -intr : 0), t.neg),
+                            ("Net", BHFmt.signedMoney(m.value - intr), t.signed(m.value - intr)),
+                        ]
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(m.label).font(.system(size: 10, weight: .medium)).foregroundStyle(t.ink55)
+                            HStack(alignment: .top, spacing: 6) {
+                                VStack(alignment: .leading, spacing: 1) { ForEach(rows, id: \.0) { r in Text(r.0).font(.system(size: 10)).foregroundStyle(t.ink55) } }
+                                VStack(alignment: .trailing, spacing: 1) { ForEach(rows, id: \.0) { r in Text(r.1).font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundStyle(r.2) } }
+                            }
                         }
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(t.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(t.hair, lineWidth: 1))
-                        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+                        .padding(.horizontal, 7).padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(t.surface))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(t.hair, lineWidth: 1))
+                        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
                         .allowsHitTesting(false)
                     }
                 }
             }
-        }
-    }
-
-    private func readout(_ label: String, _ value: String, _ color: Color) -> some View {
-        HStack(spacing: 8) {
-            Text(label).font(.system(size: 11)).foregroundStyle(t.ink55)
-            Spacer(minLength: 0)
-            Text(value).font(.system(size: 12, weight: .semibold)).monospacedDigit().foregroundStyle(color)
         }
     }
 

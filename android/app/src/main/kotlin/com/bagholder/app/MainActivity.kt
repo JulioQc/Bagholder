@@ -875,15 +875,6 @@ fun PortfolioScreen(chrome: Chrome, onHolding: (String) -> Unit) {
 }
 
 @Composable
-private fun Readout(label: String, value: String, color: Color) {
-    val t = LocalTheme.current
-    Row(Modifier.width(170.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 11.sp, color = t.ink55)
-        Text(value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = color)
-    }
-}
-
-@Composable
 private fun Legend(color: Color, label: String) {
     val t = LocalTheme.current
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1044,16 +1035,23 @@ fun CashflowScreen(chrome: Chrome) {
                         PnlBarsChart(cf.months.map { m -> com.bagholder.model.MonthBucket(m.key, m.label).apply { value = m.value; count = m.count } }, distPick, { distPick = it }, color = t.accent,
                             overlay = cf.months.map { interest[it.key] ?: 0.0 })
                         if (picked != null) {
+                            // as small as its four lines: labels in one column, values in the next
                             val intr = interest[picked.key] ?: 0.0
+                            val rows = listOf(
+                                Triple("Distributions", Fmt.money(picked.value), t.accent300),
+                                Triple("Margin interest", Fmt.money(if (intr > 0) -intr else 0.0), t.neg),
+                                Triple("Net", Fmt.signedMoney(picked.value - intr), t.signed(picked.value - intr)),
+                            )
                             Column(
-                                Modifier.align(Alignment.TopStart).shadow(8.dp, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)).background(t.surface)
-                                    .border(1.dp, t.hair, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                                Modifier.align(Alignment.TopStart).shadow(6.dp, RoundedCornerShape(6.dp)).clip(RoundedCornerShape(6.dp)).background(t.surface)
+                                    .border(1.dp, t.hair, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 5.dp),
+                                verticalArrangement = Arrangement.spacedBy(1.dp),
                             ) {
-                                Text(picked.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = t.ink55)
-                                Readout("Distributions", Fmt.money(picked.value), t.ink)
-                                Readout("Margin interest", Fmt.money(if (intr > 0) -intr else 0.0), t.neg)
-                                Readout("Net", Fmt.signedMoney(picked.value - intr), t.signed(picked.value - intr))
+                                Text(picked.label, fontSize = 10.sp, fontWeight = FontWeight.Medium, color = t.ink55)
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) { for (r in rows) Text(r.first, fontSize = 10.sp, color = t.ink55) }
+                                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(1.dp)) { for (r in rows) Text(r.second, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = r.third) }
+                                }
                             }
                         }
                     }
