@@ -1218,6 +1218,21 @@ class InAppUpdateTest(unittest.TestCase):
             self.assertFalse((Path(home) / "update-pending").exists())
             self.assertFalse((Path(home) / "previous").exists())
 
+    def test_release_assets_take_the_web_archive_by_name_and_ignore_the_rest(self):
+        import bagholder
+        def rel(*names):
+            return {"tag_name": "v2.0.0", "assets": [{"name": n, "browser_download_url": "https://x/" + n} for n in names]}
+        # the platform-named archive, with the Android build beside it
+        got = bagholder.release_assets(rel("bagholder-v2.0.0-android.apk", "bagholder-v2.0.0-web.zip", "bagholder-v2.0.0-web.zip.sha256"))
+        self.assertEqual(got, {"zip": "https://x/bagholder-v2.0.0-web.zip", "sha": "https://x/bagholder-v2.0.0-web.zip.sha256"})
+        # a release from before the name carried a platform
+        got = bagholder.release_assets(rel("bagholder-v2.0.0.zip", "bagholder-v2.0.0.zip.sha256"))
+        self.assertEqual(got, {"zip": "https://x/bagholder-v2.0.0.zip", "sha": "https://x/bagholder-v2.0.0.zip.sha256"})
+        # the web archive wins when both names are present; nothing without its checksum
+        got = bagholder.release_assets(rel("bagholder-v2.0.0.zip", "bagholder-v2.0.0.zip.sha256", "bagholder-v2.0.0-web.zip", "bagholder-v2.0.0-web.zip.sha256"))
+        self.assertEqual(got["zip"], "https://x/bagholder-v2.0.0-web.zip")
+        self.assertEqual(bagholder.release_assets(rel("bagholder-v2.0.0-web.zip", "bagholder-v2.0.0-android.apk")), {})
+
     def test_release_update_checks_the_archive_before_swapping_files(self):
         import bagholder, zipfile, hashlib
         from unittest import mock

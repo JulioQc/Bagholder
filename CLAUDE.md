@@ -41,11 +41,11 @@ Versions are GitHub releases tagged `vMAJOR.MINOR.PATCH` (semantic versioning); 
 
 To release: bump `APP_VERSION` in `bagholder.py` in the last PR going into the release, merge, then build the archive the in-app updater installs and publish it with the release:
   ```
-  git archive --format=zip -o bagholder-vX.Y.Z.zip vX.Y.Z   # after tagging, or use origin/master and tag on create
-  shasum -a 256 bagholder-vX.Y.Z.zip > bagholder-vX.Y.Z.zip.sha256
-  gh release create vX.Y.Z bagholder-vX.Y.Z.zip bagholder-vX.Y.Z.zip.sha256 --target master --title vX.Y.Z --notes "..."
+  git archive --format=zip -o bagholder-vX.Y.Z-web.zip vX.Y.Z   # after tagging, or use origin/master and tag on create
+  shasum -a 256 bagholder-vX.Y.Z-web.zip > bagholder-vX.Y.Z-web.zip.sha256
+  gh release create vX.Y.Z bagholder-vX.Y.Z-web.zip bagholder-vX.Y.Z-web.zip.sha256 --target master --title vX.Y.Z --notes "..."
   ```
-  with notes listing the merged PRs. The archive must be named exactly `bagholder-vX.Y.Z.zip` with the `.sha256` beside it, or running copies fall back to an "Update available" link. Master may carry unreleased features between releases; a release collects everything merged since the last tag, so the bump is decided by the biggest change in that set, not by the last PR alone. Running copies check the latest release at start and hourly, and show an "Update to vX.Y.Z" button when it is newer.
+  with notes listing the merged PRs. Assets say what they are: the web archive is named exactly `bagholder-vX.Y.Z-web.zip` with its `.sha256` beside it, or running copies fall back to an "Update available" link; the Android build, when there is one, goes on the same page as `bagholder-vX.Y.Z-android.apk` (`MOBILE.md`). Copies older than the release that taught the updater the `-web` name look for `bagholder-vX.Y.Z.zip`, which is why the release carrying that change ships under the old name and the next one takes `-web`. Master may carry unreleased features between releases; a release collects everything merged since the last tag, so the bump is decided by the biggest change in that set, not by the last PR alone. Running copies check the latest release at start and hourly, and show an "Update to vX.Y.Z" button when it is newer.
 
 ## Mobile
 
