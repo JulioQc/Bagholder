@@ -10,7 +10,7 @@ import os
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
@@ -526,13 +526,26 @@ def newest_ws_occurred_at():
             conn.close()
 
 
+PULL_OVERLAP_DAYS = 14
+
+
 def incremental_start_date():
-    """Date bound for a daily pull. Empty table must not call this for a full walk."""
+    """Date bound for a daily pull: PULL_OVERLAP_DAYS before the newest stored
+    Wealthsimple row. Wealthsimple files a row under the day it belongs to, not
+    the day it appears: a dividend paid on the 8th can show up on the 9th, after
+    a card purchase from the evening of the 8th has already been stored under
+    the 9th. A window starting at the newest stored day would never see it.
+    Rows already stored are dropped by canonical id, so the overlap costs a few
+    pages and nothing else. Empty table must not call this for a full walk."""
     newest = newest_ws_occurred_at()
     if not newest:
         return ""
     day = newest.split("T", 1)[0][:10]
-    return day
+    try:
+        start = datetime.strptime(day, "%Y-%m-%d") - timedelta(days=PULL_OVERLAP_DAYS)
+    except ValueError:
+        return day
+    return start.strftime("%Y-%m-%d")
 
 
 def _in_activity_pull_tz(dt):
