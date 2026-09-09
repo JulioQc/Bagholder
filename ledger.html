@@ -109,6 +109,9 @@ textarea.input{resize:none;line-height:1.5}
 .menu button.primary{color:var(--accent-300);font-weight:500}
 .menu button[disabled]{opacity:.4;cursor:default}
 .menu .sep{height:1px;background:rgba(var(--ink-rgb),.1);margin:4px 2px}
+.menu button.open{background:rgba(var(--ink-rgb),var(--hover))}
+.menu .sub{top:0;right:calc(100% + 8px);z-index:6}
+.menu .swatch{width:16px;height:16px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1.5px rgba(var(--ink-rgb),.3)}
 .tabbtn{background:transparent;border:0;cursor:pointer;font:500 13px Inter,system-ui,sans-serif;padding:11px 0;flex:none;white-space:nowrap;color:var(--ink60)}
 .tabbtn:hover{color:var(--accent-300)}
 .tabbtn.on{color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)}
@@ -185,13 +188,14 @@ const state = {
   busy: "",
   notice: "",
   confirmOpen: "",
+  themeOpen: false,
   modal: null,
   importReport: null,
   watch: null,
   tradeForm: null,
   theme: "nocturne",
 };
-const THEMES = [["nocturne", "Nocturne"], ["midnight", "Midnight"], ["light", "Light"]];
+const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
 const PROTOCOL = "2026-09-08.6"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
@@ -465,6 +469,9 @@ function headerHtml() {
     "</div></div></div>";
 }
 const ICONS = {
+  palette: "M186.8 213.8A104.0 104.0 0 1 1 231.8 133.9A46.0 46.0 0 0 0 186.8 213.8ZM214.3 110.6A88.0 88.0 0 1 0 157.7 210.8A62.0 62.0 0 0 1 214.3 110.6ZM84 132m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM104 84m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM152 68m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM176 92m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0Z",
+  caret: "M181.66 133.66l-80 80a8 8 0 0 1-11.32-11.32L164.69 128 90.34 53.66a8 8 0 0 1 11.32-11.32l80 80a8 8 0 0 1 0 11.32Z",
+  check: "M229.66 77.66l-128 128a8 8 0 0 1-11.32 0l-56-56a8 8 0 0 1 11.32-11.32L96 188.69 218.34 66.34a8 8 0 0 1 11.32 11.32Z",
   sync: "M232 128a104 104 0 0 1-208 0 104 104 0 0 1 176-75.5V32a8 8 0 0 1 16 0v40a8 8 0 0 1-8 8h-40a8 8 0 0 1 0-16h21.8A88 88 0 1 0 216 128a8 8 0 0 1 16 0Z",
   key: "M216.6 49.9A56 56 0 0 0 128 96a55.6 55.6 0 0 0 3.6 19.8L36.7 210.6A16 16 0 0 0 32 222v18a16 16 0 0 0 16 16h32a8 8 0 0 0 8-8v-16h16a8 8 0 0 0 8-8v-16h16a8 8 0 0 0 5.7-2.3l14.5-14.5A56 56 0 0 0 216.6 49.9ZM160 112a16 16 0 1 1 16-16 16 16 0 0 1-16 16Z",
   export: "M74.3 85.7a8 8 0 0 1 0-11.4l48-48a8 8 0 0 1 11.4 0l48 48a8 8 0 0 1-11.4 11.4L136 51.3V152a8 8 0 0 1-16 0V51.3L85.7 85.7a8 8 0 0 1-11.4 0ZM224 144v64a16 16 0 0 1-16 16H48a16 16 0 0 1-16-16v-64a8 8 0 0 1 16 0v64h160v-64a8 8 0 0 1 16 0Z",
@@ -490,8 +497,10 @@ function menuHtml() {
     item("folder", "Load folder", "openFolder") +
     item("export", "Export trades CSV", "exportCsv") +
     item("trash", "Clear data", "openData") +
-    '<div class="sep"></div><div style="display:flex;align-items:center;gap:6px;padding:5px 9px 4px"><span class="lbl" style="margin-right:auto">Theme</span>' +
-    THEMES.map((t) => '<button class="pill' + (state.theme === t[0] ? " on" : "") + '" data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "' style=\"padding:3px 9px;font-size:11.5px;width:auto\">" + t[1] + "</button>").join("") + "</div>" +
+    '<div class="sep"></div><div style="position:relative">' +
+    '<button data-act="themeMenu"' + (state.themeOpen ? ' class="open"' : "") + ">" + icon("palette") + 'Theme<span style="margin-left:auto;padding-left:28px;opacity:.6">' + esc((THEMES.find((t) => t[0] === state.theme) || THEMES[0])[1]) + "</span>" + icon("caret", ".5") + "</button>" +
+    (state.themeOpen ? '<div class="menu sub">' + THEMES.map((t) => '<button data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "'" + (state.theme === t[0] ? ' class="primary"' : "") + '><span class="swatch" style="background:' + t[2] + '"></span>' + esc(t[1]) + (state.theme === t[0] ? '<span style="margin-left:auto;padding-left:24px">' + icon("check", "1") + "</span>" : "") + "</button>").join("") + "</div>" : "") +
+    "</div>" +
     (s.connected ? '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", { style: "color:var(--neg)" }) : "") +
     "</div>";
 }
@@ -1556,7 +1565,8 @@ function act(name, arg, ev) {
     case "preset": setFilters({ preset: f.preset === arg.preset ? "all" : arg.preset, years: [], from: "", to: "" }); break;
     case "rangeOp": f.ranges[arg.key].op = arg.op; if (f.ranges[arg.key].v != null) setFilters({}); else render(); break;
     case "rangeStep": f.ranges[arg.key].v = String(f.ranges[arg.key].v) === String(arg.v) ? null : arg.v; setFilters({}); break;
-    case "menu": state.menuOpen = !state.menuOpen; state.picker = null; render(); break;
+    case "menu": state.menuOpen = !state.menuOpen; state.themeOpen = false; state.picker = null; render(); break;
+    case "themeMenu": state.themeOpen = !state.themeOpen; render(); break;
     case "sync": syncNow(); break;
     case "connect": connect(); break;
     case "cancelConnect": cancelConnect(); break;
@@ -1574,7 +1584,7 @@ function act(name, arg, ev) {
     case "watchFolder": watchFolder(false); break;
     case "scanFolder": watchFolder(true); break;
     case "stopWatch": stopWatch(); break;
-    case "theme": applyTheme(arg.theme); render(); break;
+    case "theme": applyTheme(arg.theme); state.themeOpen = false; render(); break;
     case "closeConfirm": state.confirmOpen = ""; render(); break;
     case "clearData": clearData(); break;
     case "disconnectNow": disconnectNow(); break;
