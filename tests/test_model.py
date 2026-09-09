@@ -2300,11 +2300,23 @@ class ServerTest(unittest.TestCase):
         calls = []
         fake = self._stub_http({"_http_status": 401, "error": "invalid_grant"}, calls)
         with mock.patch.object(bagholder, "_http_json", fake), mock.patch.object(bagholder, "run_sync", lambda *a, **k: True):
-            result = bagholder.capture_tokens({"access_token": "a1", "refresh_token": "r1", "client_id": "client-1"})
+            result = bagholder.capture_tokens({"access_token": "a1", "refresh_token": "r-dead", "client_id": "client-1"})
         self.assertFalse(result["ok"])
-        self.assertIn("invalid_grant", result["error"])
+        self.assertEqual(result["error"], bagholder.REFUSED_LOGIN_MESSAGE)
         self.assertIsNone(bagholder.load_session(), "a refused capture is not saved")
         self.assertFalse(bagholder.status_payload()["connected"])
+
+    def test_a_refused_token_is_never_posted_again(self):
+        bagholder.save_session({"access_token": "a1", "refresh_token": "r-dead-2", "client_id": "client-1"})
+        calls = []
+        fake = self._stub_http({"_http_status": 401, "error": "invalid_grant"}, calls)
+        with mock.patch.object(bagholder, "_http_json", fake):
+            first = bagholder.refresh_session(bagholder.load_session())
+            second = bagholder.refresh_session(bagholder.load_session())
+        self.assertEqual((first, second), (False, False))
+        self.assertEqual(len([c for c in calls if c[0] == "POST"]), 1, "the loop's next tries do not post the dead token")
+        self.assertEqual(bagholder.status_payload()["error"], bagholder.REFUSED_LOGIN_MESSAGE)
+        self.assertIsNotNone(bagholder.load_session(), "the file stays; Disconnect or Connect replaces it")
 
     def test_import_watch_and_manual_trade_routes(self):
         status, out = self._post("/api/import", {"name": "activities.csv", "text": CANONICAL_CSV})

@@ -1526,10 +1526,7 @@ class WealthsimpleHttpTest(unittest.TestCase):
         ):
             ok = bagholder.refresh_session(sess)
         self.assertFalse(ok)
-        self.assertEqual(
-            bagholder._state["error"],
-            "Wealthsimple token refresh HTTP 400 invalid_grant",
-        )
+        self.assertEqual(bagholder._state["error"], bagholder.REFUSED_LOGIN_MESSAGE)
         self.assertTrue(bagholder.SESSION_PATH.exists())
         saved = bagholder.load_session()
         self.assertEqual(saved.get("refresh_token"), "r")
@@ -1539,7 +1536,7 @@ class WealthsimpleHttpTest(unittest.TestCase):
         with mock.patch.object(bagholder, "_http_json", return_value={"error": "invalid_grant"}):
             ok = bagholder.refresh_session(sess)
         self.assertFalse(ok)
-        self.assertEqual(bagholder._state["error"], "invalid_grant")
+        self.assertEqual(bagholder._state["error"], bagholder.REFUSED_LOGIN_MESSAGE)
 
     def test_ensure_fresh_token_sets_error_on_failed_refresh(self):
         sess = {"refresh_token": "r", "expires_at": time_now_minus()}

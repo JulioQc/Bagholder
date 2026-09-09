@@ -682,8 +682,9 @@ def _is_code_change(item):
 
 def set_home(path):
     """Point session + SQLite paths at a directory (used by tests)."""
-    global HOME, SESSION_PATH, CLIENT_ID_PATH, UA_PATH
+    global HOME, SESSION_PATH, CLIENT_ID_PATH, UA_PATH, _refused_refresh_token
     HOME = Path(path)
+    _refused_refresh_token = None
     SESSION_PATH = HOME / "session.json"
     CLIENT_ID_PATH = HOME / "client_id"
     UA_PATH = HOME / "user_agent"
@@ -1234,6 +1235,8 @@ def save_session(sess):
 
 def delete_session_and_book():
     """Drop the login session only. Stored activity rows stay in SQLite."""
+    global _refused_refresh_token
+    _refused_refresh_token = None
     with _lock:
         try:
             SESSION_PATH.unlink()
@@ -1475,9 +1478,14 @@ def _oauth_error_code(data):
     return _public_sync_error(err)
 
 
+REFUSED_LOGIN_MESSAGE = "Wealthsimple no longer accepts the saved login. Choose Connect Wealthsimple."
+
+
 def _refresh_failure_message(data):
     status = (data or {}).get("_http_status")
     oauth_err = _oauth_error_code(data)
+    if oauth_err == "invalid_grant":
+        return REFUSED_LOGIN_MESSAGE
     parts = []
     if status:
         parts.append("Wealthsimple token refresh HTTP %s" % status)
@@ -1503,6 +1511,7 @@ def _expires_at_as_timestamp(data):
 
 
 _refresh_lock = threading.Lock()
+_refused_refresh_token = None  # a token Wealthsimple answered invalid_grant to; never posted again this run
 
 
 def refresh_session(sess, adopt=True):
@@ -1524,6 +1533,9 @@ def refresh_session(sess, adopt=True):
             if current.get("access_token") and current.get("refresh_token") and current.get("refresh_token") != rt:
                 sess.update(current)
                 return True
+        if rt == _refused_refresh_token:
+            _set_public_error(REFUSED_LOGIN_MESSAGE)
+            return False
         return _refresh_session_locked(sess, rt)
 
 
@@ -1546,6 +1558,9 @@ def _refresh_session_locked(sess, rt):
     )
     data = _http_json("POST", OAUTH + "/token", body, headers)
     if not data or not data.get("access_token"):
+        if _oauth_error_code(data) == "invalid_grant":
+            global _refused_refresh_token
+            _refused_refresh_token = rt
         _set_public_error(_refresh_failure_message(data))
         return False
     sess["access_token"] = data["access_token"]
