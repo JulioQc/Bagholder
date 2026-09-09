@@ -510,7 +510,7 @@ extension BHModel {
 
     // MARK: the Cashflow page for one filter set
 
-    static func cashflowView(_ base: BHBase, _ f: BHFilters, _ positionsAll: [BHPosition], marginUsed: Double = 0) -> BHCashflowView {
+    static func cashflowView(_ base: BHBase, _ f: BHFilters, _ positionsAll: [BHPosition], marginUsed: Double = 0, hasMargin: Bool = true) -> BHCashflowView {
         let today = base.today
         let accts = f.lists["account"] ?? []
         let symbolsF = f.lists["symbol"] ?? []
@@ -679,11 +679,20 @@ extension BHModel {
         var monthsInScope = keys.filter { bucket[$0]!.n > 0 }.count
         if monthsInScope == 0 { monthsInScope = 1 }
         tiles.append(BHTile(label: "All time", total: total, perMonth: total / Double(monthsInScope), count: recs.count))
-        // margin used is the Portfolio tab's figure; under it the average margin interest per charged month
-        let charges = everything.filter { $0.kind == "Interest charge" }
-        let chargeMonths = Set(charges.map { String($0.date.prefix(7)) }).count
-        let charged = charges.reduce(0.0) { $0 - $1.amountCad }
-        tiles.append(BHTile(label: "Margin used", marginUsed: marginUsed, interestPerMonth: chargeMonths > 0 ? charged / Double(chargeMonths) : 0, interestMonths: chargeMonths))
+        if hasMargin {
+            // margin used is the Portfolio tab's figure; under it the average margin interest per charged month
+            let charges = everything.filter { $0.kind == "Interest charge" }
+            let chargeMonths = Set(charges.map { String($0.date.prefix(7)) }).count
+            let charged = charges.reduce(0.0) { $0 - $1.amountCad }
+            tiles.append(BHTile(label: "Margin used", marginUsed: marginUsed, interestPerMonth: chargeMonths > 0 ? charged / Double(chargeMonths) : 0, interestMonths: chargeMonths))
+        } else {
+            // without a margin account: the trailing twelve months, averaged over the months that paid
+            let since = BHModel.shiftDate(today, -365)
+            let window = recs.filter { $0.date > since && $0.date <= today }
+            let sm = window.reduce(0.0) { $0 + $1.amountCad }
+            let paid = max(1, Set(window.map { String($0.date.prefix(7)) }).count)
+            tiles.append(BHTile(label: "Last 12 months", total: sm, perMonth: sm / Double(paid), count: window.count))
+        }
         tiles.append(BHTile(label: "Yield on cost", yield: basisAll != 0 ? annualAll / basisAll : nil, projected: annualAll / 12, earned: earnedAll, book: basisAll))
         let other = everything.filter { $0.kind != "Dividend" }
         var v = BHCashflowView()
@@ -765,7 +774,7 @@ extension BHModel {
             mv: positions.reduce(0.0) { $0 + ($1.short ? -$1.mv : $1.mv) },
             unreal: positions.reduce(0.0) { $0 + $1.unreal })
         v.portfolio = portfolioView(base, f, positions)
-        v.cashflow = cashflowView(base, f, positionsAll, marginUsed: v.portfolio.marginUsed)
+        v.cashflow = cashflowView(base, f, positionsAll, marginUsed: v.portfolio.marginUsed, hasMargin: v.portfolio.hasMargin)
         v.unmatched = base.unmatched
         return v
     }
@@ -796,12 +805,29 @@ extension BHModel {
             used[ccy, default: 0.0] += -b.quantity
         }
         out.marginUsed = used.reduce(0.0) { $0 + cad($1.value, $1.key) }
+        // the positive cash balances, the other side of the same rows
+        var cashBy: [String: Double] = [:]
+        for b in base.balances {
+            guard ids.contains(b.accountId), let ccy = base.cashCurrencies[b.securityId], b.quantity > 0 else { continue }
+            cashBy[ccy, default: 0.0] += b.quantity
+        }
+        out.cash = cashBy.reduce(0.0) { $0 + cad($1.value, $1.key) }
+        out.cashPct = (out.nav ?? 0) != 0 ? out.cash / out.nav! : nil
+        // the day's change: each quoted position's, summed, over what those positions were worth at the previous close
+        let quoted = positions.filter { $0.dayChange != nil }
+        if !quoted.isEmpty {
+            let dc = quoted.reduce(0.0) { $0 + cad($1.dayChange!, $1.currency) }
+            let prev = quoted.reduce(0.0) { $0 + cad($1.short ? -$1.mv : $1.mv, $1.currency) } - dc
+            out.dayChange = dc
+            out.dayChangePct = prev != 0 ? dc / prev : nil
+        }
         out.marginUsedBy = used.mapValues { ($0 * 100).rounded() / 100 }
         out.marginUsedPct = out.marketValue != 0 ? out.marginUsed / out.marketValue : nil
         var avail: [Double] = []
         var unavailable: [String] = []
         // only a margin account's buying power is margin available; any other row is cash to buy with
         let marginIds = Set(accounts.filter { $0.type.uppercased().contains("MARGIN") }.map { $0.id })
+        out.hasMargin = !marginIds.isEmpty
         for m in base.margin where marginIds.contains(m.accountId) {
             if let bp = m.buyingPower { avail.append(cad(bp, m.currency.isEmpty ? "CAD" : m.currency)) }
             else { unavailable.append(nameOf[m.accountId] ?? m.accountId) }

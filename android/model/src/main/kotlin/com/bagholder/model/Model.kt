@@ -169,6 +169,9 @@ class Portfolio {
     var marginUsedPct: Double? = null
     var availableMargin: Double? = null
     var availableMarginUnavailable: List<String> = emptyList()
+    var hasMargin = false
+    var cash = 0.0
+    var cashPct: Double? = null; var dayChange: Double? = null; var dayChangePct: Double? = null
 }
 
 class CashRow {

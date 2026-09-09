@@ -5,22 +5,130 @@
       "label": "S&P 500"
     },
     "bySymbol": [],
-    "cashflowCount": 0,
-    "cashflowHoldings": [],
-    "cashflowMonths": [],
-    "cashflowSkipped": [],
-    "cashflowTiles": [
+    "cashflowCount": 3,
+    "cashflowHoldings": [
       {
-        "count": 0,
-        "label": "2024",
-        "perMonth": 0.0,
-        "total": 0
+        "all": 35.0,
+        "annual": 30.0,
+        "exPast": false,
+        "freq": 2,
+        "freqVerified": true,
+        "nextExDate": "",
+        "nextPayDate": "2025-12-01",
+        "payPast": true,
+        "per": 1.5,
+        "qty": 10.0,
+        "symbol": "AAA",
+        "ttm": 25.0,
+        "yoc": 0.3,
+        "ytd": 0
+      }
+    ],
+    "cashflowMonths": [
+      {
+        "count": 1,
+        "key": "2024-12",
+        "label": "Dec '24",
+        "value": 10.0
       },
       {
         "count": 0,
+        "key": "2025-01",
+        "label": "Jan '25",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2025-02",
+        "label": "Feb '25",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2025-03",
+        "label": "Mar '25",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2025-04",
+        "label": "Apr '25",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2025-05",
+        "label": "May '25",
+        "value": 0.0
+      },
+      {
+        "count": 1,
+        "key": "2025-06",
+        "label": "Jun '25",
+        "value": 10.0
+      },
+      {
+        "count": 0,
+        "key": "2025-07",
+        "label": "Jul '25",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2025-08",
+        "label": "Aug '25",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2025-09",
+        "label": "Sep '25",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2025-10",
+        "label": "Oct '25",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2025-11",
+        "label": "Nov '25",
+        "value": 0.0
+      },
+      {
+        "count": 1,
+        "key": "2025-12",
+        "label": "Dec '25",
+        "value": 15.0
+      },
+      {
+        "count": 0,
+        "key": "2026-01",
+        "label": "Jan '26",
+        "value": 0.0
+      },
+      {
+        "count": 0,
+        "key": "2026-02",
+        "label": "Feb '26",
+        "value": 0.0
+      }
+    ],
+    "cashflowSkipped": [],
+    "cashflowTiles": [
+      {
+        "count": 1,
+        "label": "2024",
+        "perMonth": 10.0,
+        "total": 10.0
+      },
+      {
+        "count": 2,
         "label": "2025",
-        "perMonth": 0.0,
-        "total": 0
+        "perMonth": 12.5,
+        "total": 25.0
       },
       {
         "count": 0,
@@ -29,26 +137,26 @@
         "total": 0
       },
       {
-        "count": 0,
+        "count": 3,
         "label": "All time",
-        "perMonth": 0.0,
-        "total": 0
+        "perMonth": 11.666667,
+        "total": 35.0
       },
       {
-        "interestMonths": 0,
-        "interestPerMonth": 0.0,
-        "label": "Margin used",
-        "marginUsed": 315.0
+        "count": 2,
+        "label": "Last 12 months",
+        "perMonth": 12.5,
+        "total": 25.0
       },
       {
-        "book": 0,
-        "earned": 0,
+        "book": 100.0,
+        "earned": 25.0,
         "label": "Yield on cost",
-        "projected": 0.0,
-        "yield": null
+        "projected": 2.5,
+        "yield": 0.3
       }
     ],
-    "cashflowTotal": 0,
+    "cashflowTotal": 35.0,
     "equity": {
       "annualized": {
         "count": 0,
@@ -110,6 +218,7 @@
     "monthly": [],
     "options": {
       "accounts": [
+        "Cashflow",
         "Kids",
         "Trading"
       ],
@@ -142,25 +251,20 @@
           "value": 120.0
         }
       ],
-      "availableMargin": 700.0,
-      "availableMarginUnavailable": [
-        "Kids"
-      ],
-      "cash": 50.0,
-      "cashPct": 0.025974,
+      "availableMargin": null,
+      "availableMarginUnavailable": [],
+      "cash": 315.0,
+      "cashPct": 0.1575,
       "costBasis": 250.0,
-      "dayChange": 5.0,
-      "dayChangePct": 0.043478,
-      "hasMargin": true,
-      "marginUsed": 315.0,
-      "marginUsedBy": {
-        "CAD": 300.0,
-        "USD": 10.0
-      },
-      "marginUsedPct": 0.913043,
+      "dayChange": -2.5,
+      "dayChangePct": -0.007194,
+      "hasMargin": false,
+      "marginUsed": 0,
+      "marginUsedBy": {},
+      "marginUsedPct": 0.0,
       "marketValue": 345.0,
-      "nav": 1925.0,
-      "navAccounts": 4,
+      "nav": 2000.0,
+      "navAccounts": 2,
       "positionCount": 2,
       "unrealized": 95.0,
       "unrealizedPct": 0.38
@@ -177,8 +281,8 @@
         "fills": [
           "BUY"
         ],
-        "grade": "B",
-        "held": 27,
+        "grade": "",
+        "held": 392,
         "id": "rt:b1",
         "kind": "Shares",
         "qty": 10.0,
@@ -191,13 +295,13 @@
         "avg": 20.0,
         "cost": 100.0,
         "currency": "USD",
-        "dayChange": null,
+        "dayChange": -5.0,
         "exchange": "",
         "fills": [
           "BUY"
         ],
         "grade": "",
-        "held": 26,
+        "held": 391,
         "id": "rt:b2",
         "kind": "Shares",
         "qty": 5.0,
@@ -216,15 +320,7 @@
     "years": []
   },
   "filters": {},
-  "journal": {
-    "rt:b1": {
-      "grade": "B",
-      "tags": [
-        "core"
-      ],
-      "thesis": "hold"
-    }
-  },
+  "journal": {},
   "market": {
     "benchmark": {},
     "fx": {
@@ -237,7 +333,9 @@
         "priceChange": 0.5
       },
       "BBB": {
-        "price": 30.0
+        "percentChange": -3.2,
+        "price": 30.0,
+        "priceChange": -1.0
       }
     }
   },
@@ -248,36 +346,14 @@
         "id": "acct-1",
         "netLiquidationValue": 1500.0,
         "nickname": "Trading",
-        "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"
+        "unifiedAccountType": "SELF_DIRECTED_TFSA"
       },
       {
         "currency": "CAD",
         "id": "acct-2",
-        "netLiquidationValue": 400.0,
+        "netLiquidationValue": 500.0,
         "nickname": "Kids",
-        "unifiedAccountType": "SELF_DIRECTED_JOINT_NON_REGISTERED_MARGIN"
-      },
-      {
-        "currency": "CAD",
-        "id": "acct-3",
-        "netLiquidationValue": 25.0,
-        "nickname": "Cash",
-        "unifiedAccountType": "CASH"
-      },
-      {
-        "currency": "CAD",
-        "id": "acct-4",
-        "netLiquidationValue": 999.0,
-        "nickname": "Old",
-        "status": "closed",
-        "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN"
-      },
-      {
-        "currency": "CAD",
-        "id": "acct-5",
-        "netLiquidationValue": 0.0,
-        "nickname": "TFSA",
-        "unifiedAccountType": "SELF_DIRECTED_TFSA"
+        "unifiedAccountType": "SELF_DIRECTED_RESP"
       }
     ],
     "activities": [
@@ -292,12 +368,12 @@
         "id": "b1",
         "name": "LUNR",
         "netCashAmount": -100,
-        "occurredAt": "2026-01-05T15:00:00+00:00",
+        "occurredAt": "2025-01-05T15:00:00+00:00",
         "quantity": 10,
         "rawType": "DIY_BUY",
         "securityId": "",
         "symbol": "AAA",
-        "transactionDate": "2026-01-05",
+        "transactionDate": "2025-01-05",
         "unitPrice": 10
       },
       {
@@ -311,47 +387,87 @@
         "id": "b2",
         "name": "LUNR",
         "netCashAmount": -100,
-        "occurredAt": "2026-01-06T15:00:00+00:00",
+        "occurredAt": "2025-01-06T15:00:00+00:00",
         "quantity": 5,
         "rawType": "DIY_BUY",
         "securityId": "",
         "symbol": "BBB",
-        "transactionDate": "2026-01-06",
+        "transactionDate": "2025-01-06",
         "unitPrice": 20
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Cashflow",
+        "activitySubType": "",
+        "activityType": "Dividend",
+        "category": "dividend",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "d0",
+        "name": "LUNR",
+        "netCashAmount": 10.0,
+        "occurredAt": "2024-12-01T15:00:00+00:00",
+        "quantity": 10,
+        "rawType": "DIVIDEND",
+        "securityId": "",
+        "symbol": "AAA",
+        "transactionDate": "2024-12-01",
+        "unitPrice": 1.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Cashflow",
+        "activitySubType": "",
+        "activityType": "Dividend",
+        "category": "dividend",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "d1",
+        "name": "LUNR",
+        "netCashAmount": 10.0,
+        "occurredAt": "2025-06-01T15:00:00+00:00",
+        "quantity": 10,
+        "rawType": "DIVIDEND",
+        "securityId": "",
+        "symbol": "AAA",
+        "transactionDate": "2025-06-01",
+        "unitPrice": 1.0
+      },
+      {
+        "accountId": "acct-1",
+        "accountType": "Cashflow",
+        "activitySubType": "",
+        "activityType": "Dividend",
+        "category": "dividend",
+        "commission": 0,
+        "currency": "CAD",
+        "id": "d2",
+        "name": "LUNR",
+        "netCashAmount": 15.0,
+        "occurredAt": "2025-12-01T15:00:00+00:00",
+        "quantity": 10,
+        "rawType": "DIVIDEND",
+        "securityId": "",
+        "symbol": "AAA",
+        "transactionDate": "2025-12-01",
+        "unitPrice": 1.5
       }
     ],
     "balances": [
       {
         "accountId": "acct-1",
-        "quantity": -300.0,
+        "quantity": 300.0,
         "securityId": "sec-c-cad"
-      },
-      {
-        "accountId": "acct-1",
-        "quantity": -10.0,
-        "securityId": "sec-c-usd"
       },
       {
         "accountId": "acct-2",
-        "quantity": 50.0,
-        "securityId": "sec-c-cad"
+        "quantity": 10.0,
+        "securityId": "sec-c-usd"
       }
     ],
     "margin": [
       {
         "accountId": "acct-1",
-        "buyingPower": 700.0,
-        "currency": "CAD",
-        "unavailable": ""
-      },
-      {
-        "accountId": "acct-2",
-        "buyingPower": null,
-        "currency": "CAD",
-        "unavailable": "UnavailableSecurities (1 securities)"
-      },
-      {
-        "accountId": "acct-5",
         "buyingPower": 5638.24,
         "currency": "CAD",
         "unavailable": ""

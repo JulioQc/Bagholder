@@ -2197,6 +2197,19 @@ def portfolio_view(base, f, positions):
         if aid in ids and ccy and q < 0:
             used[ccy] = used.get(ccy, 0.0) + (-q)
     margin_used = sum(cad(v, c) for c, v in used.items())
+    # the positive cash balances, the other side of the same rows
+    cash_by = {}
+    for b in base.get("balances") or []:
+        aid = _s(b.get("accountId"))
+        ccy = cash_ccy.get(_s(b.get("securityId")))
+        q = _num(b.get("quantity"), 0.0)
+        if aid in ids and ccy and q > 0:
+            cash_by[ccy] = cash_by.get(ccy, 0.0) + q
+    cash = sum(cad(v, c) for c, v in cash_by.items())
+    # the day's change: each quoted position's, summed, over what those positions were worth at the previous close
+    quoted = [p for p in positions if p.get("dayChange") is not None]
+    day_change = sum(cad(p["dayChange"], p["currency"]) for p in quoted) if quoted else None
+    prev_value = (sum(cad(p["mv"] if not p["short"] else -p["mv"], p["currency"]) for p in quoted) - day_change) if quoted else 0.0
     # only a margin account's buying power is margin available; any other row is cash to buy with
     margin_ids = {a["id"] for a in accounts if "MARGIN" in _s(a.get("type")).upper()}
     avail = []
@@ -2234,6 +2247,12 @@ def portfolio_view(base, f, positions):
         "marginUsedPct": (margin_used / mv) if mv else None,
         "availableMargin": sum(avail) if avail else None,
         "availableMarginUnavailable": sorted(unavailable),
+        # the tiles a book without a margin account shows in the margin tiles' places
+        "hasMargin": bool(margin_ids),
+        "cash": cash,
+        "cashPct": (cash / sum(navs)) if navs and sum(navs) else None,
+        "dayChange": day_change,
+        "dayChangePct": (day_change / prev_value) if quoted and prev_value else None,
     }
 
 
@@ -2384,7 +2403,7 @@ def payments_per_year(dates):
     return min(_SCHEDULES, key=lambda s: abs(s - per_year))
 
 
-def cashflow_view(base, f, positions_all, margin_used=0.0):
+def cashflow_view(base, f, positions_all, margin_used=0.0, has_margin=True):
     today = base["today"]
     L = f["lists"]
     accts = L["account"]
@@ -2552,11 +2571,19 @@ def cashflow_view(base, f, positions_all, margin_used=0.0):
         tiles.append({"label": ("%d YTD" % y) if y == this_yr else str(y), "total": sm, "perMonth": sm / paid, "count": len(rs)})
     months_in_scope = len([k for k in keys if bucket[k]["n"] > 0]) or 1
     tiles.append({"label": "All time", "total": total, "perMonth": total / months_in_scope, "count": len(recs)})
-    # margin used is the Portfolio tab's figure; under it the average margin interest per charged month
-    charges = [r for r in everything if r["kind"] == "Interest charge"]
-    charge_months = len({r["date"][:7] for r in charges})
-    charged = sum(-r["amountCad"] for r in charges)
-    tiles.append({"label": "Margin used", "marginUsed": margin_used, "interestPerMonth": (charged / charge_months) if charge_months else 0.0, "interestMonths": charge_months})
+    if has_margin:
+        # margin used is the Portfolio tab's figure; under it the average margin interest per charged month
+        charges = [r for r in everything if r["kind"] == "Interest charge"]
+        charge_months = len({r["date"][:7] for r in charges})
+        charged = sum(-r["amountCad"] for r in charges)
+        tiles.append({"label": "Margin used", "marginUsed": margin_used, "interestPerMonth": (charged / charge_months) if charge_months else 0.0, "interestMonths": charge_months})
+    else:
+        # without a margin account: the trailing twelve months, averaged over the months that paid
+        since = shift_date(today, -365)
+        window = [r for r in recs if since < r["date"] <= today]
+        sm = sum(r["amountCad"] for r in window)
+        paid = len({r["date"][:7] for r in window}) or 1
+        tiles.append({"label": "Last 12 months", "total": sm, "perMonth": sm / paid, "count": len(window)})
     tiles.append(
         {
             "label": "Yield on cost",
@@ -2661,7 +2688,7 @@ def build_view(base, filters=None):
         "positions": positions,
         "positionsSummary": {"count": len(positions), "book": book, "mv": mv, "unreal": unreal},
         "portfolio": portfolio,
-        "cashflow": cashflow_view(base, f, positions_all, portfolio["marginUsed"]),
+        "cashflow": cashflow_view(base, f, positions_all, portfolio["marginUsed"], portfolio["hasMargin"]),
         "unmatched": base["unmatched"],
         "accounts": base["accounts"],
         "activityCount": base["activityCount"],

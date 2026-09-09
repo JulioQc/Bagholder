@@ -139,7 +139,12 @@
       "availableMarginUnavailable": [
         "Kids"
       ],
+      "cash": 50.0,
+      "cashPct": 0.125,
       "costBasis": 150.0,
+      "dayChange": -7.5,
+      "dayChangePct": -0.032258,
+      "hasMargin": true,
       "marginUsed": 0,
       "marginUsedBy": {},
       "marginUsedPct": 0.0,

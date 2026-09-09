@@ -194,7 +194,7 @@ Bars are cached in the database. Closed days are written once and never rewritte
 
 ### Portfolio
 
-Six tiles in the style of the dashboard tiles, CAD aggregates over the accounts in scope (every account when the filter names none):
+Six tiles in the style of the dashboard tiles, CAD aggregates over the accounts in scope (every account when the filter names none). The two margin tiles show when an open account in scope is a margin account (its type contains `MARGIN`); otherwise Cash and Day change take their places, so the row is always six:
 
 | Tile | Value | Subtitle |
 |---|---|---|
@@ -203,6 +203,8 @@ Six tiles in the style of the dashboard tiles, CAD aggregates over the accounts 
 | Cost basis | Book value of the open positions in scope | `Total book value` |
 | Margin used | The negative cash balances of the accounts in scope, one per currency, shown positive, converted to CAD | Its share of Market value |
 | Available margin | Sum of Wealthsimple's buying power over the open margin accounts in scope, the figure Wealthsimple labels Margin available. Only margin accounts are asked: every self-directed account answers the same query with the cash it could buy with, which is not margin | `buying power`; `unavailable for <account>` when Wealthsimple cannot price a security in it; `—` with no margin account in scope |
+| Cash (no margin account in scope) | The positive cash balances of the accounts in scope, one per currency, converted to CAD | Its share of Net asset value, or `—` without one |
+| Day change (no margin account in scope) | The day's change of every quoted open position in scope (quantity × the quote's price change, reversed on a short), converted to CAD, signed and coloured; `—` when nothing has a quote | That change over what those positions were worth at the previous close, `x% today` |
 | Unrealized P&L | Unrealized P&L of the open positions in scope, converted at today's rate | Its percentage of Cost basis, `gain` or `loss` |
 
 Nothing on the tab is derived beyond these sums: Max buying power, Portfolio value and the interest panel of Wealthsimple's margin page have no source and are not shown.
@@ -217,7 +219,7 @@ Nothing on the tab is derived beyond these sums: Max buying power, Portfolio val
 
 ### Cashflow
 
-Six tiles in the style of the dashboard tiles, CAD, dividends in scope:
+Six tiles in the style of the dashboard tiles, CAD, dividends in scope. The Margin used tile shows when an open account in scope is a margin account (the Portfolio tab's rule); otherwise Last 12 months takes its place:
 
 | Tile | Value | Subtitle |
 |---|---|---|
@@ -225,6 +227,7 @@ Six tiles in the style of the dashboard tiles, CAD, dividends in scope:
 | YTD | Sum received this year | Average per paying month |
 | All time | Sum received | `total earned` |
 | Margin used | The Portfolio tab's Margin used over the accounts in scope | Average margin interest per charged month: the Interest charge rows in scope, summed in CAD, ÷ the number of months carrying one, as `$x/mo margin interest` |
+| Last 12 months (no margin account in scope) | Sum received in the trailing twelve months, to today | Average per paying month in that window |
 | Yield on cost | Annual income of all rated holdings ÷ their book cost | Projected monthly income, that annual income ÷ 12, as `$x/mo` |
 
 **Cashflow.** One bar per month from the first payment to the current month (or to the end of the date filter), CAD, an empty bar for a month with nothing paid yet, six axis labels. The month's distributions in the accent colour, with the month's margin interest (the Interest charge rows in scope, CAD) drawn over it from the same baseline at the same width in the negative colour, so the accent left showing above it is the net; in a month where the interest exceeds the distributions the negative colour rises above the accent. The scale fits the taller of the two. The title row carries the legend at the right. Hover shows the month, Distributions, Margin interest (with a minus sign) and Net cashflow (signed, coloured).

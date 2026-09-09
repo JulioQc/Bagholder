@@ -403,7 +403,7 @@ object ModelView {
 
     private class Rate(val per: Double, val freq: Int, val annual: Double, val verified: Boolean, val source: String)
 
-    fun cashflowView(base: Base, f: Filters, positionsAll: List<Position>, marginUsed: Double = 0.0): CashflowView {
+    fun cashflowView(base: Base, f: Filters, positionsAll: List<Position>, marginUsed: Double = 0.0, hasMargin: Boolean = true): CashflowView {
         val today = base.today
         val accts = f.lists["account"]!!
         val symbolsF = f.lists["symbol"]!!
@@ -565,11 +565,20 @@ object ModelView {
         var monthsInScope = keys.count { bucket[it]!![1] > 0.0 }
         if (monthsInScope == 0) monthsInScope = 1
         tiles.add(Tile(label = "All time", total = total, perMonth = total / monthsInScope, count = recs.size))
-        // margin used is the Portfolio tab's figure; under it the average margin interest per charged month
-        val charges = everything.filter { it.kind == "Interest charge" }
-        val chargeMonths = charges.map { it.date.take(7) }.toSet().size
-        val charged = charges.sumOf { -it.amountCad }
-        tiles.add(Tile(label = "Margin used", marginUsed = marginUsed, interestPerMonth = if (chargeMonths > 0) charged / chargeMonths else 0.0, interestMonths = chargeMonths))
+        if (hasMargin) {
+            // margin used is the Portfolio tab's figure; under it the average margin interest per charged month
+            val charges = everything.filter { it.kind == "Interest charge" }
+            val chargeMonths = charges.map { it.date.take(7) }.toSet().size
+            val charged = charges.sumOf { -it.amountCad }
+            tiles.add(Tile(label = "Margin used", marginUsed = marginUsed, interestPerMonth = if (chargeMonths > 0) charged / chargeMonths else 0.0, interestMonths = chargeMonths))
+        } else {
+            // without a margin account: the trailing twelve months, averaged over the months that paid
+            val since = Model.shiftDate(today, -365)
+            val window = recs.filter { it.date > since && it.date <= today }
+            val sm = window.sumOf { it.amountCad }
+            val paid = maxOf(1, window.map { it.date.take(7) }.toSet().size)
+            tiles.add(Tile(label = "Last 12 months", total = sm, perMonth = sm / paid, count = window.size))
+        }
         tiles.add(Tile(label = "Yield on cost", yield = if (basisAll != 0.0) annualAll / basisAll else null, projected = annualAll / 12, earned = earnedAll, book = basisAll))
         val other = everything.filter { it.kind != "Dividend" }
         return CashflowView(
@@ -629,7 +638,7 @@ object ModelView {
             trades = trades, tradeTotal = tradesAll.size, positions = positions,
             positionsSummary = PositionsSummary(positions.size, positions.sumOf { abs(it.cost) }, positions.sumOf { if (it.short) -it.mv else it.mv }, positions.sumOf { it.unreal }),
             portfolio = portfolio,
-            cashflow = cashflowView(base, f, positionsAll, portfolio.marginUsed), unmatched = base.unmatched,
+            cashflow = cashflowView(base, f, positionsAll, portfolio.marginUsed, portfolio.hasMargin), unmatched = base.unmatched,
         )
     }
 
@@ -658,12 +667,29 @@ object ModelView {
             if (b.accountId in ids && b.quantity < 0) used[ccy] = (used[ccy] ?: 0.0) + (-b.quantity)
         }
         out.marginUsed = used.entries.sumOf { cad(it.value, it.key) }
+        // the positive cash balances, the other side of the same rows
+        val cashBy = LinkedHashMap<String, Double>()
+        for (b in base.balances) {
+            val ccy = base.cashCurrencies[b.securityId] ?: continue
+            if (b.accountId in ids && b.quantity > 0) cashBy[ccy] = (cashBy[ccy] ?: 0.0) + b.quantity
+        }
+        out.cash = cashBy.entries.sumOf { cad(it.value, it.key) }
+        out.cashPct = out.nav?.let { if (it != 0.0) out.cash / it else null }
+        // the day's change: each quoted position's, summed, over what those positions were worth at the previous close
+        val quoted = positions.filter { it.dayChange != null }
+        if (quoted.isNotEmpty()) {
+            val dc = quoted.sumOf { cad(it.dayChange!!, it.currency) }
+            val prev = quoted.sumOf { cad(if (it.short) -it.mv else it.mv, it.currency) } - dc
+            out.dayChange = dc
+            out.dayChangePct = if (prev != 0.0) dc / prev else null
+        }
         out.marginUsedBy = used.entries.sortedBy { it.key }.associate { it.key to Math.round(it.value * 100) / 100.0 }
         out.marginUsedPct = if (out.marketValue != 0.0) out.marginUsed / out.marketValue else null
         val avail = mutableListOf<Double>()
         val unavailable = mutableListOf<String>()
         // only a margin account's buying power is margin available; any other row is cash to buy with
         val marginIds = accounts.filter { it.type.uppercase().contains("MARGIN") }.map { it.id }.toSet()
+        out.hasMargin = marginIds.isNotEmpty()
         for (m in base.margin) {
             if (m.accountId !in marginIds) continue
             val bp = m.buyingPower

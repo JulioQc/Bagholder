@@ -200,6 +200,9 @@ struct BHPortfolio {
     var marginUsedPct: Double?
     var availableMargin: Double?
     var availableMarginUnavailable: [String] = []
+    var hasMargin = false
+    var cash = 0.0
+    var cashPct: Double?, dayChange: Double?, dayChangePct: Double?
 }
 
 struct BHCashRow {

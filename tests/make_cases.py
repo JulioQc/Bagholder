@@ -18,7 +18,7 @@ from test_model import act, buy, sell  # noqa: E402
 TRADE_KEYS = ("id", "symbol", "kind", "currency", "side", "qty", "mult", "entry", "exit", "entryDate", "exitDate", "holdDays", "pnl", "pnlCad", "pnlPct", "status", "fees", "account", "exchange", "grade", "tags")
 KPI_KEYS = ("count", "wins", "losses", "breakeven", "winRate", "realized", "expectancy", "profitFactor", "avgHold", "avgWin", "avgLoss", "grossWin", "grossLoss")
 POSITION_KEYS = ("id", "symbol", "kind", "currency", "account", "exchange", "qty", "avg", "cost", "held", "alloc", "short", "dayChange", "grade")
-PORTFOLIO_KEYS = ("marketValue", "costBasis", "unrealized", "unrealizedPct", "positionCount", "accountCount", "nav", "navAccounts", "marginUsed", "marginUsedBy", "marginUsedPct", "availableMargin", "availableMarginUnavailable")
+PORTFOLIO_KEYS = ("marketValue", "costBasis", "unrealized", "unrealizedPct", "positionCount", "accountCount", "nav", "navAccounts", "marginUsed", "marginUsedBy", "marginUsedPct", "availableMargin", "availableMarginUnavailable", "hasMargin", "cash", "cashPct", "dayChange", "dayChangePct")
 ALLOCATION_KEYS = ("id", "symbol", "account", "value", "share")
 YEAR_KEYS = ("year", "r", "days", "from", "to", "flow", "endV", "spR")
 MONTH_KEYS = ("key", "label", "value", "count")
@@ -175,6 +175,28 @@ CASES = {
         "margin": [{"accountId": "acct-2", "buyingPower": None, "currency": "CAD", "unavailable": "UnavailableSecurities (1 securities)"}],
         "filters": {"lists": {"account": ["Kids"]}},
         "market": {"fx": {"2026-02-01": 1.5}, "benchmark": {}, "quotes": {"BBB": {"price": 30.0, "priceChange": -1.0, "percentChange": -3.2}}},
+    },
+    # a book without a margin account: Cash and Day change stand in for the margin tiles, Last 12 months for the Margin used tile
+    "portfolio_tiles_without_margin": {
+        "today": "2026-02-01",
+        "activities": [
+            buy("b1", "AAA", 10, 10, "2025-01-05"),
+            buy("b2", "BBB", 5, 20, "2025-01-06", accountType="Kids", accountId="acct-2", currency="USD"),
+            dividend("d0", "AAA", 10, 1.0, "2024-12-01"),
+            dividend("d1", "AAA", 10, 1.0, "2025-06-01"),
+            dividend("d2", "AAA", 10, 1.5, "2025-12-01"),
+        ],
+        "securities": [{"id": "sec-c-cad", "symbol": "CAD", "currency": "CAD"}, {"id": "sec-c-usd", "symbol": "USD", "currency": "USD"}],
+        "accounts": [
+            {"id": "acct-1", "nickname": "Trading", "currency": "CAD", "netLiquidationValue": 1500.0, "unifiedAccountType": "SELF_DIRECTED_TFSA"},
+            {"id": "acct-2", "nickname": "Kids", "currency": "CAD", "netLiquidationValue": 500.0, "unifiedAccountType": "SELF_DIRECTED_RESP"},
+        ],
+        "balances": [
+            {"accountId": "acct-1", "securityId": "sec-c-cad", "quantity": 300.0},
+            {"accountId": "acct-2", "securityId": "sec-c-usd", "quantity": 10.0},
+        ],
+        "margin": [{"accountId": "acct-1", "buyingPower": 5638.24, "currency": "CAD", "unavailable": ""}],
+        "market": {"fx": {"2026-02-01": 1.5}, "benchmark": {}, "quotes": {"AAA": {"price": 12.0, "priceChange": 0.5, "percentChange": 4.35}, "BBB": {"price": 30.0, "priceChange": -1.0, "percentChange": -3.2}}},
     },
     # the Margin used tile: the Portfolio figure, with margin interest averaged over the months that carried a charge
     "cashflow_margin_used_tile": {
