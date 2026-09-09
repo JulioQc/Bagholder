@@ -111,6 +111,7 @@ textarea.input{resize:none;line-height:1.5}
 .menu .sep{height:1px;background:rgba(var(--ink-rgb),.1);margin:4px 2px}
 .menu button.open{background:rgba(var(--ink-rgb),var(--hover))}
 .menu .sub{top:0;right:calc(100% + 8px);z-index:6}
+.menu .sub::before{content:"";position:absolute;top:0;bottom:0;left:100%;width:8px}
 .menu .swatch{width:16px;height:16px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1.5px rgba(var(--ink-rgb),.3)}
 .tabbtn{background:transparent;border:0;cursor:pointer;font:500 13px Inter,system-ui,sans-serif;padding:11px 0;flex:none;white-space:nowrap;color:var(--ink60)}
 .tabbtn:hover{color:var(--accent-300)}
@@ -497,8 +498,8 @@ function menuHtml() {
     item("folder", "Load folder", "openFolder") +
     item("export", "Export trades CSV", "exportCsv") +
     item("trash", "Clear data", "openData") +
-    '<div class="sep"></div><div style="position:relative">' +
-    '<button data-act="themeMenu"' + (state.themeOpen ? ' class="open"' : "") + ">" + icon("palette") + 'Theme<span style="margin-left:auto;padding-left:28px;opacity:.6">' + esc((THEMES.find((t) => t[0] === state.theme) || THEMES[0])[1]) + "</span>" + icon("caret", ".5") + "</button>" +
+    '<div class="sep"></div><div style="position:relative" data-hover="theme">' +
+    '<button data-act="themeMenu"' + (state.themeOpen ? ' class="open"' : "") + ">" + icon("palette") + 'Theme<span style="margin-left:auto;padding-left:28px;opacity:.6;box-sizing:border-box;width:90px;flex:none;text-align:right">' + esc((THEMES.find((t) => t[0] === state.theme) || THEMES[0])[1]) + "</span>" + icon("caret", ".5") + "</button>" +
     (state.themeOpen ? '<div class="menu sub">' + THEMES.map((t) => '<button data-act="theme" data-arg=\'' + attr({ theme: t[0] }) + "'" + (state.theme === t[0] ? ' class="primary"' : "") + '><span class="swatch" style="background:' + t[2] + '"></span>' + esc(t[1]) + (state.theme === t[0] ? '<span style="margin-left:auto;padding-left:24px">' + icon("check", "1") + "</span>" : "") + "</button>").join("") + "</div>" : "") +
     "</div>" +
     '<div class="sep"></div>' + item("signout", "Disconnect", "disconnect", s.connected || s.email ? { style: "color:var(--neg)" } : { disabled: true }) +
@@ -1754,6 +1755,12 @@ function bind() {
     if (!h) return;
     if (e.relatedTarget && h.contains(e.relatedTarget)) return;
     if (h.dataset.hover === "eq") eqLeave(); else if (h.dataset.hover === "mo") moLeave(); else if (h.dataset.hover === "cf") cfLeave(); else if (h.dataset.hover === "pie") pieLeave();
+    else if (h.dataset.hover === "theme" && state.themeOpen) { state.themeOpen = false; renderHeaderOnly(); }
+  });
+  // the Theme row opens its list on hover, as a submenu does; the click stays for touch
+  document.addEventListener("mouseover", (e) => {
+    const h = e.target.closest && e.target.closest('[data-hover="theme"]');
+    if (h && !state.themeOpen) { state.themeOpen = true; renderHeaderOnly(); }
   });
   const _scrollTimers = new WeakMap();
   document.addEventListener("scroll", (e) => {
