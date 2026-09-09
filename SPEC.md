@@ -248,11 +248,11 @@ Five tiles in the style of the dashboard tiles, CAD, dividends in scope:
 
 Avg and Market belong to the row's own position, matched by position id, never by symbol.
 
-**Allocation and Distribution history** share one row, the Allocation card about 38% of the width on the left, the history the rest on the right, both 380px tall with their contents scrolling inside. The history table has fixed column widths (Date 14%, Symbol 11%, Type 12%, Account 22%, Qty 12%, Distribution 16%, Amount 13%) so spacing is even whatever the rows hold; the Account cell truncates with an ellipsis at its column width, so a long account name cannot push the table past its card.
+**Allocation and Distribution history** share one row in two equal columns, the Allocation card on the left and the history on the right, both 380px tall with their contents scrolling inside. The history table has fixed column widths (Date 17%, Symbol 14%, Account 27%, Qty 10%, Distribution 18%, Amount 14%) so spacing is even whatever the rows hold; the Account cell truncates with an ellipsis at its column width, so a long account name cannot push the table past its card.
 
 **Allocation.** A donut of the income holdings in scope, each holding's share of the whole by projected monthly income; no switch. Slices are ordered largest first and coloured from the palette defined per theme: saturated on the dark themes, pastel in Light so the slices sit as softly on the page as its other colours do. The donut fills the card's height; the centre reads `Projected` and the total, or the hovered slice's symbol, value and share, laid out as the Portfolio donut's centre; the legend beside it is an aligned grid of symbol, value and share, vertically centred on the donut. No browser tooltips.
 
-**Distribution history.** Date · Symbol · Type · Account · Qty · Distribution · Amount, newest first, amounts in native currency, scrolling inside its card.
+**Distribution history.** Date · Symbol · Account · Qty · Distribution · Amount, newest first, amounts in native currency, scrolling inside its card. No Type column: every row is a dividend.
 
 ## 5. Filters
 
