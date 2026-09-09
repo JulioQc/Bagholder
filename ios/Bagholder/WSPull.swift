@@ -1060,9 +1060,52 @@ query FetchAccountHistoricalFinancials(
         return now.addingTimeInterval(300) >= exp
     }
 
+    static let refusedLoginMessage = "Saved login refused. Connect Wealthsimple again."
+
+    /// Refreshes run one at a time (bagholder.refresh_session): Wealthsimple rotates the
+    /// refresh token on every grant, so two callers posting the same token would leave the
+    /// loser with invalid_grant and the login dead. Under the gate the saved login is read
+    /// again and, when another caller has rotated it meanwhile, adopted without a post; a
+    /// token Wealthsimple has refused is never posted again this run.
+    private actor RefreshGate {
+        private var busy = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        var refusedToken = ""
+        func enter() async {
+            if !busy { busy = true; return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+        func leave() {
+            if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
+        }
+        func refuse(_ token: String) { refusedToken = token }
+    }
+    private static let refreshGate = RefreshGate()
+
     private static func refreshSession(_ box: TokenBox) async throws {
         let rt = box.sess.refreshToken.trimmingCharacters(in: .whitespacesAndNewlines)
         if rt.isEmpty { throw WSPullError.refresh("missing refresh token") }
+        await refreshGate.enter()
+        do {
+            // another caller rotated the login meanwhile: adopt what it saved, post nothing
+            if let rec = Keychain.load(), let cookie = rec["oauth_cookie"] as? String,
+               let stored = jsonWithAccessToken(cookie), let built = session(fromCookie: cookie, wssdi: rec["wssdi"] as? String),
+               !built.accessToken.isEmpty, !built.refreshToken.isEmpty, built.refreshToken != rt {
+                box.sess = built
+                box.oauth = stored
+                await refreshGate.leave()
+                return
+            }
+            if await refreshGate.refusedToken == rt { throw WSPullError.refresh(refusedLoginMessage) }
+            try await refreshSessionLocked(box, rt)
+        } catch {
+            await refreshGate.leave()
+            throw error
+        }
+        await refreshGate.leave()
+    }
+
+    private static func refreshSessionLocked(_ box: TokenBox, _ rt: String) async throws {
         let cid = box.sess.clientId.trimmingCharacters(in: .whitespacesAndNewlines)
         if cid.isEmpty { throw WSPullError.refresh("session has no client id") }
         let sessCopy = box.sess
@@ -1087,6 +1130,7 @@ query FetchAccountHistoricalFinancials(
         )
         let access = J.str(data, "access_token")
         if access.isEmpty {
+            if oauthErrorCode(data) == "invalid_grant" { await refreshGate.refuse(rtCopy) }
             throw WSPullError.refresh(refreshFailureMessage(data))
         }
         box.oauth["access_token"] = access

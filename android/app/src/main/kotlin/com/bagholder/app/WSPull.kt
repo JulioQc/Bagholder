@@ -304,16 +304,44 @@ object WSPull {
         return parts.joinToString(" ")
     }
 
+    const val REFUSED_LOGIN_MESSAGE = "Saved login refused. Connect Wealthsimple again."
+    private val refreshLock = Any()
+    private var refusedRefreshToken = ""   // a token Wealthsimple answered invalid_grant to; never posted again this run
+
+    /** Refreshes run one at a time (bagholder.refresh_session): Wealthsimple rotates the
+     *  refresh token on every grant, so two callers posting the same token would leave the
+     *  loser with invalid_grant and the login dead. Under the lock the saved login is read
+     *  again and, when another caller has rotated it meanwhile, adopted without a post; a
+     *  token Wealthsimple has refused is never posted again this run. */
     private fun refreshSession(box: TokenBox) {
         val rt = box.sess.refreshToken.trim()
         if (rt.isEmpty()) throw PullException("missing refresh token")
+        synchronized(refreshLock) {
+            Store.loadSession()?.let { (cookie, wssdi) ->
+                val stored = jsonWithAccessToken(cookie)
+                val built = session(cookie, wssdi)
+                if (stored != null && built != null && built.accessToken.isNotEmpty() && built.refreshToken.isNotEmpty() && built.refreshToken != rt) {
+                    box.sess = built
+                    box.oauth = stored
+                    return
+                }
+            }
+            if (rt == refusedRefreshToken) throw PullException(REFUSED_LOGIN_MESSAGE)
+            refreshSessionLocked(box, rt)
+        }
+    }
+
+    private fun refreshSessionLocked(box: TokenBox, rt: String) {
         val cid = box.sess.clientId.trim()
         if (cid.isEmpty()) throw PullException("session has no client id")
         val headers = sessionHeaders(box.sess, mapOf("x-wealthsimple-client" to WS_CLIENT, "x-ws-profile" to "invest"))
         val body = JSONObject().put("grant_type", "refresh_token").put("refresh_token", rt).put("client_id", cid)
         val data = httpJSON("POST", TOKEN_URL, headers, body, 60_000, throwOnAuth = false)
         val access = str(data, "access_token")
-        if (access.isEmpty()) throw PullException(refreshFailureMessage(data))
+        if (access.isEmpty()) {
+            if (oauthErrorCode(data) == "invalid_grant") refusedRefreshToken = rt
+            throw PullException(refreshFailureMessage(data))
+        }
         box.oauth.put("access_token", access)
         box.sess.accessToken = access
         val newRt = str(data, "refresh_token")
