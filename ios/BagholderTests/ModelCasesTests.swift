@@ -208,7 +208,8 @@ final class ModelCasesTests: XCTestCase {
                 navByAccount[nick] = ((pts as? [[String: Any]]) ?? []).map(navPoint)
             }
             let accounts = ((snapshot["accounts"] as? [[String: Any]]) ?? []).map { a in
-                BHAccountInfo(id: str(a, "id"), name: str(a, "nickname"), currency: str(a, "currency"), nav: numOpt(a, "netLiquidationValue"))
+                BHAccountInfo(id: str(a, "id"), name: str(a, "nickname"), currency: str(a, "currency"), nav: numOpt(a, "netLiquidationValue"),
+                              type: str(a, "unifiedAccountType"), status: str(a, "status"))
             }
             let balances = ((snapshot["balances"] as? [[String: Any]]) ?? []).map { b in
                 BHBalanceRow(accountId: str(b, "accountId"), securityId: str(b, "securityId"), quantity: num(b, "quantity"))

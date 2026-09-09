@@ -251,7 +251,7 @@ object Book {
         val market = Market(fx = Store.loadFx(), distributions = MarketData.distributions(), quotes = quotes, benchmark = sp, benchmarks = benchmarks)
         val nav = p.nav.map { NavPoint(it.date, it.equity, it.netDeposits) }
         val navBy = p.navByAccount.mapValues { e -> e.value.map { NavPoint(it.date, it.equity, it.netDeposits) } }
-        val accounts = p.accounts.map { AccountInfo(it.id, it.nickname, it.currency, it.netLiquidationValue) }
+        val accounts = p.accounts.map { AccountInfo(it.id, it.nickname, it.currency, it.netLiquidationValue, it.unifiedAccountType, it.status) }
         val balances = p.balances.map { BalanceRow(it.accountId, it.securityId, it.quantity) }
         val margin = p.margin.map { MarginRow(it.accountId, it.buyingPower, it.currency, it.unavailable) }
         val b = Model.buildBase(p.activities.map { it.toAct() }, securities, market, Model.todayLocal(), nav, navBy, journal, accounts, balances, margin)

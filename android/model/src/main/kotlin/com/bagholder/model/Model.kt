@@ -147,7 +147,7 @@ class Position {
 }
 
 /** What Wealthsimple states per account: its net liquidation value, in its currency. */
-class AccountInfo(val id: String, val name: String, val currency: String, val nav: Double?)
+class AccountInfo(val id: String, val name: String, val currency: String, val nav: Double?, val type: String = "", val status: String = "")
 
 class BalanceRow(val accountId: String, val securityId: String, val quantity: Double)
 
@@ -1631,7 +1631,7 @@ object Model {
         base.trades = buildTrades(fifo.closed, actsById, securities, journal)
         base.positions = buildPositions(fifo.open, lastFillPrices(acts), securities, today, market.quotes, journal, actsById)
         base.cashflow = buildCashflow(acts, securities, market.fx)
-        base.accounts = accounts.map { AccountInfo(it.id, normAccountName(it.name), it.currency, it.nav) }
+        base.accounts = accounts.map { AccountInfo(it.id, normAccountName(it.name), it.currency, it.nav, it.type, it.status) }
         base.balances = balances
         base.margin = margin
         base.cashCurrencies = securities.cashCurrencies()

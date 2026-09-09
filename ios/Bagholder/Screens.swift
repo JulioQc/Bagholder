@@ -888,7 +888,8 @@ struct PortfolioScreen: View {
     }
 
     private func allocation(_ pf: BHPortfolio) -> some View {
-        let top = pf.allocation.prefix(7), rest = pf.allocation.dropFirst(7)
+        let shown = pf.allocation.count > 10 ? 10 : pf.allocation.count
+        let top = pf.allocation.prefix(shown), rest = pf.allocation.dropFirst(shown)
         var items: [(label: String, value: Double)] = top.map { ($0.symbol, $0.value) }
         if !rest.isEmpty { items.append(("Other (\(rest.count))", rest.reduce(0.0) { $0 + $1.value })) }
         let total = items.reduce(0.0) { $0 + $1.value }

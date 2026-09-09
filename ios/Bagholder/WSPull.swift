@@ -159,6 +159,23 @@ struct WSActivity: Equatable, Codable {
 struct WSAccountRow: Equatable, Codable {
     var id = "", nickname = "", currency = ""
     var netLiquidationValue: Double?
+    var unifiedAccountType = "", status = ""
+
+    init(id: String = "", nickname: String = "", currency: String = "", netLiquidationValue: Double? = nil, unifiedAccountType: String = "", status: String = "") {
+        self.id = id; self.nickname = nickname; self.currency = currency; self.netLiquidationValue = netLiquidationValue
+        self.unifiedAccountType = unifiedAccountType; self.status = status
+    }
+
+    /// A pull stored before the type and status were kept decodes without them.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+        nickname = try c.decodeIfPresent(String.self, forKey: .nickname) ?? ""
+        currency = try c.decodeIfPresent(String.self, forKey: .currency) ?? ""
+        netLiquidationValue = try c.decodeIfPresent(Double.self, forKey: .netLiquidationValue)
+        unifiedAccountType = try c.decodeIfPresent(String.self, forKey: .unifiedAccountType) ?? ""
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+    }
 }
 
 struct WSBalanceRow: Equatable, Codable {
@@ -1433,8 +1450,16 @@ query FetchAccountHistoricalFinancials(
             if id.isEmpty { return nil }
             let fin = J.dict(J.dict(a["financials"])["currentCombined"])
             let (amt, _) = moneyAmount(fin, keys: ["netLiquidationValue", "netLiquidationValueV2"])
-            return WSAccountRow(id: id, nickname: J.str(a, "nickname"), currency: J.str(a, "currency"), netLiquidationValue: amt)
+            return WSAccountRow(id: id, nickname: J.str(a, "nickname"), currency: J.str(a, "currency"), netLiquidationValue: amt,
+                                unifiedAccountType: J.str(a, "unifiedAccountType"), status: J.str(a, "status"))
         }
+    }
+
+    /// bagholder.margin_account_ids: the open margin accounts, the only ones whose buying power is
+    /// margin available. Every self-directed account answers the query with the cash it could buy
+    /// with, and cash, card and crypto accounts with an error; neither is margin.
+    static func marginAccountIds(_ rows: [WSAccountRow]) -> [String] {
+        rows.filter { !$0.id.isEmpty && $0.unifiedAccountType.uppercased().contains("MARGIN") && $0.status.lowercased() != "closed" }.map(\.id)
     }
 
     private static func fetchBalances(_ box: TokenBox, accountIds: [String]) async throws -> [WSBalanceRow] {
@@ -1497,7 +1522,7 @@ query FetchAccountHistoricalFinancials(
         let rows = slimAccounts(accounts)
         let ids = rows.map(\.id)
         let balances = (try? await fetchBalances(box, accountIds: ids)) ?? []
-        return PortfolioSnapshot(accounts: rows, balances: balances, margin: await fetchMargin(box, accountIds: ids))
+        return PortfolioSnapshot(accounts: rows, balances: balances, margin: await fetchMargin(box, accountIds: marginAccountIds(rows)))
     }
 
     /// The Portfolio figures between syncs: net liquidation values, cash balances and buying power.

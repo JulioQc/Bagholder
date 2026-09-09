@@ -32,7 +32,7 @@ class BHTheme(
             ink = hex(0xe9e9ed), ink75 = hex(0xe9e9ed, 0.8f), ink60 = hex(0xe9e9ed, 0.68f), ink55 = hex(0xe9e9ed, 0.62f),
             hair = hex(0xe9e9ed, 0.14f), grid = hex(0xe9e9ed, 0.07f), pos = hex(0x6fd39b), neg = hex(0xe0778a), mixed = hex(0x7972a9),
             chipBg = hex(0x2b2741), chipFg = hex(0xd2cefd),
-            pie = listOf(hex(0x9184d9), hex(0x6fd39b), hex(0x5fb0e6), hex(0xe8b36a), hex(0xe0778a), hex(0x7fd3c9), hex(0xc48fdc), hex(0xd7c46a)),
+            pie = listOf(hex(0x9184d9), hex(0x6fd39b), hex(0x5fb0e6), hex(0xe8b36a), hex(0xe0778a), hex(0x7fd3c9), hex(0xc48fdc), hex(0xd7c46a), hex(0xe59a6a), hex(0x8fb87a), hex(0xa0a8b8)),
         )
 
         val light = BHTheme(
@@ -41,7 +41,7 @@ class BHTheme(
             ink = hex(0x1b1d27), ink75 = hex(0x1b1d27, 0.82f), ink60 = hex(0x1b1d27, 0.72f), ink55 = hex(0x1b1d27, 0.66f),
             hair = hex(0x1b1d27, 0.12f), grid = hex(0x1b1d27, 0.06f), pos = hex(0x2e8a62), neg = hex(0xc0505f), mixed = hex(0x9a95c4),
             chipBg = hex(0xe9e6fa), chipFg = hex(0x4a3bb8),
-            pie = listOf(hex(0xa89ee6), hex(0x8fd4b4), hex(0x93c4ec), hex(0xf0c98c), hex(0xeea3ae), hex(0x9adbd4), hex(0xcfaee6), hex(0xe0d48c)),
+            pie = listOf(hex(0xa89ee6), hex(0x8fd4b4), hex(0x93c4ec), hex(0xf0c98c), hex(0xeea3ae), hex(0x9adbd4), hex(0xcfaee6), hex(0xe0d48c), hex(0xf2b592), hex(0xb9d69c), hex(0xb6bec9)),
         )
     }
 }

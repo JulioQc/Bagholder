@@ -166,6 +166,7 @@ struct BHPosition {
 struct BHAccountInfo {
     var id = "", name = "", currency = ""
     var nav: Double?
+    var type = "", status = ""
 }
 
 struct BHBalanceRow {
@@ -1943,7 +1944,7 @@ enum BHModel {
         base.trades = buildTrades(fifo.closed, actsById: actsById, securities: securities, journal: journal)
         base.positions = buildPositions(fifo.open, lastPrices: lastFillPrices(acts), securities: securities, today: today, quotes: market.quotes, journal: journal, actsById: actsById)
         base.cashflow = buildCashflow(acts, securities: securities, fx: market.fx)
-        base.accounts = accounts.map { a in BHAccountInfo(id: a.id, name: normAccountName(a.name), currency: a.currency, nav: a.nav) }
+        base.accounts = accounts.map { a in BHAccountInfo(id: a.id, name: normAccountName(a.name), currency: a.currency, nav: a.nav, type: a.type, status: a.status) }
         base.balances = balances
         base.margin = margin
         base.cashCurrencies = securities.cashCurrencies()

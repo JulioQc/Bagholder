@@ -632,7 +632,8 @@ object ModelView {
         val fx = base.fx; val today = base.today
         fun cad(amount: Double, currency: String) = Model.toCad(fx, amount, currency, today)
         val names = f.lists["account"] ?: emptyList()
-        val accounts = base.accounts.filter { names.isEmpty() || names.contains(it.name) }
+        // closed accounts hold nothing and count for nothing here
+        val accounts = base.accounts.filter { it.status.lowercase() != "closed" && (names.isEmpty() || names.contains(it.name)) }
         val ids = accounts.map { it.id }.toSet()
         val nameOf = accounts.associate { it.id to it.name }
         val out = Portfolio()
@@ -655,8 +656,10 @@ object ModelView {
         out.marginUsedPct = if (out.marketValue != 0.0) out.marginUsed / out.marketValue else null
         val avail = mutableListOf<Double>()
         val unavailable = mutableListOf<String>()
+        // only a margin account's buying power is margin available; any other row is cash to buy with
+        val marginIds = accounts.filter { it.type.uppercase().contains("MARGIN") }.map { it.id }.toSet()
         for (m in base.margin) {
-            if (m.accountId !in ids) continue
+            if (m.accountId !in marginIds) continue
             val bp = m.buyingPower
             if (bp != null) avail.add(cad(bp, m.currency.ifEmpty { "CAD" })) else unavailable.add(nameOf[m.accountId] ?: m.accountId)
         }

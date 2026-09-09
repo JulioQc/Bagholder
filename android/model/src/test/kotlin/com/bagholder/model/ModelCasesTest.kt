@@ -217,7 +217,7 @@ class ModelCasesTest {
                 }
             }
             val accRows = snapshot.optJSONArray("accounts") ?: JSONArray()
-            val accounts = (0 until accRows.length()).map { i -> val a = accRows.getJSONObject(i); AccountInfo(a.optString("id"), a.optString("nickname"), a.optString("currency"), if (a.isNull("netLiquidationValue")) null else a.optDouble("netLiquidationValue")) }
+            val accounts = (0 until accRows.length()).map { i -> val a = accRows.getJSONObject(i); AccountInfo(a.optString("id"), a.optString("nickname"), a.optString("currency"), if (a.isNull("netLiquidationValue")) null else a.optDouble("netLiquidationValue"), a.optString("unifiedAccountType"), a.optString("status")) }
             val balRows = snapshot.optJSONArray("balances") ?: JSONArray()
             val balances = (0 until balRows.length()).map { i -> val b = balRows.getJSONObject(i); BalanceRow(b.optString("accountId"), b.optString("securityId"), b.optDouble("quantity", 0.0)) }
             val marginRows = snapshot.optJSONArray("margin") ?: JSONArray()
