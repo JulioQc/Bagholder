@@ -1296,7 +1296,7 @@ function cashflowHtml(m) {
     return Object.assign({}, h, { mv: p ? p.mv : null });
   });
   const holdings = sortRows(holdingRows, ys.key, ys.dir, (r, k) => r[k]);
-  const dcols = [{ key: "date", label: "Date", width: "14%" }, { key: "symbol", label: "Symbol", width: "11%" }, { key: "kind", label: "Type", width: "12%" }, { key: "account", label: "Account", width: "22%" }, { key: "qty", label: "Qty", align: "right", width: "12%" }, { key: "per", label: "Distribution", align: "right", width: "16%" }, { key: "amount", label: "Amount", align: "right", padRight: "0px", width: "13%" }];
+  const dcols = [{ key: "date", label: "Date", width: "17%" }, { key: "symbol", label: "Symbol", width: "14%" }, { key: "account", label: "Account", width: "27%" }, { key: "qty", label: "Qty", align: "right", width: "10%" }, { key: "per", label: "Distribution", align: "right", width: "18%" }, { key: "amount", label: "Amount", align: "right", padRight: "0px", width: "14%" }];
   const cs = state.sort.cash;
   const rows = sortRows(c.rows || [], cs.key, cs.dir, (r, k) => r[k]);
   const other = c.other || [];
@@ -1313,9 +1313,9 @@ function cashflowHtml(m) {
     '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Cashflow Positions</h5><div class="scroll" style="max-height:344px"><table class="table" style="font-size:12px;table-layout:fixed"><thead><tr>' + th("yoc", ycols) + "</tr></thead><tbody>" +
     (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(h.symbol) + '</td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + px(h.avg) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.mv == null ? "—" : money0(h.mv)) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2)) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right;color:' + (h.exPast ? "var(--ink55)" : "var(--ink)") + '">' + esc(h.nextExDate || "—") + '</td><td style="text-align:right;color:' + (h.payPast ? "var(--ink55)" : "var(--ink)") + '">' + esc(h.nextPayDate || "—") + '</td><td style="text-align:right">' + (h.annual == null ? "—" : money0(h.annual / 12)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="13" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
     "</tbody></table></div></div>" +
-    '<div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1.85fr);gap:14px;height:380px">' + pieCardHtml(holdingRows) +
-    '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><h5 style="margin-bottom:4px">Distribution history</h5><div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:600px;width:100%;table-layout:fixed;font-size:12px"><thead><tr>' + th("cash", dcols) + "</tr></thead><tbody>" +
-    (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap">' + esc(r.kind) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="7" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
+    '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;height:380px">' + pieCardHtml(holdingRows) +
+    '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><h5 style="margin-bottom:4px">Distribution history</h5><div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:560px;width:100%;table-layout:fixed;font-size:12px"><thead><tr>' + th("cash", dcols) + "</tr></thead><tbody>" +
+    (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="6" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
     "</tbody></table></div></div></div></div>";
 }
 // The pie: each income holding's share of the whole by projected monthly income.
@@ -1329,7 +1329,7 @@ function pieSlices(rows) {
 function pieCardHtml(rows) {
   const p = pieSlices(rows);
   const fmt = (v) => money0(v) + "/mo";
-  const R = 44, W = 14, C = 60, SIZE = 236;
+  const R = 44, W = 14, C = 60, SIZE = 322;
   let acc = 0;
   const arcs = p.items.map((x, i) => {
     const a0 = acc * 2 * Math.PI - Math.PI / 2, a1 = (acc + x.share) * 2 * Math.PI - Math.PI / 2;
@@ -1341,10 +1341,10 @@ function pieCardHtml(rows) {
   }).join("");
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
     '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5></div>' +
-    (p.items.length ? '<div id="piePlot" data-hover="pie" style="display:flex;gap:22px;align-items:center;flex:1;min-height:0">' +
-      '<div style="position:relative;width:' + SIZE + 'px;height:' + SIZE + 'px;flex:none"><svg viewBox="0 0 120 120" style="width:' + SIZE + 'px;height:' + SIZE + 'px;display:block">' + arcs + "</svg>" +
+    (p.items.length ? '<div id="piePlot" data-hover="pie" style="display:flex;gap:28px;align-items:center;flex:1;min-height:0">' +
+      '<div style="position:relative;flex:none;width:max(200px, min(' + SIZE + 'px, 100% - 198px));aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
       '<div id="pieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">Projected</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(p.total) + "</div></div></div>" +
-      '<div id="pieLegend" class="scroll" style="flex:1;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
+      '<div id="pieLegend" class="scroll" style="flex:1 1 auto;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;column-gap:12px;row-gap:12px;align-content:center;align-items:center;font-size:12.5px">' +
       p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.symbol) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + fmt(x.v) + '</span><span class="tab muted" style="text-align:right;white-space:nowrap;min-width:44px">' + pctPlain(x.share) + "</span></span>").join("") +
       "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No income holdings in scope.</div>') + "</div>";
 }
