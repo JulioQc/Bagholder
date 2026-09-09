@@ -682,8 +682,9 @@ def _is_code_change(item):
 
 def set_home(path):
     """Point session + SQLite paths at a directory (used by tests)."""
-    global HOME, SESSION_PATH, CLIENT_ID_PATH, UA_PATH
+    global HOME, SESSION_PATH, CLIENT_ID_PATH, UA_PATH, _refused_refresh_token
     HOME = Path(path)
+    _refused_refresh_token = None
     SESSION_PATH = HOME / "session.json"
     CLIENT_ID_PATH = HOME / "client_id"
     UA_PATH = HOME / "user_agent"
@@ -1234,6 +1235,8 @@ def save_session(sess):
 
 def delete_session_and_book():
     """Drop the login session only. Stored activity rows stay in SQLite."""
+    global _refused_refresh_token
+    _refused_refresh_token = None
     with _lock:
         try:
             SESSION_PATH.unlink()
@@ -1475,9 +1478,14 @@ def _oauth_error_code(data):
     return _public_sync_error(err)
 
 
+REFUSED_LOGIN_MESSAGE = "Saved login refused. Connect Wealthsimple again."
+
+
 def _refresh_failure_message(data):
     status = (data or {}).get("_http_status")
     oauth_err = _oauth_error_code(data)
+    if oauth_err == "invalid_grant":
+        return REFUSED_LOGIN_MESSAGE
     parts = []
     if status:
         parts.append("Wealthsimple token refresh HTTP %s" % status)
@@ -1502,12 +1510,36 @@ def _expires_at_as_timestamp(data):
     return dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def refresh_session(sess):
-    """refresh_token grant. Do not send Authorization."""
+_refresh_lock = threading.Lock()
+_refused_refresh_token = None  # a token Wealthsimple answered invalid_grant to; never posted again this run
+
+
+def refresh_session(sess, adopt=True):
+    """refresh_token grant. Do not send Authorization.
+
+    Wealthsimple rotates the refresh token on every grant, so two threads
+    posting the same token would leave the loser with invalid_grant and the
+    login dead. Refreshes run one at a time; under the lock the session on
+    disk is read again and, when another thread has rotated it meanwhile,
+    that session is adopted and nothing is posted. A caller holding a login
+    newer than the file (a capture) passes adopt=False."""
     rt = (sess or {}).get("refresh_token")
     if not rt:
         _set_public_error("missing refresh token")
         return False
+    with _refresh_lock:
+        if adopt:
+            current = load_session() or {}
+            if current.get("access_token") and current.get("refresh_token") and current.get("refresh_token") != rt:
+                sess.update(current)
+                return True
+        if rt == _refused_refresh_token:
+            _set_public_error(REFUSED_LOGIN_MESSAGE)
+            return False
+        return _refresh_session_locked(sess, rt)
+
+
+def _refresh_session_locked(sess, rt):
     cid = client_id_for(sess)
     if not cid:
         _set_public_error("session has no client id")
@@ -1526,6 +1558,9 @@ def refresh_session(sess):
     )
     data = _http_json("POST", OAUTH + "/token", body, headers)
     if not data or not data.get("access_token"):
+        if _oauth_error_code(data) == "invalid_grant":
+            global _refused_refresh_token
+            _refused_refresh_token = rt
         _set_public_error(_refresh_failure_message(data))
         return False
     sess["access_token"] = data["access_token"]
@@ -2811,7 +2846,10 @@ def _attempt_is(attempt):
 def _capture_loop(proc, debug_port, attempt):
     """Try to capture the session every CAPTURE_EVERY_SEC while the attempt is
     live. Runs beside the window watcher so a capture call stuck on a window
-    that just closed never delays noticing the close."""
+    that just closed never delays noticing the close. A captured refresh token
+    Wealthsimple refused is not posted again; the loop waits for the browser
+    to hold a different one."""
+    refused = None
     while _attempt_is(attempt):
         with _lock:
             if not _state.get("capturing"):
@@ -2822,14 +2860,16 @@ def _capture_loop(proc, debug_port, attempt):
                 body = _try_capture_from_cdp(debug_port)
         except Exception:
             body = None
-        if body and body.get("access_token") and _attempt_is(attempt):
+        if body and body.get("access_token") and _attempt_is(attempt) and body.get("refresh_token") != refused:
             with _lock:
                 if not _state.get("capturing"):
                     return
-            capture_tokens(body)
-            sys.stderr.write("bagholder captured Wealthsimple session\n")
-            _close_login_browser(proc)
-            return
+            if capture_tokens(body).get("ok"):
+                sys.stderr.write("bagholder captured Wealthsimple session\n")
+                _close_login_browser(proc)
+                return
+            refused = body.get("refresh_token")
+            sys.stderr.write("bagholder login: Wealthsimple refused the captured session on refresh; still watching the window\n")
         time.sleep(CAPTURE_EVERY_SEC)
 
 
@@ -3083,6 +3123,14 @@ def capture_tokens(body):
         ua = cached_user_agent()
         if ua:
             sess["user_agent"] = ua
+    # Take the login over: rotate its refresh token now, so the copy the
+    # browser holds goes stale instead of ours, and a capture Wealthsimple
+    # will not honour is found out here, not at the next restart.
+    if not refresh_session(sess, adopt=False):
+        with _lock:
+            _state["connected"] = False
+            err = _state.get("error") or "Wealthsimple refused the captured login"
+        return {"ok": False, "error": err}
     save_session(sess)
     with _lock:
         _state["connected"] = True

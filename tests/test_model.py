@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 from http.server import ThreadingHTTPServer
 from unittest import mock
@@ -2257,6 +2258,65 @@ class ServerTest(unittest.TestCase):
         self.assertIn('{ journal: true, market: true }', html)
         self.assertNotIn("session: true", html)
         self.assertIn("Your Wealthsimple login stays.", html)
+
+    def _stub_http(self, post_response, calls, delay=0.0):
+        def fake(method, url, body=None, headers=None, timeout=60):
+            calls.append((method, url.rsplit("/", 1)[-1], dict(body or {})))
+            if method == "GET" and url.endswith("/token/info"):
+                return {"identity_canonical_id": "identity-1", "email": "who@example.com", "client_id": "client-1"}
+            if delay:
+                time.sleep(delay)
+            return dict(post_response)
+        return fake
+
+    def test_refresh_runs_one_at_a_time_and_rotates_once(self):
+        bagholder.save_session({"access_token": "a1", "refresh_token": "r1", "client_id": "client-1"})
+        calls = []
+        fake = self._stub_http({"access_token": "a2", "refresh_token": "r2", "expires_in": 1800}, calls, delay=0.2)
+        results = []
+        with mock.patch.object(bagholder, "_http_json", fake):
+            threads = [threading.Thread(target=lambda: results.append(bagholder.refresh_session(bagholder.load_session()))) for _ in range(2)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        self.assertEqual(results, [True, True])
+        self.assertEqual([c[:2] for c in calls], [("POST", "token")], "the second thread adopts the rotated login instead of posting the used token")
+        self.assertEqual(bagholder.load_session()["refresh_token"], "r2")
+
+    def test_capture_makes_the_login_its_own_by_refreshing(self):
+        calls = []
+        fake = self._stub_http({"access_token": "a2", "refresh_token": "r2", "expires_in": 1800}, calls)
+        with mock.patch.object(bagholder, "_http_json", fake), mock.patch.object(bagholder, "run_sync", lambda *a, **k: True):
+            result = bagholder.capture_tokens({"access_token": "a1", "refresh_token": "r1", "client_id": "client-1", "wssdi": "device-1"})
+        self.assertTrue(result["ok"])
+        sess = bagholder.load_session()
+        self.assertEqual((sess["access_token"], sess["refresh_token"]), ("a2", "r2"), "the browser's copy is stale, the app's is current")
+        self.assertEqual([c[:2] for c in calls if c[0] == "POST"], [("POST", "token")])
+        self.assertEqual(calls[-1][2]["refresh_token"], "r1")
+        self.assertTrue(bagholder.status_payload()["connected"])
+
+    def test_capture_refused_on_refresh_is_not_a_connection(self):
+        calls = []
+        fake = self._stub_http({"_http_status": 401, "error": "invalid_grant"}, calls)
+        with mock.patch.object(bagholder, "_http_json", fake), mock.patch.object(bagholder, "run_sync", lambda *a, **k: True):
+            result = bagholder.capture_tokens({"access_token": "a1", "refresh_token": "r-dead", "client_id": "client-1"})
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], bagholder.REFUSED_LOGIN_MESSAGE)
+        self.assertIsNone(bagholder.load_session(), "a refused capture is not saved")
+        self.assertFalse(bagholder.status_payload()["connected"])
+
+    def test_a_refused_token_is_never_posted_again(self):
+        bagholder.save_session({"access_token": "a1", "refresh_token": "r-dead-2", "client_id": "client-1"})
+        calls = []
+        fake = self._stub_http({"_http_status": 401, "error": "invalid_grant"}, calls)
+        with mock.patch.object(bagholder, "_http_json", fake):
+            first = bagholder.refresh_session(bagholder.load_session())
+            second = bagholder.refresh_session(bagholder.load_session())
+        self.assertEqual((first, second), (False, False))
+        self.assertEqual(len([c for c in calls if c[0] == "POST"]), 1, "the loop's next tries do not post the dead token")
+        self.assertEqual(bagholder.status_payload()["error"], bagholder.REFUSED_LOGIN_MESSAGE)
+        self.assertIsNotNone(bagholder.load_session(), "the file stays; Disconnect or Connect replaces it")
 
     def test_import_watch_and_manual_trade_routes(self):
         status, out = self._post("/api/import", {"name": "activities.csv", "text": CANONICAL_CSV})
