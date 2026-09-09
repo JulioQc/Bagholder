@@ -836,8 +836,9 @@ fun PortfolioScreen(chrome: Chrome, onHolding: (String) -> Unit) {
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { PortfolioTiles(pf) }
             item {
-                val top = pf.allocation.take(7)
-                val rest = pf.allocation.drop(7)
+                val shown = if (pf.allocation.size > 10) 10 else pf.allocation.size
+                val top = pf.allocation.take(shown)
+                val rest = pf.allocation.drop(shown)
                 val items = top.map { Pair(it.symbol, it.value) } + (if (rest.isNotEmpty()) listOf(Pair("Other (${rest.size})", rest.sumOf { it.value })) else emptyList())
                 val total = items.sumOf { it.second }
                 Card("Allocation") {

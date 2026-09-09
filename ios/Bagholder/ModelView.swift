@@ -770,7 +770,8 @@ extension BHModel {
         let fx = base.fx, today = base.today
         func cad(_ amount: Double, _ currency: String) -> Double { toCad(fx, amount, currency, today) }
         let names = f.lists["account"] ?? []
-        let accounts = base.accounts.filter { names.isEmpty || names.contains($0.name) }
+        // closed accounts hold nothing and count for nothing here
+        let accounts = base.accounts.filter { $0.status.lowercased() != "closed" && (names.isEmpty || names.contains($0.name)) }
         let ids = Set(accounts.map { $0.id })
         var nameOf: [String: String] = [:]
         for a in accounts { nameOf[a.id] = a.name }
@@ -794,7 +795,9 @@ extension BHModel {
         out.marginUsedPct = out.marketValue != 0 ? out.marginUsed / out.marketValue : nil
         var avail: [Double] = []
         var unavailable: [String] = []
-        for m in base.margin where ids.contains(m.accountId) {
+        // only a margin account's buying power is margin available; any other row is cash to buy with
+        let marginIds = Set(accounts.filter { $0.type.uppercased().contains("MARGIN") }.map { $0.id })
+        for m in base.margin where marginIds.contains(m.accountId) {
             if let bp = m.buyingPower { avail.append(cad(bp, m.currency.isEmpty ? "CAD" : m.currency)) }
             else { unavailable.append(nameOf[m.accountId] ?? m.accountId) }
         }

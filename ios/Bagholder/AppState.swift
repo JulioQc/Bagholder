@@ -432,7 +432,7 @@ final class Book: ObservableObject {
             let nav = snap.nav.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) }
             var navBy: [String: [BHNavPoint]] = [:]
             for (nick, pts) in snap.navByAccount { navBy[nick] = pts.map { BHNavPoint(date: $0.date, equity: $0.equity, netDeposits: $0.netDeposits) } }
-            let accounts = (snap.accounts ?? []).map { BHAccountInfo(id: $0.id, name: $0.nickname, currency: $0.currency, nav: $0.netLiquidationValue) }
+            let accounts = (snap.accounts ?? []).map { BHAccountInfo(id: $0.id, name: $0.nickname, currency: $0.currency, nav: $0.netLiquidationValue, type: $0.unifiedAccountType, status: $0.status) }
             let balances = (snap.balances ?? []).map { BHBalanceRow(accountId: $0.accountId, securityId: $0.securityId, quantity: $0.quantity) }
             let margin = (snap.margin ?? []).map { BHMarginRow(accountId: $0.accountId, buyingPower: $0.buyingPower, currency: $0.currency, unavailable: $0.unavailable) }
             let b = BHModel.buildBase(activities: snap.activities.map(BHAct.init), securities: snap.listings.map(WSPull.security), market: market,

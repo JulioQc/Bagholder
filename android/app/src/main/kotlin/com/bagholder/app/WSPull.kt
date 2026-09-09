@@ -54,9 +54,14 @@ data class WSActivity(
     }
 }
 
-data class WSAccountRow(val id: String, val nickname: String, val currency: String, val netLiquidationValue: Double?) {
+data class WSAccountRow(val id: String, val nickname: String, val currency: String, val netLiquidationValue: Double?, val unifiedAccountType: String = "", val status: String = "") {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("nickname", nickname).put("currency", currency).put("netLiquidationValue", netLiquidationValue ?: JSONObject.NULL)
-    companion object { fun fromJson(o: JSONObject) = WSAccountRow(o.optString("id"), o.optString("nickname"), o.optString("currency"), if (o.isNull("netLiquidationValue")) null else o.optDouble("netLiquidationValue")) }
+        .put("unifiedAccountType", unifiedAccountType).put("status", status)
+    companion object {
+        /** A pull stored before the type and status were kept reads without them. */
+        fun fromJson(o: JSONObject) = WSAccountRow(o.optString("id"), o.optString("nickname"), o.optString("currency"), if (o.isNull("netLiquidationValue")) null else o.optDouble("netLiquidationValue"),
+            o.optString("unifiedAccountType"), o.optString("status"))
+    }
 }
 
 class WSBalanceRow(val accountId: String, val securityId: String, val quantity: Double) {
@@ -423,9 +428,15 @@ object WSPull {
         else {
             val fin = dict(dict(a.opt("financials")).opt("currentCombined"))
             val (amt, _) = moneyAmount(fin, listOf("netLiquidationValue", "netLiquidationValueV2"))
-            WSAccountRow(id, str(a, "nickname"), str(a, "currency"), amt)
+            WSAccountRow(id, str(a, "nickname"), str(a, "currency"), amt, str(a, "unifiedAccountType"), str(a, "status"))
         }
     }
+
+    /** bagholder.margin_account_ids: the open margin accounts, the only ones whose buying power is
+     *  margin available. Every self-directed account answers the query with the cash it could buy
+     *  with, and cash, card and crypto accounts with an error; neither is margin. */
+    fun marginAccountIds(rows: List<WSAccountRow>): List<String> =
+        rows.filter { it.id.isNotEmpty() && it.unifiedAccountType.uppercase().contains("MARGIN") && it.status.lowercase() != "closed" }.map { it.id }
 
     private fun fetchBalances(box: TokenBox, accountIds: List<String>): List<WSBalanceRow> {
         val out = mutableListOf<WSBalanceRow>()
@@ -484,7 +495,7 @@ object WSPull {
         val rows = slimAccounts(accounts)
         val ids = rows.map { it.id }
         val balances = try { fetchBalances(box, ids) } catch (e: Exception) { emptyList() }
-        return PortfolioSnapshot(rows, balances, fetchMargin(box, ids))
+        return PortfolioSnapshot(rows, balances, fetchMargin(box, marginAccountIds(rows)))
     }
 
     /** The Portfolio figures between syncs: net liquidation values, cash balances and buying power. */
