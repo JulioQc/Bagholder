@@ -308,17 +308,23 @@ object Book {
     private fun startPortfolioLoop() {
         if (portfolioJob != null) return
         portfolioJob = scope.launch {
+            // the first read as soon as the app is ready, then every five minutes; a
+            // failed read is logged, not swallowed
             while (isActive) {
+                val session = Store.loadSession()
+                val stored = pull
+                if (session == null || stored == null || phase != Phase.Ready) { delay(5_000); continue }
+                try {
+                    val snap = withContext(Dispatchers.IO) { WSPull.refreshPortfolio(session.first, session.second) }
+                    val newPull = StoredPull(stored.activities, stored.listings, stored.syncedAt, stored.nav, stored.navByAccount, snap.accounts, snap.balances, snap.margin)
+                    withContext(Dispatchers.IO) { Store.savePull(newPull) }
+                    pull = newPull
+                    val v = rebuild()
+                    withContext(Dispatchers.Main) { view = v }
+                } catch (e: Exception) {
+                    android.util.Log.w("bagholder", "portfolio refresh failed", e)
+                }
                 delay(PORTFOLIO_REFRESH_MS)
-                val session = Store.loadSession() ?: continue
-                val stored = pull ?: continue
-                if (phase != Phase.Ready) continue
-                val snap = try { withContext(Dispatchers.IO) { WSPull.refreshPortfolio(session.first, session.second) } } catch (e: Exception) { continue }
-                val newPull = StoredPull(stored.activities, stored.listings, stored.syncedAt, stored.nav, stored.navByAccount, snap.accounts, snap.balances, snap.margin)
-                withContext(Dispatchers.IO) { Store.savePull(newPull) }
-                pull = newPull
-                val v = rebuild()
-                withContext(Dispatchers.Main) { view = v }
             }
         }
     }

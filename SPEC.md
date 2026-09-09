@@ -215,7 +215,7 @@ Nothing on the tab is derived beyond these sums: Max buying power, Portfolio val
 
 **A holding.** Clicking a row opens the holding on the page a trade opens (§Trades), the position standing in for the trade: the symbol, name and listing; the unrealized P&L and its percentage at the top right; the chart with the fills so far; Qty, Avg (the average cost), Book, Market (the last two in the position's currency), Hold (the days so far), Account, in place of a trade's Open, Close, Entry and Exit, which an open position does not have; the executions; the thesis, grade and tags. The holding and the trade it becomes when it closes share one journal entry, keyed by the round trip that opened it, so what is written here is the trade's journal on that day.
 
-**Refresh.** Net liquidation values, cash balances and buying power are read at every sync and again every five minutes while the app runs and is connected, so the tiles move with the day instead of waiting for the daily sync.
+**Refresh.** Net liquidation values, cash balances and buying power are read at every sync, at once when the app comes up connected (on the phones, as soon as the stored book is on screen), and again every five minutes while the app runs and is connected; a read that fails is reported (the desktop's terminal, the phone's console), never swallowed, so the tiles move with the day instead of waiting for the daily sync.
 
 ### Cashflow
 
