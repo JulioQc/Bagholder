@@ -1392,7 +1392,7 @@ function cfHover(e) {
   tip.style.left = x; tip.style.transform = "translateX(" + (i > n * 0.7 ? "-100%" : "-8px") + ")";
   const intr = cfInterestByMonth(m.cashflow)[b.key] || 0, net = b.value - intr;
   const row = (label, value, color) => '<div class="tv" style="display:flex;justify-content:space-between;gap:16px' + (color ? ";color:" + color : "") + '"><span style="font-weight:400;color:var(--ink60)">' + label + "</span><span>" + value + "</span></div>";
-  tip.innerHTML = '<div class="tl" style="margin-bottom:2px">' + esc(monthLong(b.key)) + "</div>" + row("Distributions", money0(b.value), "var(--accent-300)") + row("Margin interest", money0(intr), "var(--neg)") + row("Net cashflow", signedMoney(net, "", 0), color(net));
+  tip.innerHTML = '<div class="tl" style="margin-bottom:2px">' + esc(monthLong(b.key)) + "</div>" + row("Distributions", money0(b.value), "var(--accent-300)") + row("Margin interest", intr ? signedMoney(-intr, "", 0) : money0(0), "var(--neg)") + row("Net cashflow", signedMoney(net, "", 0), color(net));
   tip.hidden = false;
 }
 function cfLeave() { ["cfX", "cfTip"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = true; }); }
