@@ -74,13 +74,27 @@ For a copy that runs in the background on a machine you keep on. Nothing is need
 docker compose up -d
 ```
 
-Open `http://127.0.0.1:8765` and choose Connect Wealthsimple: the sign-in page opens inside the page. Sign in with your email, password and 2FA code (a passkey needs a real browser). The port is published on the host's loopback only. The image is published with every release; the header says when a new one is out and links to it, as on the desktop, and moving to it is a pull rather than the Update button:
-
-```
-docker compose pull && docker compose up -d
-```
+Open `http://127.0.0.1:8765` and choose Connect Wealthsimple: the sign-in page opens inside the page. Sign in with your email, password and 2FA code (a passkey needs a real browser). The port is published on the host's loopback only. The image is published with every release; moving to a new one is under Keeping up to date below.
 
 To build the image yourself instead, `docker build -t bagholder .` and point the compose file's `image` at `bagholder`.
+
+## Keeping up to date
+
+Every copy checks GitHub for the latest release when it starts and once an hour. When there is a newer one, the header shows it. Your database and your login are never part of an update; they stay in `~/.bagholder`.
+
+- **Unpacked from a release archive:** the header shows an `Update to vX.Y.Z` button. Press it. Bagholder downloads the release, checks it against the release's checksum, swaps its own files and restarts itself; the copies it replaced are kept under `~/.bagholder/previous` until the next update.
+- **Cloned with git:** the same button runs `git pull` on `master` and restarts. A checkout with local changes or on another branch gets an `Update available` link instead, and you pull it yourself:
+
+  ```
+  git pull
+  ```
+
+  then start `python3 bagholder.py` again.
+- **Docker:** the container has no update button. The header shows `vX.Y.Z image available` with a link to the release, and the update is the pull above:
+
+  ```
+  docker compose pull && docker compose up -d
+  ```
 
 ## First use
 
