@@ -179,6 +179,7 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .tk-go[disabled]{opacity:.5;cursor:default}
 .tk-rowbtns{display:inline-flex;gap:2px;flex:none}
 .tk-rowbtn{width:22px;height:22px;border-radius:5px;border:0;background:transparent;color:rgba(var(--ink-rgb),.5);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.tk-rowbtn.off{color:rgba(var(--ink-rgb),.18);cursor:default;pointer-events:none}
 .tk-rowbtn.buy:hover{background:rgba(var(--pos-rgb),.16);color:var(--pos)}
 .tk-rowbtn.sell:hover{background:rgba(var(--neg-rgb),.16);color:var(--neg)}
 /* orders panel */
@@ -905,8 +906,8 @@ function extSchedule(q) {
   }, 300);
 }
 function extRowHtml(r, cls) {
-  const icon = '<span class="tk-rowbtns"><span class="tk-rowbtn buy" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.plus + '"/></svg></span></span>';
   const sym = r.sym || r.symbol;
+  const icon = '<span class="tk-rowbtns"><span class="tk-rowbtn buy" aria-hidden="true">' + tkIconSvg(ICONS.plus) + "</span>" + tkIcon("SELL", false) + "</span>";
   return symbolRowHtml(sym, r.name, r.exchange, icon, cls, "tkOpenExt", { symbol: sym, exchange: r.exchange, currency: r.currency, name: r.name });
 }
 // The symbol rows for a text, the book's and the ones found outside it, in one order
@@ -1011,10 +1012,18 @@ function tkLookup(symbol) {
   return { securityId: t ? t.securityId || "" : "", kind: t ? t.kind : "", position: pos };
 }
 function tkTradable(symbol) { return tkLookup(symbol).kind === "Shares"; }
+// Both icons on every symbol row, each live only where it applies: Buy on a share or ETF,
+// Sell where a position is open, neither on an option contract; the rest dimmed, not clickable.
+const tkIconSvg = (path) => '<svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + path + '"/></svg>';
+function tkIcon(side, on, symbol, act, arg) {
+  const label = side === "BUY" ? "Buy" : "Sell", path = side === "BUY" ? ICONS.plus : ICONS.minus;
+  return on ? '<button class="tk-rowbtn ' + side.toLowerCase() + '" aria-label="' + label + " " + esc(symbol) + '" data-act="' + act + '" data-arg=\'' + attr(arg) + "'>" + tkIconSvg(path) + "</button>"
+    : '<span class="tk-rowbtn off" aria-hidden="true">' + tkIconSvg(path) + "</span>";
+}
 function tkRowButtons(symbol) {
-  if (!tkTradable(symbol)) return "";
-  const b = (side, label, path) => '<button class="tk-rowbtn ' + side.toLowerCase() + '" aria-label="' + label + " " + esc(symbol) + '" data-act="tkOpen" data-arg=\'' + attr({ symbol, side }) + '\'><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + path + '"/></svg></button>';
-  return '<span class="tk-rowbtns">' + b("BUY", "Buy", ICONS.plus) + b("SELL", "Sell", ICONS.minus) + "</span>";
+  const info = tkLookup(symbol);
+  const share = info.kind === "Shares";
+  return '<span class="tk-rowbtns">' + tkIcon("BUY", share, symbol, "tkOpen", { symbol, side: "BUY" }) + tkIcon("SELL", share && !!info.position, symbol, "tkOpen", { symbol, side: "SELL" }) + "</span>";
 }
 // The accounts a ticket can route to: the server's list once the quote has answered, the
 // book's own list before that, joined so an account chosen from either is never lost.
