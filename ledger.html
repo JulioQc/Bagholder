@@ -293,7 +293,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.4"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.5"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -941,7 +941,7 @@ function tkAccounts() {
   const t = state.ticket;
   const out = (t && t.data && t.data.accounts ? t.data.accounts : []).slice();
   ((state.model && state.model.accounts) || []).filter((a) => a.status !== "closed" && /^SELF_DIRECTED/.test(a.type) && !/CRYPTO|PREDICTIONS|MANAGED/.test(a.type))
-    .forEach((a) => { if (!out.some((x) => x.id === a.id)) out.push({ id: a.id, name: a.name, type: a.type, margin: /MARGIN/.test(a.type) }); });
+    .forEach((a) => { if (!out.some((x) => x.id === a.id)) out.push({ id: a.id, name: a.name, type: a.type, margin: /MARGIN/.test(a.type), marginAccountId: /MARGIN/.test(a.type) ? a.id : "" }); });
   return out;
 }
 // the account picked last time, when it is still one the ticket offers
@@ -1016,13 +1016,14 @@ function tkVals() {
   const nav = ((state.model && state.model.accounts) || []).filter((a) => a.status !== "closed" && a.nav != null).reduce((s, a) => s + a.nav, 0);
   const acct = tkAccounts().find((a) => a.id === t.accountId) || null;
   const isMargin = !!(acct && acct.margin);
+  const linkedMargin = !!(acct && !acct.margin && acct.marginAccountId);   // collateral for a margin account: its margin moves too
   const rate = d.marginRate != null ? d.marginRate : 1;
-  const after = isMargin ? (d.marginAvailable != null && cad != null ? d.marginAvailable - dir * cad * rate : null)
-    : (d.cash != null && notional != null ? d.cash - dir * notional : null);
+  const marginAfter = (isMargin || linkedMargin) && d.marginAvailable != null && cad != null ? d.marginAvailable - dir * cad * rate : null;
+  const after = isMargin ? marginAfter : (d.cash != null && notional != null ? d.cash - dir * notional : null);
   const typeWord = { MARKET: "Market", LIMIT: "Limit", STOP: "Stop", STOP_LIMIT: "Stop limit" }[t.type];
   const tifWord = t.tif === "DAY" ? "Day" : "GTC";
   const trailWord = t.sl.unit === "pct" ? tkPlain(trail) + "%" : px(trail);
-  return { buy, dir, last, mult, qtyN, limit, stop, entry, notional, slOn, tpOn, isTrail, trail, slPrice, tpPrice, risk, gain, slPct, tpPct, rr, cad, nav, acct, isMargin, after, typeWord, tifWord, trailWord, q, d };
+  return { buy, dir, last, mult, qtyN, limit, stop, entry, notional, slOn, tpOn, isTrail, trail, slPrice, tpPrice, risk, gain, slPct, tpPct, rr, cad, nav, acct, isMargin, linkedMargin, marginAfter, after, typeWord, tifWord, trailWord, q, d };
 }
 function tkPlain(n) { return n == null ? "—" : Number.isInteger(n) ? String(n) : String(+n.toFixed(2)); }
 // a price an order may carry: two decimals from $1, four below it
@@ -1093,7 +1094,8 @@ function tkReviewHtml(v) {
     '<div style="display:flex;flex-direction:column;gap:10px;padding-top:16px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10)">' +
     (v.buy ? row("At risk", v.slOn && v.risk != null ? tkSAmt(-v.risk) + " (" + pct(v.slPct) + ")" : "—", "var(--neg)", 500) + row("Target", v.tpOn && v.gain != null ? tkSAmt(v.gain) + " (" + pct(v.tpPct) + ")" : "—", "var(--pos)", 500) + row("Risk / reward", rrStr) : "") +
     row("Position size", v.cad != null && v.nav > 0 ? (v.cad / v.nav * 100).toFixed(1) + "% of net asset value" : "—") +
-    row(v.isMargin ? "Available margin after" : "Cash after", v.after == null ? "—" : money(v.after, "", 0), v.after != null && v.after < 0 ? "var(--neg)" : "") + "</div>" +
+    row(v.isMargin ? "Available margin after" : "Cash after", v.after == null ? "—" : money(v.after, "", 0), v.after != null && v.after < 0 ? "var(--neg)" : "") +
+    (v.linkedMargin ? row("Available margin after", v.marginAfter == null ? "—" : money(v.marginAfter, "", 0), v.marginAfter != null && v.marginAfter < 0 ? "var(--neg)" : "") : "") + "</div>" +
     '<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:16px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10)"><span style="font-size:13px;font-weight:500">' + (v.buy ? "Estimated cost" : "Estimated proceeds") + '</span><span class="num" style="font-size:20px;line-height:1.2;font-weight:500">' + (t.type === "MARKET" ? "≈ " : "") + tkAmt(v.notional) + "</span></div>" +
     (t.submitError ? '<div class="status-err" style="font-size:12px">' + esc(t.submitError) + "</div>" : "") +
     "</div>" +

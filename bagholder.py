@@ -155,6 +155,14 @@ fragment AccountCore on Account {
 fragment AccountFeature on AccountFeature {
   name
   enabled
+  functional
+  metadata {
+    __typename
+    ... on MarginBoostFeatureMetadata {
+      targetMarginAccountId
+      __typename
+    }
+  }
   __typename
 }
 
@@ -697,7 +705,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-10.4"
+PROTOCOL = "2026-09-10.5"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -2295,7 +2303,7 @@ def refresh_portfolio():
             return {"ok": False, "skipped": "no accounts"}
         balances = fetch_balances(sess, ids)
         margin = fetch_margin(sess, margin_account_ids(accounts))
-        store.replace_accounts([slim_account(a) for a in accounts])
+        store.replace_accounts(slim_accounts(accounts))
         store.replace_balances(balances)
         store.replace_margin(margin)
         store.set_meta("balances_read_at", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
@@ -2488,6 +2496,39 @@ def fill_listings(sess, from_sync=False):
             _state["syncStep"] = ""
 
 
+def margin_boost_target(acc):
+    """The custodian account id a Margin Boost feature points at: an account
+    Wealthsimple lets back a margin account as collateral carries the feature
+    MARGIN_BOOST, and its metadata names the margin account's custodian account."""
+    for f in (acc.get("accountFeatures") or []) if isinstance(acc, dict) else []:
+        if not isinstance(f, dict) or _s(f.get("name")).upper() != "MARGIN_BOOST" or not f.get("enabled") or f.get("functional") is False:
+            continue
+        md = f.get("metadata") if isinstance(f.get("metadata"), dict) else {}
+        return _s(md.get("targetMarginAccountId"))
+    return ""
+
+
+def slim_accounts(accounts):
+    """The stored shape of every account, each collateral account naming the margin
+    account it backs (the custodian id in its feature resolved to the account id)."""
+    custodian = {}
+    for a in accounts or []:
+        if not isinstance(a, dict):
+            continue
+        for c in a.get("custodianAccounts") or []:
+            if isinstance(c, dict) and _s(c.get("id")):
+                custodian[_s(c.get("id"))] = _s(a.get("id"))
+    out = []
+    for a in accounts or []:
+        if not isinstance(a, dict):
+            continue
+        row = slim_account(a)
+        target = margin_boost_target(a)
+        row["marginAccountId"] = custodian.get(target, "") if target else ""
+        out.append(row)
+    return out
+
+
 def slim_account(acc):
     nlv = None
     try:
@@ -2676,7 +2717,7 @@ def run_sync(allow_refresh=True, force_activity=True):
         _set_sync_step("Saving…")
         save_accounts_snapshot(
             {
-                "accounts": [slim_account(a) for a in accounts],
+                "accounts": slim_accounts(accounts),
                 "balances": balances,
                 "margin": margin,
                 "navHistory": combined,
@@ -3772,7 +3813,9 @@ def _ticket_session():
 def order_accounts(accounts=None):
     """The accounts a ticket can route to: open self-directed accounts that trade
     securities (crypto and predictions accounts have their own order paths). Each
-    carries whether it is a margin account, which decides the review's last figure."""
+    carries whether it is a margin account, and the account whose available margin
+    the review shows: itself for a margin account, the margin account it backs for
+    a collateral account, none otherwise."""
     out = []
     for a in (accounts if accounts is not None else store.snapshot().get("accounts") or []):
         typ = _s(a.get("unifiedAccountType") or a.get("unified_account_type")).upper()
@@ -3782,7 +3825,9 @@ def order_accounts(accounts=None):
         if any(m in typ for m in ORDER_UNTRADABLE_MARKERS):
             continue
         nick = model.norm_account_name(a.get("nickname") or typ)
-        out.append({"id": _s(a.get("id")), "name": nick, "type": typ, "margin": "MARGIN" in typ, "currency": _s(a.get("currency"))})
+        margin = "MARGIN" in typ
+        out.append({"id": _s(a.get("id")), "name": nick, "type": typ, "margin": margin, "currency": _s(a.get("currency")),
+                    "marginAccountId": _s(a.get("id")) if margin else _s(a.get("marginAccountId"))})
     return out
 
 
@@ -3919,9 +3964,9 @@ def ticket_quote(symbol="", security_id="", account_id=""):
         except Exception as e:
             sys.stderr.write("bagholder ticket: buying power for %s failed: %s\n" % (acct["id"], e))
     margin_available = None
-    if acct and acct["margin"]:
+    if acct and acct["marginAccountId"]:
         for m in store.snapshot().get("margin") or []:
-            if _s(m.get("accountId")) == acct["id"] and m.get("buyingPower") is not None:
+            if _s(m.get("accountId")) == acct["marginAccountId"] and m.get("buyingPower") is not None:
                 margin_available = _num(m.get("buyingPower"), None)
     fx = store.fx_rates()
     return {
