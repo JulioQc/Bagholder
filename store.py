@@ -2045,6 +2045,7 @@ def data_version():
                 "SELECT COUNT(*), SUM(quantity) FROM balances",
                 "SELECT COUNT(*), MAX(id) FROM accounts",
                 "SELECT COUNT(*), MAX(fetched_at) FROM margin",
+                "SELECT COUNT(*), MAX(fetched_at) FROM exposures",
                 "SELECT COUNT(*), SUM(COALESCE(net_liquidation_value, 0)) FROM accounts",
             ):
                 row = conn.execute(sql).fetchone()
