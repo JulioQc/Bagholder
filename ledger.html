@@ -209,6 +209,9 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .od-link:hover{color:var(--accent-300)}
 .od-link.muted{color:var(--ink55)}
 .od-link.neg{color:var(--neg)}
+.od-link[disabled]{opacity:.4;cursor:default}
+.od-link[disabled]:hover{color:var(--accent)}
+.od-remove{align-self:flex-start;font-size:11.5px;margin-top:2px}
 .od-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:9px;margin-top:4px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:13px}
 .od-foot .od-when{font-size:12.5px;color:var(--ink55)}
 .od-foot-acts{display:flex;gap:14px;margin-left:auto}
@@ -1298,41 +1301,57 @@ function bracketLegs(b) {
   }
   return legs;
 }
-function bracketEditorHtml(b, leg) {
-  const e = state.bracketEdit;
-  const isTrail = leg.key === "sl" && b.slKind === "trail";
-  const cur = leg.key === "sl" ? (isTrail ? (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail)) : px(b.slPrice)) : px(b.tpPrice);
-  const label = leg.key === "sl" ? (isTrail ? (b.slTrailUnit === "amt" ? "Trail" : "Trail %") : "Stop price") : "Limit price";
-  return '<div class="od-edit"><label class="tk-f"><span class="tk-l">' + label + '</span><input class="tk-in num" id="od-level" inputmode="decimal" autocomplete="off" value="' + esc(e && e.text != null ? e.text : cur) + '"></label>' +
-    '<div class="od-edit-btns"><button class="od-link muted" data-act="bracketEditCancel">Cancel</button><button class="od-link neg" data-act="bracketRemove" data-arg=\'' + attr({ id: b.id, leg: leg.key }) + "'>Remove</button><button class=\"tk-go od-save\" data-act=\"bracketEditSave\" data-arg='" + attr({ id: b.id, leg: leg.key }) + "'" + (state.busy === "orders" ? " disabled" : "") + ">" + (state.busy === "orders" ? "Saving…" : "Save") + "</button></div>" +
-    (e && e.error ? '<div class="status-err" style="font-size:12px">' + esc(e.error) + "</div>" : "") + "</div>";
+function bracketEditorHtml(b) {
+  // one editor for both legs: the level of each, Remove beneath each, Save for what changed
+  const e = state.bracketEdit || {};
+  const isTrail = b.slKind === "trail";
+  const slLabel = isTrail ? (b.slTrailUnit === "amt" ? "Trail" : "Trail %") : "Stop price";
+  const slCur = isTrail ? (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail)) : px(b.slPrice);
+  const field = (label, id, value, leg, removeLabel) => '<div class="tk-f"><span class="tk-l">' + label + '</span><input class="tk-in num" id="' + id + '" inputmode="decimal" autocomplete="off" value="' + esc(value) + '">' +
+    '<button class="od-link neg od-remove" data-act="bracketRemove" data-arg=\'' + attr({ id: b.id, leg }) + "'>" + removeLabel + "</button></div>";
+  return '<div class="od-edit"><div class="tk-grid">' +
+    (b.slKind ? field(slLabel, "od-sl", e.sl != null ? e.sl : slCur, "sl", "Remove stop loss") : "<div></div>") +
+    (b.tpPrice ? field("Limit price", "od-tp", e.tp != null ? e.tp : px(b.tpPrice), "tp", "Remove take profit") : "<div></div>") + "</div>" +
+    '<div class="od-edit-btns"><button class="od-link muted" data-act="bracketEditCancel">Cancel</button><button class="tk-go od-save" data-act="bracketEditSave" data-arg=\'' + attr({ id: b.id }) + "'" + (state.busy === "orders" ? " disabled" : "") + ">" + (state.busy === "orders" ? "Saving…" : "Save") + "</button></div>" +
+    (e.error ? '<div class="status-err" style="font-size:12px">' + esc(e.error) + "</div>" : "") + "</div>";
 }
 function orderEditorHtml(o) {
   const e = state.orderEdit;
   const hasLimit = o.type === "LIMIT" || o.type === "STOP_LIMIT";
   return '<div class="od-edit"><div class="tk-grid">' +
-    '<label class="tk-f"><span class="tk-l">' + (o.type === "MARKET" ? "Shares" : "Shares") + '</span><input class="tk-in num" id="od-qty" inputmode="decimal" autocomplete="off" value="' + esc(e.qty != null ? e.qty : qty(o.quantity)) + '"></label>' +
-    (hasLimit ? '<label class="tk-f"><span class="tk-l">Limit price</span><input class="tk-in num" id="od-limit" inputmode="decimal" autocomplete="off" value="' + esc(e.limit != null ? e.limit : px(o.limitPrice)) + '"></label>' : "") + "</div>" +
+    '<label class="tk-f"><span class="tk-l">Shares</span><input class="tk-in num" id="od-qty" inputmode="decimal" autocomplete="off" value="' + esc(e.qty != null ? e.qty : qty(o.quantity)) + '"></label>' +
+    (hasLimit ? '<label class="tk-f"><span class="tk-l">Limit price</span><input class="tk-in num" id="od-limit" inputmode="decimal" autocomplete="off" value="' + esc(e.limit != null ? e.limit : px(o.limitPrice)) + '"></label>' : "<div></div>") + "</div>" +
     '<div class="od-edit-btns"><button class="od-link muted" data-act="orderEditCancel">Cancel</button><button class="tk-go od-save" data-act="orderEditSave" data-arg=\'' + attr({ id: o.id }) + "'" + (state.busy === "orders" ? " disabled" : "") + ">" + (state.busy === "orders" ? "Saving…" : "Save") + "</button></div>" +
     (e.error ? '<div class="status-err" style="font-size:12px">' + esc(e.error) + "</div>" : "") + "</div>";
 }
-// the two legs of a live bracket, each with its state and Adjust
+// the two legs of a bracket: label, level, state; no actions in a row
 function bracketLegsHtml(b) {
-  return bracketLegs(b).map((leg) => {
-    const editing = state.bracketEdit && state.bracketEdit.id === b.id && state.bracketEdit.leg === leg.key;
-    return '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-label">' + leg.label + '</span><span class="od-leg-value num">' + esc(leg.value) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span>" +
-      (BRACKET_LIVE[b.status] && !editing ? '<button class="od-link" data-act="bracketEdit" data-arg=\'' + attr({ id: b.id, leg: leg.key }) + "'>Adjust</button>" : "") + "</div>" + (editing ? bracketEditorHtml(b, leg) : "");
-  }).join("");
+  return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-label">' + leg.label + '</span><span class="od-leg-value num">' + esc(leg.value) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span></div>").join("");
 }
-// a live bracket is a card of its own under Open: the position it protects, then its legs
+// every card's foot: when, at the left; Edit and Cancel at the right while it is live, Edit dimmed where a change is not possible
+function cardFootHtml(when, live, editAct, editArg, canEdit, cancelAct, cancelArg) {
+  return '<div class="od-foot"><span class="od-when">' + esc(when) + "</span>" +
+    (live ? '<span class="od-foot-acts"><button class="od-link" data-act="' + editAct + '" data-arg=\'' + attr(editArg) + "'" + (canEdit ? "" : " disabled") + '>Edit</button><button class="od-link muted" data-act="' + cancelAct + '" data-arg=\'' + attr(cancelArg) + "'>Cancel</button></span>" : "") + "</div>";
+}
+function bracketPill(b) {
+  switch (b.status) {
+    case "armed": return ["Armed", "accent"];
+    case "firing": return ["Firing", "accent"];
+    case "target_placed": return ["Target placed", "accent"];
+    case "waiting": return ["Waiting for fill", "accent"];
+    default: return [b.status, ""];
+  }
+}
+// an armed bracket is a card of its own under Open: the position it protects, its legs, the same foot as every card
 function bracketCardHtml(b) {
-  const entry = orderById(b.orderId);
+  const entry = orderById(b.orderId), pill = bracketPill(b);
   const detail = (entry && entry.avgFill ? "Bought " + px(entry.avgFill) : "Bought") + " · " + esc((entry && entry.account) || "—");
   const value = entry && entry.avgFill ? money(b.quantity * entry.avgFill * orderMultiplier(entry), "", 2) : "";
-  return '<div class="od-card"><div class="od-row1"><span class="od-title">' + esc(qty(b.quantity)) + " " + esc(b.symbol) + '</span><span class="od-pill accent">Bracket</span></div>' +
+  const editing = state.bracketEdit && state.bracketEdit.id === b.id;
+  return '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:var(--accent-300)">Bracket</span> ' + esc(qty(b.quantity)) + " " + esc(b.symbol) + '</span><span class="od-pill ' + pill[1] + '">' + esc(pill[0]) + "</span></div>" +
     '<div class="od-row2"><span class="od-line">' + detail + '</span><span class="od-when num">' + value + "</span></div>" +
-    bracketLegsHtml(b) +
-    '<div class="od-foot"><span class="od-when">' + esc(orderWhenWord(b.armedAt || b.createdAt)) + '</span><span class="od-foot-acts"><button class="od-link muted" data-act="cancelBracket" data-arg=\'' + attr({ id: b.id }) + "'>Cancel</button></span></div></div>";
+    bracketLegsHtml(b) + (editing ? bracketEditorHtml(b) : "") +
+    cardFootHtml(orderWhenWord(b.armedAt || b.createdAt), BRACKET_LIVE[b.status] && !editing, "bracketEdit", { id: b.id }, true, "cancelBracket", { id: b.id }) + "</div>";
 }
 function cancelBracketNow(id) {
   const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id);
@@ -1351,16 +1370,15 @@ function orderCardHtml(o) {
   const fill = orderFillLine(o);
   const live = ORDER_LIVE[o.status] && o.status !== "cancelling";
   const canEdit = live && o.type !== "STOP";   // Wealthsimple's modify has no stop price
+  const editing = state.orderEdit && state.orderEdit.id === o.id;
   let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + esc(qty(o.quantity)) + " " + esc(o.symbol) + '</span><span class="od-pill ' + pill[1] + '">' + esc(pill[0]) + "</span></div>" +
     '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + '</span><span class="od-when num">' + esc(orderValue(o)) + "</span></div>" +
     (fill ? '<div class="od-fill">' + esc(fill) + "</div>" : "");
   // a bracket still waiting for this order's fill shows on the order; once armed it is a card of its own
   const waiting = live ? bracketOf(o) : null;
   if (waiting && waiting.status === "waiting") html += bracketLegsHtml(waiting);
-  if (state.orderEdit && state.orderEdit.id === o.id) html += orderEditorHtml(o);
-  // the foot: when it was placed at the left; Edit and Cancel at the right while it is open
-  html += '<div class="od-foot"><span class="od-when">' + esc(orderWhenWord(o.createdAt)) + "</span>" +
-    (live ? '<span class="od-foot-acts">' + (canEdit ? '<button class="od-link" data-act="orderEdit" data-arg=\'' + attr({ id: o.id }) + "'>Edit</button>" : "") + '<button class="od-link muted" data-act="cancelOrder" data-arg=\'' + attr({ id: o.id }) + "'>Cancel</button></span>" : "") + "</div>";
+  if (editing) html += orderEditorHtml(o);
+  html += cardFootHtml(orderWhenWord(o.createdAt), live && !editing, "orderEdit", { id: o.id }, canEdit, "cancelOrder", { id: o.id });
   return html + "</div>";
 }
 // what the order is worth: quantity × price, contracts × 100; a filled order, what it filled for
@@ -1428,21 +1446,45 @@ function orderEditSave(id) {
     loadOrders();
   });
 }
-function bracketEditSave(id, leg, remove) {
-  const e = state.bracketEdit; const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id); if (!b) return;
-  const body = { id, leg };
-  if (remove) body.remove = true;
-  else {
-    const el = document.getElementById("od-level"), v = el ? tkNum(el.value) : null;
-    if (!(v > 0)) { if (e) e.error = "A level is required."; renderOrders(); return; }
-    if (leg === "sl" && b.slKind === "trail") body.trail = v; else body.price = v;
+function bracketEditSave(id) {
+  const e = state.bracketEdit; const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id); if (!b || !e) return;
+  const sl = document.getElementById("od-sl"), tp = document.getElementById("od-tp");
+  const calls = [];
+  if (sl) {
+    const v = tkNum(sl.value);
+    if (!(v > 0)) { e.error = b.slKind === "trail" ? "A trail is required." : "A stop price is required."; renderOrders(); return; }
+    const cur = b.slKind === "trail" ? b.slTrail : b.slPrice;
+    if (v !== cur) calls.push(b.slKind === "trail" ? { id, leg: "sl", trail: v } : { id, leg: "sl", price: v });
   }
-  state.busy = "orders"; if (e) e.error = ""; renderOrders();
-  api("POST", "/api/bracket/adjust", body).then((r) => {
+  if (tp) {
+    const v = tkNum(tp.value);
+    if (!(v > 0)) { e.error = "A limit price is required."; renderOrders(); return; }
+    if (v !== b.tpPrice) calls.push({ id, leg: "tp", price: v });
+  }
+  if (!calls.length) { state.bracketEdit = null; renderOrders(); return; }
+  state.busy = "orders"; e.error = ""; renderOrders();
+  const run = (i) => {
+    if (i >= calls.length) {
+      state.busy = ""; state.bracketEdit = null;
+      state.notice = "Bracket changed · " + qty(b.quantity) + " " + b.symbol; state.noticeKind = "ok";
+      setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
+      renderHeaderOnly(); loadOrders(); return;
+    }
+    api("POST", "/api/bracket/adjust", calls[i]).then((r) => {
+      if (!r || !r.ok) { state.busy = ""; if (state.bracketEdit) state.bracketEdit.error = (r && r.error) || "Could not change the bracket."; renderOrders(); loadOrders(); return; }
+      run(i + 1);
+    });
+  };
+  run(0);
+}
+function bracketRemove(id, leg) {
+  const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id); if (!b) return;
+  state.busy = "orders"; renderOrders();
+  api("POST", "/api/bracket/adjust", { id, leg, remove: true }).then((r) => {
     state.busy = "";
-    if (!r || !r.ok) { if (state.bracketEdit) state.bracketEdit.error = (r && r.error) || "Could not change the bracket."; renderOrders(); return; }
+    if (!r || !r.ok) { if (state.bracketEdit) state.bracketEdit.error = (r && r.error) || "Could not remove the leg."; renderOrders(); return; }
     state.bracketEdit = null;
-    state.notice = (remove ? (leg === "sl" ? "Stop loss removed · " : "Take profit removed · ") : (leg === "sl" ? "Stop loss moved · " : "Take profit moved · ")) + b.symbol; state.noticeKind = "ok";
+    state.notice = (leg === "sl" ? "Stop loss removed · " : "Take profit removed · ") + qty(b.quantity) + " " + b.symbol; state.noticeKind = "ok";
     setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
     renderHeaderOnly();
     loadOrders();
@@ -2361,10 +2403,10 @@ function act(name, arg, ev) {
     case "orderEdit": state.orderEdit = { id: arg.id, error: "" }; state.bracketEdit = null; renderOrders(); { const q = document.getElementById("od-qty"); if (q) q.focus(); } break;
     case "orderEditCancel": state.orderEdit = null; renderOrders(); break;
     case "orderEditSave": orderEditSave(arg.id); break;
-    case "bracketEdit": state.bracketEdit = { id: arg.id, leg: arg.leg, error: "" }; state.orderEdit = null; renderOrders(); { const l = document.getElementById("od-level"); if (l) { l.focus(); l.select(); } } break;
+    case "bracketEdit": state.bracketEdit = { id: arg.id, error: "" }; state.orderEdit = null; renderOrders(); { const l = document.getElementById("od-sl") || document.getElementById("od-tp"); if (l) { l.focus(); l.select(); } } break;
     case "bracketEditCancel": state.bracketEdit = null; renderOrders(); break;
-    case "bracketEditSave": bracketEditSave(arg.id, arg.leg, false); break;
-    case "bracketRemove": bracketEditSave(arg.id, arg.leg, true); break;
+    case "bracketEditSave": bracketEditSave(arg.id); break;
+    case "bracketRemove": bracketRemove(arg.id, arg.leg); break;
     case "tkClose": closeTicket(); break;
     case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.trail = null; t.tp.price = null; t.limit = null; t.stop = null; renderTicket(); } break;
     case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
@@ -2456,7 +2498,7 @@ function bind() {
     if (state.ordersOpen && !state.confirmOpen) {
       // the orders panel has the keyboard: Esc closes an editor, then the panel; Enter saves an editor
       if (e.key === "Escape") { e.preventDefault(); if (state.orderEdit || state.bracketEdit) { state.orderEdit = null; state.bracketEdit = null; renderOrders(); } else closeOrders(); return; }
-      if (e.key === "Enter" && e.target && /^od-/.test(e.target.id || "")) { e.preventDefault(); if (state.orderEdit) orderEditSave(state.orderEdit.id); else if (state.bracketEdit) bracketEditSave(state.bracketEdit.id, state.bracketEdit.leg, false); }
+      if (e.key === "Enter" && e.target && /^od-/.test(e.target.id || "")) { e.preventDefault(); if (state.orderEdit) orderEditSave(state.orderEdit.id); else if (state.bracketEdit) bracketEditSave(state.bracketEdit.id); }
       return;
     }
     // ⌘K (Ctrl+K elsewhere): the filter popover on Symbol, search box focused
