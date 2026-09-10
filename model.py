@@ -32,6 +32,7 @@ import re
 import threading
 from datetime import date, datetime, timedelta, timezone
 
+import exposure
 import store
 
 EPS = 1e-10
@@ -2199,6 +2200,7 @@ def exposure_slices(positions, exposures, cad):
         s_sum = sum(_num(w, 0.0) for w in s_map.values())
         c_sum = sum(_num(w, 0.0) for w in c_map.values())
         for n, w in s_map.items():
+            n = exposure.norm_sector(n) or n   # a record read before an alias was known folds here
             sec_tot[n] = sec_tot.get(n, 0.0) + v * _num(w, 0.0)
         for n, w in c_map.items():
             cty_tot[n] = cty_tot.get(n, 0.0) + v * _num(w, 0.0)
