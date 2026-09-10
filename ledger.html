@@ -72,6 +72,13 @@ textarea.input{resize:none;line-height:1.5}
 .pos{color:var(--pos)}
 .neg{color:var(--neg)}
 .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55)}
+.xrow{position:relative;height:22px;border-radius:3px}
+.xrow:hover{background:rgba(var(--ink-rgb),.05)}
+.xfill{position:absolute;top:0;bottom:0;border-radius:2px;opacity:.55}
+.xrow:hover .xfill{opacity:.7}
+.xname{position:absolute;top:0;line-height:22px;font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap}
+.xpct{position:absolute;top:0;line-height:22px;font-size:12.5px;visibility:hidden}
+.xrow:hover .xpct{visibility:visible}
 .seg{display:flex;gap:0;padding:0;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);overflow:hidden}
 .seg-opt{flex:1;display:flex;align-items:center;justify-content:center;padding:12px 0;cursor:pointer;font-size:13px;color:var(--ink);border-left:1px solid rgba(var(--ink-rgb),.14)}
 .seg-opt:first-child{border-left:0}
@@ -2119,12 +2126,22 @@ function exposureSlices(rows) {
   const total = (rows || []).reduce((a, x) => a + x.value, 0);
   return { total, items };
 }
+// one card the width of the row: sectors as bars from the left edge toward the centre, regions from the right edge,
+// both on one scale (the largest slice on either side fills its half); the name rides on the bar, the share shows on hover
 function exposureCardsHtml(pf) {
-  const sec = exposureSlices(pf.sectors), reg = exposureSlices(pf.regions);
-  const total = pf.marketValue || 0;   // the centre reads what Allocation's does
-  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch">' +
-    donutCardHtml("xsec", "Sectors", "Market value", sec.items, total, "No open positions in scope.") +
-    donutCardHtml("xreg", "Regions", "Market value", reg.items, total, "No open positions in scope.") + "</div>";
+  const sec = exposureSlices(pf.sectors).items, reg = exposureSlices(pf.regions).items;
+  const max = Math.max(0, ...sec.map((x) => x.share), ...reg.map((x) => x.share));
+  const width = (x) => Math.max(0.5, x.share / max * 100).toFixed(2) + "%";
+  const row = (x, side) => !x ? "<div></div>" :
+    '<div class="xrow"><div class="xfill" style="' + side + ':0;width:' + width(x) + ';background:' + x.color + '"></div>' +
+    '<span class="xname" style="' + side + ':8px">' + esc(x.label) + '</span>' +
+    '<span class="xpct tab" style="' + (side === "left" ? "right" : "left") + ':0">' + pctPlain(x.share) + "</span></div>";
+  let rows = "";
+  for (let i = 0; i < Math.max(sec.length, reg.length); i++) rows += row(sec[i], "left") + row(reg[i], "right");
+  return '<div class="card elev-sm" style="padding:16px 18px 14px">' +
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:12px"><h5>Sectors</h5><h5>Regions</h5></div>' +
+    (rows ? '<div style="display:grid;grid-template-columns:1fr 1fr;column-gap:100px;row-gap:4px">' + rows + "</div>"
+      : '<div class="muted" style="font-size:12.5px">No open positions in scope.</div>') + "</div>";
 }
 function donutHover(e, key) {
   const el = e.target.closest("[data-slice]"); const plot = document.getElementById(key + "Plot"); if (!plot) return;
