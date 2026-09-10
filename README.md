@@ -48,7 +48,7 @@ Futures are not supported yet.
 ## Requirements
 
 - Python 3.9 or newer
-- Google Chrome (opened once so you can sign in to Wealthsimple)
+- A Chromium-based browser — Google Chrome, Brave, Microsoft Edge, or Chromium — opened once so you can sign in to Wealthsimple
 
 ## Install
 

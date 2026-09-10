@@ -1470,6 +1470,14 @@ class InAppUpdateTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"BAGHOLDER_CHROME": "/definitely/not/there"}):
             self.assertNotEqual(bagholder.find_chrome(), "/definitely/not/there", "an explicit path is used only when it exists")
 
+    def test_brave_is_a_supported_login_browser(self):
+        import bagholder
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"BAGHOLDER_CHROME": ""}, clear=False), \
+             mock.patch.object(bagholder.sys, "platform", "linux"), \
+             mock.patch.object(bagholder.shutil, "which", side_effect=lambda name: "/usr/bin/brave-browser" if name == "brave-browser" else None):
+            self.assertEqual(bagholder.find_chrome(), "/usr/bin/brave-browser")
+
     def test_update_button_refuses_during_a_sync(self):
         import bagholder
         from unittest import mock

@@ -2805,12 +2805,18 @@ def boot_session():
 
 
 def find_chrome():
+    """Find a Chromium-family browser capable of the DevTools login flow.
+
+    The name predates support for other compatible browsers; keep it for the
+    callers and integrations that already use it.
+    """
     explicit = (os.environ.get("BAGHOLDER_CHROME") or "").strip()
     if explicit and os.path.isfile(explicit):
         return explicit
     if sys.platform == "darwin":
         for p in (
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
             "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
         ):
             if os.path.isfile(p):
@@ -2818,6 +2824,9 @@ def find_chrome():
     names = [
         "google-chrome",
         "google-chrome-stable",
+        "brave-browser",
+        "brave-browser-stable",
+        "brave",
         "chromium",
         "chromium-browser",
         "microsoft-edge",
@@ -2830,6 +2839,7 @@ def find_chrome():
             return p
     extras = [
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
         "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     ]
     pf = os.environ.get("PROGRAMFILES", r"C:\Program Files")
@@ -2840,6 +2850,9 @@ def find_chrome():
             os.path.join(pf, "Google", "Chrome", "Application", "chrome.exe"),
             os.path.join(pf86, "Google", "Chrome", "Application", "chrome.exe"),
             os.path.join(local, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(pf, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(pf86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(local, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
             os.path.join(pf, "Microsoft", "Edge", "Application", "msedge.exe"),
             os.path.join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"),
         ]
@@ -3583,7 +3596,7 @@ def start_login_browser():
     if not chrome:
         return {
             "ok": False,
-            "error": 'Install Chrome. Passkey login has to happen on Wealthsimple’s site.',
+            "error": 'Install Chrome, Brave, Edge, or another Chromium browser. Passkey login has to happen on Wealthsimple’s site.',
         }
     profile = HOME / "chrome"
     _ensure_home()
@@ -3636,7 +3649,7 @@ def start_login_browser():
     except Exception:
         return {
             "ok": False,
-            "error": 'Install Chrome. Passkey login has to happen on Wealthsimple’s site.',
+            "error": 'Install Chrome, Brave, Edge, or another Chromium browser. Passkey login has to happen on Wealthsimple’s site.',
         }
 
 
