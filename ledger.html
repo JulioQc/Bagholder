@@ -1311,7 +1311,7 @@ function orderCardHtml(o) {
   // a filled entry under Open is there for its bracket: its fill is already the detail line
   const fill = o.status === "filled" && state.ordersTab === "open" ? "" : orderFillLine(o);
   const live = ORDER_LIVE[o.status] && o.status !== "cancelling";
-  const canEdit = live && o.type !== "STOP" && o.source !== "wealthsimple";
+  const canEdit = live && o.type !== "STOP";   // Wealthsimple's modify has no stop price
   let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + esc(qty(o.quantity)) + " " + esc(o.symbol) + '</span><span class="od-pill ' + pill[1] + '">' + esc(pill[0]) + "</span></div>" +
     '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + '</span><span class="od-when">' + esc(orderWhenWord(o.createdAt)) + "</span></div>" +
     (fill ? '<div class="od-fill' + (o.status === "rejected" || o.status === "failed" ? "" : "") + '">' + esc(fill) + "</div>" : "");
@@ -2397,6 +2397,12 @@ function bind() {
       // the ticket has the keyboard: Esc closes it, Enter in a field commits the field
       if (e.key === "Escape") { e.preventDefault(); closeTicket(); return; }
       if (e.key === "Enter" && e.target && /^tk-/.test(e.target.id || "") && e.target.tagName === "INPUT") { e.preventDefault(); e.target.blur(); }
+      return;
+    }
+    // ⌘O (Ctrl+O elsewhere) opens the orders panel; pressed again it closes it
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "o") {
+      e.preventDefault();
+      if (state.ordersOpen) closeOrders(); else openOrders();
       return;
     }
     if (state.ordersOpen && !state.confirmOpen) {
