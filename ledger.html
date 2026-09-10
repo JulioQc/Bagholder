@@ -72,10 +72,6 @@ textarea.input{resize:none;line-height:1.5}
 .pos{color:var(--pos)}
 .neg{color:var(--neg)}
 .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55)}
-.xrow{display:grid;grid-template-columns:160px minmax(0,1fr) 48px;align-items:center;gap:12px;font-size:12.5px}
-.xrow.r{grid-template-columns:48px minmax(0,1fr) 160px}
-.xrow .xname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.xbar{height:16px;border-radius:3px}
 .seg{display:flex;gap:0;padding:0;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);overflow:hidden}
 .seg-opt{flex:1;display:flex;align-items:center;justify-content:center;padding:12px 0;cursor:pointer;font-size:13px;color:var(--ink);border-left:1px solid rgba(var(--ink-rgb),.14)}
 .seg-opt:first-child{border-left:0}
@@ -2087,9 +2083,12 @@ function portfolioSlices(pf) {
 // label and total or the hovered slice, the legend as an aligned grid. `key` names the
 // card's elements and the hover registry.
 const _donuts = {};
-function donutCardHtml(key, title, centreLabel, items, total, empty) {
+// a donut's two pieces: the ring with its centre, and the legend (swatch, name, share; mirrored when `side` is "r")
+// `size` fixes the ring's width; without it the ring takes what its card leaves beside the legend. A null `total` leaves
+// the centre to its label alone, and a hovered slice then shows its name and share
+function donutPieces(key, centreLabel, items, total, side, size) {
   _donuts[key] = { items, total, centreLabel };
-  const R = 44, W = 14, C = 60, SIZE = 264;
+  const R = 44, W = 14, C = 60, SIZE = size || 264;
   let acc = 0;
   const arcs = items.map((x, i) => {
     const a0 = acc * 2 * Math.PI - Math.PI / 2, a1 = (acc + x.share) * 2 * Math.PI - Math.PI / 2;
@@ -2099,14 +2098,22 @@ function donutCardHtml(key, title, centreLabel, items, total, empty) {
     const d = "M" + (C + R * Math.cos(a0)).toFixed(2) + " " + (C + R * Math.sin(a0)).toFixed(2) + " A" + R + " " + R + " 0 " + large + " 1 " + (C + R * Math.cos(a1)).toFixed(2) + " " + (C + R * Math.sin(a1)).toFixed(2);
     return '<path d="' + d + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '" style="cursor:default"/>';
   }).join("");
+  const ring = '<div style="position:relative;flex:none;width:' + (size ? SIZE + "px" : "max(200px, min(" + SIZE + "px, 100% - 140px))") + ';aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
+    // the centre is inset to the ring's hole so a hovered name wraps inside it
+    '<div id="' + key + 'Centre" style="position:absolute;inset:21%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">' + esc(centreLabel) + "</div>" + (total == null ? "" : '<div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(total) + "</div>") + "</div></div>";
+  const swatch = (x) => '<span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span>';
+  const name = (x) => '<span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' + (side === "r" ? ";text-align:right" : "") + '">' + esc(x.label) + "</span>";
+  const share = (x) => '<span class="tab" style="text-align:' + (side === "r" ? "left" : "right") + ';white-space:nowrap">' + pctPlain(x.share) + "</span>";
+  const legend = '<div id="' + key + 'Legend" class="scroll" style="flex:0 1 auto;min-width:0;min-height:0;max-height:100%;justify-self:' + (side === "r" ? "end" : "start") + ';display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
+    items.map((x, i) => '<span data-slice="' + i + '" style="display:contents">' + (side === "r" ? share(x) + name(x) + swatch(x) : swatch(x) + name(x) + share(x)) + "</span>").join("") + "</div>";
+  return { ring, legend };
+}
+function donutCardHtml(key, title, centreLabel, items, total, empty) {
+  const d = donutPieces(key, centreLabel, items, total, "l");
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
     '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>' + esc(title) + "</h5></div>" +
-    (items.length ? '<div id="' + key + 'Plot" data-hover="' + key + '" style="display:flex;gap:16px;align-items:center;justify-content:center;flex:1;min-height:0">' +
-      '<div style="position:relative;flex:none;width:max(200px, min(' + SIZE + 'px, 100% - 140px));aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
-      '<div id="' + key + 'Centre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">' + esc(centreLabel) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(total) + "</div></div></div>" +
-      '<div id="' + key + 'Legend" class="scroll" style="flex:0 1 auto;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
-      items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.label) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + pctPlain(x.share) + "</span></span>").join("") +
-      "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">' + esc(empty) + "</div>") + "</div>";
+    (items.length ? '<div id="' + key + 'Plot" data-hover="' + key + '" style="display:flex;gap:16px;align-items:center;justify-content:center;flex:1;min-height:0">' + d.ring + d.legend + "</div>"
+      : '<div class="muted empty" style="flex:1;font-size:12px">' + esc(empty) + "</div>") + "</div>";
 }
 function portfolioPieHtml(pf) {
   const p = portfolioSlices(pf);
@@ -2123,21 +2130,17 @@ function exposureSlices(rows, cap) {
   const total = (rows || []).reduce((a, x) => a + x.value, 0);
   return { total, items };
 }
-// one card the width of the row: each sector a bar from its name at the left edge toward the centre, each region a bar
-// from its name at the right edge toward the centre, the shares meeting in the middle; each side scaled to its own largest
+// one card the width of the row: the Sectors legend at the left edge, its donut, the Regions donut, its legend mirrored at
+// the right edge; the two donuts sit together at the centre, each reading its word until a slice is hovered
 function exposureCardsHtml(pf) {
   const sec = exposureSlices(pf.sectors, 12).items, reg = exposureSlices(pf.regions).items;
-  const width = (x, items) => { const m = Math.max(0, ...items.map((y) => y.share)); return Math.max(0.6, m > 0 ? x.share / m * 100 : 0).toFixed(2) + "%"; };
-  const bar = (x, items, side) => '<div style="display:flex;justify-content:' + (side === "l" ? "flex-start" : "flex-end") + '"><div class="xbar" style="width:' + width(x, items) + ';background:' + x.color + '"></div></div>';
-  const row = (x, items, side) => !x ? "<div></div>" : side === "l"
-    ? '<div class="xrow"><span class="xname">' + esc(x.label) + "</span>" + bar(x, items, side) + '<span class="tab" style="text-align:right">' + pctPlain(x.share) + "</span></div>"
-    : '<div class="xrow r"><span class="tab">' + pctPlain(x.share) + "</span>" + bar(x, items, side) + '<span class="xname" style="text-align:right">' + esc(x.label) + "</span></div>";
-  let rows = "";
-  for (let i = 0; i < Math.max(sec.length, reg.length); i++) rows += row(sec[i], sec, "l") + row(reg[i], reg, "r");
-  return '<div class="card elev-sm" style="padding:16px 18px 14px">' +
-    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:12px"><h5>Sectors</h5><h5>Regions</h5></div>' +
-    (rows ? '<div style="display:grid;grid-template-columns:1fr 1fr;column-gap:56px;row-gap:8px">' + rows + "</div>"
-      : '<div class="muted" style="font-size:12.5px">No open positions in scope.</div>') + "</div>";
+  const head = '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Sectors</h5><h5>Regions</h5></div>';
+  if (!sec.length && !reg.length) return '<div class="card elev-sm" style="padding:16px 18px 12px">' + head + '<div class="muted empty" style="font-size:12px">No open positions in scope.</div></div>';
+  const a = donutPieces("xsec", "Sector", sec, null, "l", 240), b = donutPieces("xreg", "Region", reg, null, "r", 240);
+  return '<div class="card elev-sm" style="padding:16px 18px 12px">' + head +
+    '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto minmax(0,1fr);column-gap:40px;align-items:center">' +
+    '<div id="xsecPlot" data-hover="xsec" style="display:contents">' + a.legend + a.ring + "</div>" +
+    '<div id="xregPlot" data-hover="xreg" style="display:contents">' + b.ring + b.legend + "</div></div></div>";
 }
 function donutHover(e, key) {
   const el = e.target.closest("[data-slice]"); const plot = document.getElementById(key + "Plot"); if (!plot) return;
@@ -2146,8 +2149,9 @@ function donutHover(e, key) {
   plot.querySelectorAll("#" + key + "Legend [data-slice]").forEach((s) => { const on = i < 0 || +s.dataset.slice === i; [...s.children].forEach((c) => { c.style.opacity = on ? "1" : ".45"; }); });
   const centre = document.getElementById(key + "Centre"); const d = _donuts[key]; if (!centre || !d) return;
   const x = i >= 0 ? d.items[i] : null;
-  centre.innerHTML = x ? '<div class="lbl">' + esc(x.label) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(x.v) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + pctPlain(x.share) + "</div>"
-    : '<div class="lbl">' + esc(d.centreLabel) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(d.total) + "</div>";
+  centre.innerHTML = x ? (d.total == null ? '<div class="lbl">' + esc(x.label) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + pctPlain(x.share) + "</div>"
+      : '<div class="lbl">' + esc(x.label) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(x.v) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + pctPlain(x.share) + "</div>")
+    : '<div class="lbl">' + esc(d.centreLabel) + "</div>" + (d.total == null ? "" : '<div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(d.total) + "</div>");
 }
 function ppieHover(e) { donutHover(e, "ppie"); }
 function ppieLeave() { ppieHover({ target: document.body }); }
