@@ -2086,7 +2086,7 @@ class _OrdersBase(unittest.TestCase):
         store.ensure()
         store.replace_accounts([
             {"id": "acct-margin", "nickname": "Trading", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN", "currency": "CAD", "status": "open", "type": "non_registered"},
-            {"id": "acct-tfsa", "nickname": "TFSA", "unifiedAccountType": "SELF_DIRECTED_TFSA", "currency": "CAD", "status": "open", "type": "tfsa"},
+            {"id": "acct-tfsa", "nickname": "TFSA", "unifiedAccountType": "SELF_DIRECTED_TFSA", "currency": "CAD", "status": "open", "type": "tfsa", "marginAccountId": "acct-margin"},
             {"id": "acct-crypto", "nickname": "Crypto", "unifiedAccountType": "SELF_DIRECTED_CRYPTO", "currency": "CAD", "status": "open", "type": "crypto"},
             {"id": "acct-old", "nickname": "Old", "unifiedAccountType": "SELF_DIRECTED_RRSP", "currency": "CAD", "status": "closed", "type": "rrsp"},
             {"id": "acct-managed", "nickname": "Managed", "unifiedAccountType": "MANAGED_TFSA", "currency": "CAD", "status": "open", "type": "tfsa"},
@@ -2151,6 +2151,50 @@ class OrderTicketTest(_OrdersBase):
         self.assertAlmostEqual(md["marginRate"], 0.30, "a percentage becomes a fraction")
         bp = bagholder.parse_buying_power({"account": {"financials": {"current": {"tradingBalanceViewV2": {"buyingPower": {"quantity": 12680.45, "currency": "USD"}, "cash": {"quantity": 3420.18, "currency": "USD"}}}}}})
         self.assertEqual((bp["buyingPower"], bp["cash"], bp["currency"]), (12680.45, 3420.18, "USD"))
+
+    def test_collateral_account_names_the_margin_account_it_backs(self):
+        """Wealthsimple marks an account linked as margin collateral with the feature
+        MARGIN_BOOST; its metadata carries the margin account's custodian id, which
+        the pull resolves to the margin account itself and the store keeps."""
+        raw = [
+            {"id": "acct-margin", "nickname": "Trading", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN", "currency": "CAD", "status": "open", "type": "non_registered",
+             "custodianAccounts": [{"id": "cust-margin-1"}], "accountFeatures": [{"name": "MARGIN", "enabled": True, "functional": True, "metadata": None}]},
+            {"id": "acct-tfsa", "nickname": "TFSA", "unifiedAccountType": "SELF_DIRECTED_TFSA", "currency": "CAD", "status": "open", "type": "tfsa",
+             "custodianAccounts": [{"id": "cust-tfsa-1"}], "accountFeatures": [{"name": "MARGIN_BOOST", "enabled": True, "functional": True, "metadata": {"__typename": "MarginBoostFeatureMetadata", "targetMarginAccountId": "cust-margin-1"}}]},
+            {"id": "acct-rrsp", "nickname": "RRSP", "unifiedAccountType": "SELF_DIRECTED_RRSP", "currency": "CAD", "status": "open", "type": "rrsp",
+             "custodianAccounts": [{"id": "cust-rrsp-1"}], "accountFeatures": [{"name": "MARGIN_BOOST", "enabled": False, "functional": False, "metadata": {"__typename": "MarginBoostFeatureMetadata", "targetMarginAccountId": "cust-margin-1"}}]},
+            {"id": "acct-lira", "nickname": "LIRA", "unifiedAccountType": "SELF_DIRECTED_LIRA", "currency": "CAD", "status": "open", "type": "lira", "custodianAccounts": [], "accountFeatures": []},
+        ]
+        slim = {a["id"]: a for a in bagholder.slim_accounts(raw)}
+        self.assertEqual(slim["acct-tfsa"]["marginAccountId"], "acct-margin", "the feature's custodian id resolved to the margin account")
+        self.assertEqual(slim["acct-rrsp"]["marginAccountId"], "", "a feature that is not enabled links nothing")
+        self.assertEqual((slim["acct-margin"]["marginAccountId"], slim["acct-lira"]["marginAccountId"]), ("", ""))
+        store.replace_accounts(list(slim.values()))
+        kept = {a["id"]: a for a in store.snapshot()["accounts"]}
+        self.assertEqual(kept["acct-tfsa"]["marginAccountId"], "acct-margin", "the link survives the store")
+        by_id = {a["id"]: a for a in bagholder.order_accounts()}
+        self.assertEqual(by_id["acct-margin"]["marginAccountId"], "acct-margin", "a margin account's own margin")
+        self.assertEqual(by_id["acct-tfsa"]["marginAccountId"], "acct-margin", "the collateral account shows the margin account's margin")
+        self.assertEqual(by_id["acct-rrsp"]["marginAccountId"], "", "a plain account shows cash only")
+
+    def test_ticket_quote_on_a_collateral_account_carries_the_margin_it_backs(self):
+        def fake_graphql(sess, operation, variables, query=None):
+            if operation == "FetchSecuritiesSummary":
+                return {"securities": [{"id": "sec-s-us", "buyable": True, "sellable": True, "wsTradeEligible": True, "securityType": "EQUITY", "currency": "USD",
+                                        "stock": {"name": "Quantum Emotion Corp", "symbol": "QNC", "primaryExchange": "NYSE"},
+                                        "quoteV2": {"__typename": "EquityQuote", "ask": 3.02, "bid": 3.0, "currency": "USD", "price": 3.01, "previousBaseline": 2.9, "marketStatus": "OPEN", "askSize": 5, "bidSize": 7}}]}
+            if operation == "FetchSecurityMarketData":
+                return {"security": {"id": "sec-s-us", "allowedOrderSubtypes": ["MARKET", "LIMIT"], "marginRates": {"clientMarginRate": 0.5}}}
+            if operation == "FetchTradingBalanceBuyingPower":
+                self.assertEqual(variables["accountCanonicalId"], "acct-tfsa", "cash and buying power are the TFSA's own")
+                return {"account": {"financials": {"current": {"tradingBalanceViewV2": {"buyingPower": {"quantity": 500.0, "currency": "USD"}, "cash": {"quantity": 500.0, "currency": "USD"}}}}}}
+            raise AssertionError(operation)
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}):
+            r = bagholder.ticket_quote("QNC", "", "acct-tfsa")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["cash"], 500.0)
+        self.assertEqual(r["marginAvailable"], 12680.45, "the margin account the TFSA backs")
+        self.assertEqual(r["account"]["marginAccountId"], "acct-margin")
 
     def test_ticket_quote_answers_with_everything_the_panel_shows(self):
         def fake_graphql(sess, operation, variables, query=None):

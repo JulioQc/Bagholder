@@ -309,6 +309,7 @@ def _init_schema(conn):
     _migrate_spy_meta(conn)
     _ensure_quote_columns(conn)
     _ensure_order_columns(conn)
+    _ensure_account_columns(conn)
     _migrate_history_sources(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES (?, ?) "
@@ -1124,7 +1125,7 @@ def replace_accounts(accounts):
                 conn.execute(
                     "INSERT INTO accounts ("
                     "id, nickname, unified_account_type, currency, status, type, "
-                    "net_liquidation_value) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "net_liquidation_value, margin_account_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         aid,
                         _s(acc.get("nickname")),
@@ -1133,6 +1134,7 @@ def replace_accounts(accounts):
                         _s(acc.get("status")),
                         _s(acc.get("type")),
                         nlv,
+                        _s(acc.get("marginAccountId")),
                     ),
                 )
             conn.commit()
@@ -1370,6 +1372,12 @@ def _ensure_order_columns(conn):
     for col, typ in (("seen_held", "INTEGER"),):
         if col not in bcols:
             conn.execute("ALTER TABLE brackets ADD COLUMN %s %s" % (col, typ))
+
+
+def _ensure_account_columns(conn):
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)").fetchall()}
+    if "margin_account_id" not in cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN margin_account_id TEXT")
 
 
 def _migrate_spy_meta(conn):
@@ -2169,6 +2177,7 @@ def snapshot():
                         "status": r["status"] or "",
                         "type": r["type"] or "",
                         "netLiquidationValue": r["net_liquidation_value"],
+                        "marginAccountId": r["margin_account_id"] or "",
                     }
                 )
             balances = []
