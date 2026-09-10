@@ -578,6 +578,72 @@ query FetchTradingBalanceBuyingPower($accountCanonicalId: ID!, $currency: Curren
 }
 """.strip()
 
+Q_FETCH_SO_ORDERS_EXTENDED_ORDER = """
+query FetchSoOrdersExtendedOrder($branchId: String!, $externalId: String!) {
+  soOrdersExtendedOrder(branchId: $branchId, externalId: $externalId) {
+    averageFilledPrice
+    filledQuantity
+    firstFilledAtUtc
+    lastFilledAtUtc
+    limitPrice
+    orderType
+    rejectionCause
+    rejectionCode
+    securityCurrency
+    status
+    stopPrice
+    submittedAtUtc
+    submittedQuantity
+    timeInForce
+    accountId
+    canonicalAccountId
+    cancellationCutoff
+    expiredAtUtc
+    securityId
+  }
+}
+""".strip()
+
+Q_ORDER_SERVICE_EXTENDED_ORDER_FEED = """
+query OrderServiceExtendedOrderFeed($identityId: ID!, $statuses: [OrderServiceOrderStatus!]!, $first: Int = 25, $cursor: String) {
+  identity(id: $identityId) {
+    id
+    orderServiceExtendedOrderFeed(statuses: $statuses, first: $first, after: $cursor) {
+      edges {
+        cursor
+        node {
+          id
+          orderId
+          canonicalAccountId
+          createdAtUtc
+          status
+          side
+          executionType
+          submittedQuantity
+          limitPrice
+          stopPrice
+          averageFillPrice
+          securityCurrency
+          securityId
+          symbol
+          security { id stock { symbol name } }
+        }
+      }
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+}
+""".strip()
+
+Q_SO_ORDERS_ORDER_CANCEL = """
+mutation SoOrdersOrderCancel($cancelOrderRequest: CancelOrderRequest!) {
+  orderServiceCancelOrder(cancelOrderRequest: $cancelOrderRequest) {
+    externalId
+    errors { code message }
+  }
+}
+""".strip()
+
 Q_SO_ORDERS_ORDER_CREATE = """
 mutation SoOrdersOrderCreate($input: SoOrders_CreateOrderInput!) {
   soOrdersCreateOrder(input: $input) {
@@ -623,7 +689,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-10.1"
+PROTOCOL = "2026-09-10.2"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -679,6 +745,9 @@ QUERIES = {
     "FetchSecurityMarketData": Q_FETCH_SECURITY_MARKET_DATA,
     "FetchTradingBalanceBuyingPower": Q_FETCH_TRADING_BALANCE_BUYING_POWER,
     "SoOrdersOrderCreate": Q_SO_ORDERS_ORDER_CREATE,
+    "FetchSoOrdersExtendedOrder": Q_FETCH_SO_ORDERS_EXTENDED_ORDER,
+    "OrderServiceExtendedOrderFeed": Q_ORDER_SERVICE_EXTENDED_ORDER_FEED,
+    "SoOrdersOrderCancel": Q_SO_ORDERS_ORDER_CANCEL,
 }
 
 SKIP_TYPE_MARKERS = (
@@ -3982,7 +4051,238 @@ def place_order(body):
     order = result.get("order") or {}
     store.update_order(row["id"], {"status": "sent", "wsOrderId": _s(order.get("orderId"))})
     sys.stderr.write("bagholder order: %s sent, Wealthsimple order %s\n" % (row["id"], _s(order.get("orderId"))))
+    threading.Thread(target=refresh_orders, args=(row["id"],), name="bagholder-order-refresh", daemon=True).start()
     return {"ok": True, "id": row["id"], "status": "sent", "wsOrderId": _s(order.get("orderId"))}
+
+
+# --- reading orders back: Wealthsimple's state of every order, from anywhere ---
+ORDER_BRANCH = "TR"   # the branch id Wealthsimple's web app passes with every order lookup
+# Wealthsimple's order statuses, grouped as the page shows them
+WS_PENDING = ("NEW", "PENDING_SUBMISSION", "PENDING_REVIEW", "PENDING_FUND_TRANSFER", "SUBMITTED", "PLACED", "PARTIALLY_FILLED", "CONTINGENT")
+WS_CANCELLING = ("CANCEL_PENDING",)
+WS_STATUS_MAP = {"FILLED": "filled", "POSTED": "filled", "CANCELLED": "cancelled", "DELETED": "cancelled", "EXPIRED": "expired", "REJECTED": "rejected"}
+LIVE_STATUSES = ("sent", "pending", "cancelling")   # rows still worth asking Wealthsimple about
+ORDERS_REFRESH_SEC = 30
+
+
+def app_status(ws_status):
+    s = _s(ws_status).upper()
+    if s in WS_PENDING:
+        return "pending"
+    if s in WS_CANCELLING:
+        return "cancelling"
+    return WS_STATUS_MAP.get(s, "pending" if s else "")
+
+
+def parse_extended_order(data):
+    """One soOrdersExtendedOrder answer into the fields the row keeps."""
+    o = (data or {}).get("soOrdersExtendedOrder") if isinstance(data, dict) else None
+    if not isinstance(o, dict) or not o.get("status"):
+        return None
+    return {
+        "wsStatus": _s(o.get("status")).upper(),
+        "status": app_status(o.get("status")),
+        "filledQty": _num(o.get("filledQuantity"), None),
+        "avgFill": _num(o.get("averageFilledPrice"), None),
+        "submittedAt": _s(o.get("submittedAtUtc")),
+        "expiresAt": _s(o.get("expiredAtUtc")),
+        "error": _s(o.get("rejectionCause") or o.get("rejectionCode")),
+        "quantity": _num(o.get("submittedQuantity"), None),
+        "limitPrice": _num(o.get("limitPrice"), None),
+        "stopPrice": _num(o.get("stopPrice"), None),
+        "tif": _s(o.get("timeInForce")).upper(),
+        "currency": _s(o.get("securityCurrency")).upper(),
+        "accountId": _s(o.get("canonicalAccountId") or o.get("accountId")),
+        "securityId": _s(o.get("securityId")),
+        "type": _s(o.get("orderType")).upper(),
+    }
+
+
+def fetch_extended_order(sess, external_id):
+    return parse_extended_order(graphql(sess, "FetchSoOrdersExtendedOrder", {"branchId": ORDER_BRANCH, "externalId": _s(external_id)}))
+
+
+def fetch_order_feed(sess, identity, statuses=WS_PENDING):
+    """Every order of the identity in the given statuses, placed from anywhere."""
+    out = []
+    cursor = None
+    while True:
+        data = graphql(sess, "OrderServiceExtendedOrderFeed", {"identityId": identity, "statuses": list(statuses), "first": 25, "cursor": cursor})
+        feed = (((data or {}).get("identity") or {}).get("orderServiceExtendedOrderFeed") or {})
+        for edge in feed.get("edges") or []:
+            node = (edge or {}).get("node")
+            if isinstance(node, dict) and node.get("id"):
+                out.append(node)
+        page = feed.get("pageInfo") or {}
+        cursor = page.get("endCursor")
+        if not page.get("hasNextPage") or not cursor:
+            break
+    return out
+
+
+def feed_order_row(node):
+    """A feed node that Bagholder did not place, as a row of its own."""
+    sec = node.get("security") if isinstance(node.get("security"), dict) else {}
+    stock = sec.get("stock") if isinstance(sec.get("stock"), dict) else {}
+    acct = next((a for a in order_accounts() if a["id"] == _s(node.get("canonicalAccountId"))), None)
+    side = _s(node.get("side")).upper()
+    return {
+        "id": _s(node.get("id")),
+        "createdAt": _s(node.get("createdAtUtc")),
+        "accountId": _s(node.get("canonicalAccountId")),
+        "account": acct["name"] if acct else "",
+        "securityId": _s(node.get("securityId") or sec.get("id")),
+        "symbol": _s(node.get("symbol") or stock.get("symbol")),
+        "currency": _s(node.get("securityCurrency")).upper(),
+        "side": "SELL" if side.startswith("SELL") else "BUY",
+        "type": _s(node.get("executionType")).upper() or "LIMIT",
+        "quantity": _num(node.get("submittedQuantity"), 0.0),
+        "limitPrice": _num(node.get("limitPrice"), None),
+        "stopPrice": _num(node.get("stopPrice"), None),
+        "tif": "",
+        "stopLoss": None,
+        "takeProfit": None,
+        "status": app_status(node.get("status")),
+        "wsStatus": _s(node.get("status")).upper(),
+        "wsOrderId": _s(node.get("orderId")),
+        "avgFill": _num(node.get("averageFillPrice"), None),
+        "source": "wealthsimple",
+    }
+
+
+_orders_refreshed_at = ""
+_orders_refreshing = threading.Lock()
+
+
+def kick_orders_refresh():
+    """A read in the background when the last one is older than the loop's tick and
+    none is running: the Orders tab opening does not wait for the loop."""
+    if _orders_refreshed_at:
+        try:
+            age = (datetime.now(timezone.utc) - datetime.strptime(_orders_refreshed_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds()
+        except ValueError:
+            age = ORDERS_REFRESH_SEC
+        if age < ORDERS_REFRESH_SEC:
+            return False
+    with _lock:
+        connected = bool(_state["connected"]) and not _state["syncing"]
+    if not connected or not _orders_refreshing.acquire(blocking=False):
+        return False
+
+    def go():
+        try:
+            refresh_orders()
+        finally:
+            _orders_refreshing.release()
+    threading.Thread(target=go, name="bagholder-orders-refresh", daemon=True).start()
+    return True
+
+
+def refresh_orders(only_id=""):
+    """Read every live order's state back from Wealthsimple, and the pending-order
+    feed so an order placed in Wealthsimple's own app is a row too. Never raises;
+    what failed is on the terminal. Returns what it did."""
+    global _orders_refreshed_at
+    sess = _ticket_session()
+    if not sess:
+        return {"ok": False, "skipped": "no session"}
+    live = [o for o in store.list_orders() if o["status"] in LIVE_STATUSES and (not only_id or o["id"] == only_id)]
+    read, failed = 0, 0
+    for o in live:
+        try:
+            upd = fetch_extended_order(sess, o["id"])
+        except PermissionError:
+            sys.stderr.write("bagholder orders: Wealthsimple refused the session\n")
+            return {"ok": False, "skipped": "refused"}
+        except Exception as e:
+            failed += 1
+            sys.stderr.write("bagholder orders: %s status failed: %s\n" % (o["id"], str(e) or e.__class__.__name__))
+            continue
+        if upd:
+            patch = {k: upd[k] for k in ("wsStatus", "status", "filledQty", "avgFill", "submittedAt", "expiresAt") if upd.get(k) is not None}
+            if upd.get("error"):
+                patch["error"] = upd["error"]
+            if o.get("source") == "wealthsimple":
+                for k in ("tif", "quantity", "limitPrice", "stopPrice", "currency"):
+                    if upd.get(k) not in (None, ""):
+                        patch[k] = upd[k]
+            store.update_order(o["id"], patch)
+            read += 1
+    added = 0
+    if not only_id:
+        identity = _identity_from(sess)
+        if identity:
+            try:
+                known = {o["id"] for o in store.list_orders()}
+                for node in fetch_order_feed(sess, identity):
+                    if node["id"] in known:
+                        continue
+                    store.insert_order(feed_order_row(node))
+                    added += 1
+            except PermissionError:
+                return {"ok": False, "skipped": "refused"}
+            except Exception as e:
+                failed += 1
+                sys.stderr.write("bagholder orders: pending-order feed failed: %s\n" % (str(e) or e.__class__.__name__))
+    if not only_id:   # one order's read after a send or a cancel is not a check of everything
+        _orders_refreshed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if read or added or failed:
+        sys.stderr.write("bagholder orders: %d read, %d found pending at Wealthsimple, %d failed\n" % (read, added, failed))
+    return {"ok": not failed, "read": read, "added": added, "failed": failed}
+
+
+def orders_loop():
+    """Every ORDERS_REFRESH_SEC while connected: the live orders' state and the feed."""
+    while not _stop.wait(ORDERS_REFRESH_SEC):
+        with _lock:
+            connected = bool(_state["connected"]) and not _state["syncing"]
+        if not connected:
+            continue
+        if not any(o["status"] in LIVE_STATUSES for o in store.list_orders()) and _orders_refreshed_at:
+            # nothing live: the feed alone, every tenth tick, catches an order placed elsewhere
+            if int(time.time() / ORDERS_REFRESH_SEC) % 10:
+                continue
+        refresh_orders()
+
+
+def cancel_order(order_id):
+    """Ask Wealthsimple to cancel a live order. Only with ORDERS_LIVE: without it the
+    app never writes to Wealthsimple, and a dry row was never there to cancel."""
+    row = store.get_order(order_id)
+    if not row:
+        return {"ok": False, "error": "No such order."}
+    if row["status"] not in LIVE_STATUSES:
+        return {"ok": False, "error": "That order is not open."}
+    if not ORDERS_LIVE:
+        return {"ok": False, "error": "Orders are off: start Bagholder with BAGHOLDER_LIVE_ORDERS=1 to cancel at Wealthsimple."}
+    sess = _ticket_session()
+    if not sess:
+        return {"ok": False, "error": "Not connected."}
+    try:
+        data = graphql(sess, "SoOrdersOrderCancel", {"cancelOrderRequest": {"externalId": row["id"]}})
+    except PermissionError:
+        return {"ok": False, "error": "Wealthsimple refused the session. Connect Wealthsimple again."}
+    except Exception as e:
+        msg = str(e) or e.__class__.__name__
+        sys.stderr.write("bagholder orders: cancel %s failed: %s\n" % (row["id"], msg))
+        return {"ok": False, "error": "Cancel failed: " + msg}
+    result = (data or {}).get("orderServiceCancelOrder") or {}
+    errs = result.get("errors") or []
+    if errs:
+        first = errs[0] if isinstance(errs[0], dict) else {"message": str(errs[0])}
+        msg = _s(first.get("message") or first.get("code"))
+        sys.stderr.write("bagholder orders: cancel %s refused: %s\n" % (row["id"], msg))
+        return {"ok": False, "error": "Wealthsimple refused the cancel: " + msg}
+    store.update_order(row["id"], {"status": "cancelling", "wsStatus": "CANCEL_PENDING"})
+    sys.stderr.write("bagholder orders: cancel %s accepted\n" % row["id"])
+    threading.Thread(target=refresh_orders, args=(row["id"],), name="bagholder-order-refresh", daemon=True).start()
+    return {"ok": True, "id": row["id"], "status": "cancelling"}
+
+
+def orders_payload(kick=False):
+    if kick:
+        kick_orders_refresh()
+    return {"ok": True, "orders": store.list_orders(), "live": ORDERS_LIVE, "refreshedAt": _orders_refreshed_at}
 
 
 def status_payload():
@@ -4598,7 +4898,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self._gate():
                 self._send(403, {"ok": False})
                 return
-            self._send(200, {"ok": True, "orders": store.list_orders(), "live": ORDERS_LIVE})
+            self._send(200, orders_payload(kick=True))
             return
         if path == "/api/status":
             if not self._gate():
@@ -4762,6 +5062,16 @@ class Handler(BaseHTTPRequestHandler):
             body = self._read_json()
             self._send(200, place_order(body))
             return
+        if path == "/api/order/cancel":
+            body = self._read_json()
+            self._send(200, cancel_order((body or {}).get("id") if isinstance(body, dict) else ""))
+            return
+        if path == "/api/orders/refresh":
+            self._read_json()
+            r = refresh_orders()
+            r.update(orders_payload())
+            self._send(200, r)
+            return
         if path == "/api/journal":
             body = self._read_json()
             if not isinstance(body, dict) or not _s(body.get("id")).strip():
@@ -4918,6 +5228,7 @@ def main():
     threading.Thread(target=check_for_update, name="bagholder-update-check", daemon=True).start()
     threading.Thread(target=quote_loop, name="bagholder-quote-loop", daemon=True).start()
     threading.Thread(target=portfolio_loop, name="bagholder-portfolio-loop", daemon=True).start()
+    threading.Thread(target=orders_loop, name="bagholder-orders-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()

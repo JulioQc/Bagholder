@@ -2074,8 +2074,8 @@ class WealthsimpleHttpTest(unittest.TestCase):
 
 
 
-class OrderTicketTest(unittest.TestCase):
-    """The order ticket: what the page asks for, what the store keeps, what would be sent."""
+class _OrdersBase(unittest.TestCase):
+    """A book with a margin account, a TFSA and the QNC listings, for the ticket tests."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -2107,6 +2107,10 @@ class OrderTicketTest(unittest.TestCase):
                 "stopLoss": {"kind": "stop", "price": 157.13}, "takeProfit": {"price": 181.94}}
         body.update(over)
         return body
+
+
+class OrderTicketTest(_OrdersBase):
+    """The order ticket: what the page asks for, what the store keeps, what would be sent."""
 
     def test_tradable_accounts_are_open_self_directed_securities_accounts(self):
         ids = [a["id"] for a in bagholder.order_accounts()]
@@ -2246,3 +2250,137 @@ class OrderTicketTest(unittest.TestCase):
         store.clear_synced_data(keep_journal=False, keep_market=False)
         self.assertEqual(len(store.list_orders()), 1, "what was submitted is a record of the user's own actions, never cleared with the synced rows")
         self.assertEqual(store.list_orders()[0]["id"], r["id"])
+
+
+class OrdersReadBackTest(_OrdersBase):
+    """Orders read back from Wealthsimple: their state, the pending feed, and cancel."""
+
+    def _sent(self):
+        with mock.patch.object(bagholder, "graphql", return_value={"soOrdersCreateOrder": {"errors": [], "order": {"orderId": "ws-1"}}}), \
+             mock.patch.object(bagholder, "ORDERS_LIVE", True), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}), \
+             mock.patch.object(bagholder.threading, "Thread"):
+            return bagholder.place_order(self._ticket())["id"]
+
+    def test_wealthsimple_statuses_group_as_the_page_shows_them(self):
+        for ws in ("NEW", "PENDING_SUBMISSION", "SUBMITTED", "PLACED", "PARTIALLY_FILLED", "CONTINGENT"):
+            self.assertEqual(bagholder.app_status(ws), "pending", ws)
+        self.assertEqual(bagholder.app_status("CANCEL_PENDING"), "cancelling")
+        self.assertEqual(bagholder.app_status("FILLED"), "filled"); self.assertEqual(bagholder.app_status("POSTED"), "filled")
+        self.assertEqual(bagholder.app_status("CANCELLED"), "cancelled"); self.assertEqual(bagholder.app_status("DELETED"), "cancelled")
+        self.assertEqual(bagholder.app_status("EXPIRED"), "expired"); self.assertEqual(bagholder.app_status("REJECTED"), "rejected")
+        self.assertEqual(bagholder.app_status(""), "")
+
+    def test_a_sent_order_is_read_back_by_its_external_id_on_the_TR_branch(self):
+        oid = self._sent()
+        asked = []
+        def fake_graphql(sess, operation, variables, query=None):
+            asked.append((operation, variables))
+            if operation == "FetchSoOrdersExtendedOrder":
+                return {"soOrdersExtendedOrder": {"status": "FILLED", "filledQuantity": 25, "averageFilledPrice": 165.38, "submittedAtUtc": "2026-09-10T13:30:00Z", "expiredAtUtc": None, "rejectionCause": None, "timeInForce": "DAY", "submittedQuantity": 25}}
+            if operation == "OrderServiceExtendedOrderFeed":
+                return {"identity": {"id": "ident-1", "orderServiceExtendedOrderFeed": {"edges": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}}}
+            raise AssertionError(operation)
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t", "identity_canonical_id": "ident-1"}):
+            r = bagholder.refresh_orders()
+        self.assertEqual((r["read"], r["added"], r["failed"]), (1, 0, 0))
+        self.assertEqual(asked[0], ("FetchSoOrdersExtendedOrder", {"branchId": "TR", "externalId": oid}))
+        self.assertEqual(asked[1][1]["statuses"], list(bagholder.WS_PENDING))
+        row = store.get_order(oid)
+        self.assertEqual((row["status"], row["wsStatus"], row["filledQty"], row["avgFill"], row["submittedAt"]), ("filled", "FILLED", 25.0, 165.38, "2026-09-10T13:30:00Z"))
+        # a filled order is not asked about again
+        asked.clear()
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t", "identity_canonical_id": "ident-1"}):
+            bagholder.refresh_orders()
+        self.assertEqual([a[0] for a in asked], ["OrderServiceExtendedOrderFeed"])
+
+    def test_an_order_placed_in_wealthsimples_app_becomes_a_row_from_the_feed(self):
+        node = {"id": "order-ws-placed", "orderId": "ws-9", "canonicalAccountId": "acct-tfsa", "createdAtUtc": "2026-09-10T01:00:00Z", "status": "SUBMITTED", "side": "BUY", "executionType": "LIMIT",
+                "submittedQuantity": 3, "limitPrice": 1.76, "stopPrice": None, "averageFillPrice": None, "securityCurrency": "USD", "securityId": "sec-s-us", "symbol": "QNC", "security": {"id": "sec-s-us", "stock": {"symbol": "QNC", "name": "Quantum Emotion Corp"}}}
+        def fake_graphql(sess, operation, variables, query=None):
+            if operation == "OrderServiceExtendedOrderFeed":
+                return {"identity": {"id": "ident-1", "orderServiceExtendedOrderFeed": {"edges": [{"cursor": "c1", "node": node}], "pageInfo": {"hasNextPage": False, "endCursor": "c1"}}}}
+            if operation == "FetchSoOrdersExtendedOrder":
+                return {"soOrdersExtendedOrder": {"status": "SUBMITTED", "timeInForce": "UNTIL_CANCEL", "submittedQuantity": 3, "limitPrice": 1.76, "securityCurrency": "USD"}}
+            raise AssertionError(operation)
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t", "identity_canonical_id": "ident-1"}):
+            r = bagholder.refresh_orders()
+        self.assertEqual((r["read"], r["added"]), (0, 1))
+        row = store.get_order("order-ws-placed")
+        self.assertEqual((row["source"], row["status"], row["symbol"], row["account"], row["side"], row["type"], row["quantity"], row["limitPrice"], row["wsOrderId"]), ("wealthsimple", "pending", "QNC", "TFSA", "BUY", "LIMIT", 3.0, 1.76, "ws-9"))
+        self.assertIsNone(row["stopLoss"])
+        # the next pass reads it like any live order and learns its time in force; nothing is inserted twice
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t", "identity_canonical_id": "ident-1"}):
+            r = bagholder.refresh_orders()
+        self.assertEqual((r["read"], r["added"]), (1, 0))
+        self.assertEqual(store.get_order("order-ws-placed")["tif"], "UNTIL_CANCEL")
+        self.assertEqual(len(store.list_orders()), 1)
+
+    def test_a_failed_read_is_counted_and_the_others_still_happen(self):
+        oid = self._sent()
+        def fake_graphql(sess, operation, variables, query=None):
+            if operation == "FetchSoOrdersExtendedOrder":
+                raise RuntimeError("FetchSoOrdersExtendedOrder: boom")
+            return {"identity": {"id": "ident-1", "orderServiceExtendedOrderFeed": {"edges": [], "pageInfo": {"hasNextPage": False}}}}
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t", "identity_canonical_id": "ident-1"}):
+            r = bagholder.refresh_orders()
+        self.assertEqual((r["ok"], r["failed"]), (False, 1))
+        self.assertEqual(store.get_order(oid)["status"], "sent", "an unanswered read changes nothing")
+
+    def test_cancel_needs_the_switch_and_a_live_order(self):
+        oid = self._sent()
+        with mock.patch.object(bagholder, "ORDERS_LIVE", False):
+            self.assertIn("Orders are off", bagholder.cancel_order(oid)["error"])
+        self.assertEqual(bagholder.cancel_order("nope")["error"], "No such order.")
+        store.update_order(oid, {"status": "filled"})
+        with mock.patch.object(bagholder, "ORDERS_LIVE", True):
+            self.assertEqual(bagholder.cancel_order(oid)["error"], "That order is not open.")
+
+    def test_cancel_goes_to_wealthsimple_by_external_id_and_the_row_says_cancelling(self):
+        oid = self._sent()
+        sent = []
+        def fake_graphql(sess, operation, variables, query=None):
+            sent.append((operation, variables))
+            return {"orderServiceCancelOrder": {"externalId": oid, "errors": []}}
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "ORDERS_LIVE", True), \
+             mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}), mock.patch.object(bagholder.threading, "Thread"):
+            r = bagholder.cancel_order(oid)
+        self.assertTrue(r["ok"]); self.assertEqual(r["status"], "cancelling")
+        self.assertEqual(sent, [("SoOrdersOrderCancel", {"cancelOrderRequest": {"externalId": oid}})])
+        self.assertEqual((store.get_order(oid)["status"], store.get_order(oid)["wsStatus"]), ("cancelling", "CANCEL_PENDING"))
+        # a refusal leaves the row as it was
+        store.update_order(oid, {"status": "pending", "wsStatus": "SUBMITTED"})
+        with mock.patch.object(bagholder, "graphql", return_value={"orderServiceCancelOrder": {"externalId": oid, "errors": [{"code": "x", "message": "Too late to cancel"}]}}), \
+             mock.patch.object(bagholder, "ORDERS_LIVE", True), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}):
+            r = bagholder.cancel_order(oid)
+        self.assertIn("Too late to cancel", r["error"])
+        self.assertEqual(store.get_order(oid)["status"], "pending")
+
+    def test_the_orders_tab_opening_kicks_a_read_unless_one_is_fresh(self):
+        ran = []
+        class Sync:
+            def __init__(self, target=None, args=(), **kw): self.target, self.args = target, args
+            def start(self): self.target(*self.args)
+        with mock.patch.object(bagholder.threading, "Thread", Sync), mock.patch.object(bagholder, "refresh_orders", side_effect=lambda only_id="": ran.append(only_id)) as rf:
+            with bagholder._lock:
+                bagholder._state["connected"] = False
+            self.assertFalse(bagholder.kick_orders_refresh(), "nothing is read while not connected")
+            with bagholder._lock:
+                bagholder._state["connected"] = True
+            bagholder._orders_refreshed_at = ""
+            self.assertTrue(bagholder.orders_payload(kick=True)["ok"])
+            self.assertEqual(ran, [""], "the list's first request reads everything")
+            bagholder._orders_refreshed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.assertFalse(bagholder.kick_orders_refresh(), "a read younger than the loop's tick is fresh enough")
+            bagholder._orders_refreshed_at = "2026-01-01T00:00:00Z"
+            self.assertTrue(bagholder.kick_orders_refresh())
+        with bagholder._lock:
+            bagholder._state["connected"] = False
+        bagholder._orders_refreshed_at = ""
+
+    def test_one_orders_read_after_a_send_does_not_count_as_a_check(self):
+        oid = self._sent()
+        bagholder._orders_refreshed_at = ""
+        with mock.patch.object(bagholder, "graphql", return_value={"soOrdersExtendedOrder": {"status": "SUBMITTED"}}), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}):
+            bagholder.refresh_orders(only_id=oid)
+        self.assertEqual(bagholder._orders_refreshed_at, "")
+        self.assertEqual(store.get_order(oid)["status"], "pending")
