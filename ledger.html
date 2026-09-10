@@ -2084,7 +2084,8 @@ function portfolioSlices(pf) {
 // card's elements and the hover registry.
 const _donuts = {};
 // a donut's two pieces: the ring with its centre, and the legend (swatch, name, share; mirrored when `side` is "r")
-// `size` fixes the ring's width; without it the ring takes what its card leaves beside the legend. A null `total` leaves
+// `size` sets the ring's width (a number in px, or a CSS width such as "100%" of its grid cell); without it the ring takes
+// what its card leaves beside the legend. A null `total` leaves
 // the centre to its label alone, and a hovered slice then shows its name and share
 function donutPieces(key, centreLabel, items, total, side, size) {
   _donuts[key] = { items, total, centreLabel };
@@ -2098,7 +2099,7 @@ function donutPieces(key, centreLabel, items, total, side, size) {
     const d = "M" + (C + R * Math.cos(a0)).toFixed(2) + " " + (C + R * Math.sin(a0)).toFixed(2) + " A" + R + " " + R + " 0 " + large + " 1 " + (C + R * Math.cos(a1)).toFixed(2) + " " + (C + R * Math.sin(a1)).toFixed(2);
     return '<path d="' + d + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '" style="cursor:default"/>';
   }).join("");
-  const ring = '<div style="position:relative;flex:none;width:' + (size ? SIZE + "px" : "max(200px, min(" + SIZE + "px, 100% - 140px))") + ';aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
+  const ring = '<div style="position:relative;flex:none;width:' + (typeof size === "string" ? size : size ? SIZE + "px" : "max(200px, min(" + SIZE + "px, 100% - 140px))") + ';aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
     // the centre is inset to the ring's hole so a hovered name wraps inside it
     '<div id="' + key + 'Centre" style="position:absolute;inset:21%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">' + esc(centreLabel) + "</div>" + (total == null ? "" : '<div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(total) + "</div>") + "</div></div>";
   const swatch = (x) => '<span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span>';
@@ -2136,9 +2137,11 @@ function exposureCardsHtml(pf) {
   const sec = exposureSlices(pf.sectors, 12).items, reg = exposureSlices(pf.regions).items;
   const head = '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Sectors</h5><h5>Regions</h5></div>';
   if (!sec.length && !reg.length) return '<div class="card elev-sm" style="padding:16px 18px 12px">' + head + '<div class="muted empty" style="font-size:12px">No open positions in scope.</div></div>';
-  const a = donutPieces("xsec", "Sector", sec, null, "l", 240), b = donutPieces("xreg", "Region", reg, null, "r", 240);
+  // the legend columns keep their natural width and share what the donuts leave, so the pair stays centred; the donut
+  // columns grow from 240px to 340px each as the card allows
+  const a = donutPieces("xsec", "Sector", sec, null, "l", "100%"), b = donutPieces("xreg", "Region", reg, null, "r", "100%");
   return '<div class="card elev-sm" style="padding:16px 18px 12px">' + head +
-    '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto minmax(0,1fr);column-gap:40px;align-items:center">' +
+    '<div style="display:grid;grid-template-columns:minmax(max-content,1fr) minmax(240px,340px) minmax(240px,340px) minmax(max-content,1fr);column-gap:40px;align-items:center">' +
     '<div id="xsecPlot" data-hover="xsec" style="display:contents">' + a.legend + a.ring + "</div>" +
     '<div id="xregPlot" data-hover="xreg" style="display:contents">' + b.ring + b.legend + "</div></div></div>";
 }
