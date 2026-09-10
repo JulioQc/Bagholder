@@ -4265,7 +4265,7 @@ def cancel_order(order_id):
     if row["status"] not in LIVE_STATUSES:
         return {"ok": False, "error": "That order is not open."}
     if not ORDERS_LIVE:
-        return {"ok": False, "error": "Orders are off: start Bagholder with BAGHOLDER_LIVE_ORDERS=1 to cancel at Wealthsimple."}
+        return {"ok": False, "error": "Orders are off (BAGHOLDER_DRY_ORDERS): nothing is sent to Wealthsimple."}
     sess = _ticket_session()
     if not sess:
         return {"ok": False, "error": "Not connected."}
@@ -4376,7 +4376,13 @@ def _cancel_exit(order_id):
 
 
 def _exit_row(b, role):
-    """The bracket's latest order of that role, from the orders table."""
+    """The bracket's order of that role: the one it currently holds when it holds one,
+    else its latest (a moved trailing stop leaves the old one behind, cancelled)."""
+    held = b.get("slOrderId") if role == "stop" else b.get("tpOrderId")
+    if held:
+        row = store.get_order(held)
+        if row:
+            return row
     rows = [o for o in store.list_orders() if o.get("parentId") == b["orderId"] and o.get("role") == role]
     return rows[0] if rows else None
 

@@ -2338,7 +2338,7 @@ def list_orders(limit=200):
         conn = _connect()
         try:
             _init_schema(conn)
-            rows = conn.execute("SELECT * FROM orders ORDER BY created_at DESC, id DESC LIMIT ?", (int(limit),)).fetchall()
+            rows = conn.execute("SELECT * FROM orders ORDER BY created_at DESC, rowid DESC LIMIT ?", (int(limit),)).fetchall()
             return [_order_from_row(r) for r in rows]
         finally:
             conn.close()

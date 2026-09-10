@@ -92,7 +92,7 @@ Trades can also be imported from Wealthsimple's CSV exports, or entered by hand.
 - **Trades**: every closed trade with its executions, a price path across the fills, and a journal with a thesis, a grade and tags. Shares, options and crypto are all matched FIFO per account; covered calls, rolls, expiries and assignments are handled.
 - **Portfolio**: market value, net asset value, cost basis, margin used, available margin and unrealized P&L across the accounts you choose; allocation; every open holding with the day's change, each opening on its own page with the chart, the fills and the journal that becomes the trade's when it closes.
 - **Cashflow**: distributions by month and by holding, with yield on cost and current yield from each fund's declared distributions.
-- **Orders**: an order ticket for shares and ETFs, opened from a symbol in the search list, with a stop loss and a take profit recorded alongside; every order placed here or pending at Wealthsimple, with its status read back, and a cancel. Orders reach Wealthsimple only when the app is started with `BAGHOLDER_LIVE_ORDERS=1`.
+- **Orders**: an order ticket for shares and ETFs, opened from a symbol in the search list, with a stop loss and a take profit recorded alongside; every order placed here or pending at Wealthsimple, with its status read back, and a cancel. After a buy fills, the stop loss is placed at Wealthsimple as its own stop order and the take profit is watched and placed when the price reaches it.
 
 A filter icon next to the menu narrows every page at once by date, account, symbol, grade, tag, side, kind, exchange, price, hold time, P&L or quantity.
 
