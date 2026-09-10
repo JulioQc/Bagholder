@@ -689,6 +689,11 @@ class ViewTest(unittest.TestCase):
         self.assertEqual(v["options"]["accounts"], ["Retirement", "Trading"])
         self.assertEqual(v["options"]["kinds"], ["Shares"])
         self.assertEqual(v["options"]["tags"], ["x"])
+        listings = v["options"]["listings"]
+        self.assertEqual(sorted(listings), v["options"]["symbols"], "one listing per symbol the ⌘K list can show")
+        self.assertEqual(listings["DDD"]["exchange"], p["exchange"])
+        self.assertEqual(listings["DDD"]["kind"], "Shares")
+        self.assertIn("name", listings["DDD"])
 
     def test_account_filter_narrows_everything(self):
         v = model.build_view(self.base, {"lists": {"account": ["Retirement"]}})
