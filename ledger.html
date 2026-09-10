@@ -1274,7 +1274,7 @@ function bracketLegs(b) {
   if (b.slKind) {
     const value = b.slKind === "trail" ? "Trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") + " · " + px(b.slPrice) + " now" : "Market at " + px(b.slPrice);
     let st = "Waiting for fill", on = false;
-    if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "Active" : "Arming"; }
+    if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : "Placing"; }
     else if (b.status === "target_placed") st = "Cancelled";
     else if (done) { st = b.outcome === "stopped" ? "Filled" : "Cancelled"; on = b.outcome === "stopped"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
@@ -1284,8 +1284,8 @@ function bracketLegs(b) {
   }
   if (b.tpPrice) {
     let st = "Waiting for fill", on = false;
-    if (b.status === "armed" || b.status === "firing") { on = true; st = "Working"; }
-    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : "Placed"; }
+    if (b.status === "armed" || b.status === "firing") { on = true; st = "Watching"; }
+    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : "At Wealthsimple"; }
     else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
     legs.push({ key: "tp", label: "Take profit", value: "Limit at " + px(b.tpPrice), state: st, on });
@@ -1361,10 +1361,10 @@ function ordersBodyHtml() {
     const rows = entries.filter((o) => ["cancelled", "expired", "rejected", "failed", "dry"].indexOf(o.status) >= 0).sort(newest);
     return group("Cancelled and rejected", rows) || '<div class="dim" style="font-size:12px">Nothing cancelled or rejected.</div>';
   }
-  // resting orders first, then filled entries whose bracket is still working, newest first within each
-  const rows = entries.filter((o) => ORDER_LIVE[o.status] || (() => { const b = bracketOf(o); return b && BRACKET_LIVE[b.status]; })())
-    .sort((a, b) => ((ORDER_LIVE[a.status] ? 0 : 1) - (ORDER_LIVE[b.status] ? 0 : 1)) || newest(a, b));
-  return group("Open", rows) || '<div class="dim" style="font-size:12px">No open orders.</div>';
+  // resting orders under Open; filled entries whose bracket is still working under their own heading
+  const resting = entries.filter((o) => ORDER_LIVE[o.status]).sort(newest);
+  const working = entries.filter((o) => !ORDER_LIVE[o.status] && (() => { const b = bracketOf(o); return b && BRACKET_LIVE[b.status]; })()).sort(newest);
+  return (group("Open", resting) + group("Brackets working", working)) || '<div class="dim" style="font-size:12px">No open orders.</div>';
 }
 function ordersPanelHtml() {
   const seg = (id, label) => '<button class="od-seg' + (state.ordersTab === id ? " on" : "") + '" data-act="ordersTab" data-arg=\'' + attr({ tab: id }) + "'>" + label + "</button>";
