@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from unittest import mock
 
@@ -2564,7 +2564,8 @@ class _EngineBase(_OrdersBase):
         if operation == "FetchSoOrdersExtendedOrder":
             row = store.get_order(variables["externalId"]) or {}
             ws = {"sent": "SUBMITTED", "pending": "SUBMITTED", "cancelling": "CANCEL_PENDING", "filled": "FILLED", "cancelled": "CANCELLED", "expired": "EXPIRED", "rejected": "REJECTED"}.get(row.get("status"), "SUBMITTED")
-            return {"soOrdersExtendedOrder": {"status": ws, "filledQuantity": row.get("filledQty"), "averageFilledPrice": row.get("avgFill"), "submittedQuantity": row.get("quantity")}}
+            return {"soOrdersExtendedOrder": {"status": ws, "filledQuantity": row.get("filledQty"), "averageFilledPrice": row.get("avgFill"), "submittedQuantity": row.get("quantity"),
+                                              "timeInForce": row.get("tif"), "expiredAtUtc": row.get("expiresAt") or None}}
         raise AssertionError(operation)
 
     def _live(self):
@@ -2589,7 +2590,7 @@ class BracketEngineTest(_EngineBase):
 
     def test_a_ticket_with_brackets_makes_a_waiting_bracket(self):
         oid, b = self._entry()
-        self.assertEqual((b["orderId"], b["status"], b["slKind"], b["slPrice"], b["tpPrice"], b["quantity"], b["tif"]), (oid, "waiting", "stop", 157.13, 181.94, 25.0, "DAY"))
+        self.assertEqual((b["orderId"], b["status"], b["slKind"], b["slPrice"], b["tpPrice"], b["quantity"], b["tif"]), (oid, "waiting", "stop", 157.13, 181.94, 25.0, "UNTIL_CANCEL"))
         self.assertIsNone(store.bracket_for_order("nope"))
         self._tick()
         self.assertEqual(store.get_bracket(b["id"])["status"], "waiting", "an unfilled entry leaves the bracket waiting")
@@ -2606,7 +2607,7 @@ class BracketEngineTest(_EngineBase):
         self.assertEqual(len(create), 1)
         inp = create[0]["input"]
         self.assertEqual({k: v for k, v in inp.items() if k != "externalId"},
-                         {"canonicalAccountId": "acct-margin", "executionType": "STOP", "orderType": "SELL_QUANTITY", "quantity": 25.0, "securityId": "sec-s-us", "timeInForce": "DAY", "stopPrice": 157.13})
+                         {"canonicalAccountId": "acct-margin", "executionType": "STOP", "orderType": "SELL_QUANTITY", "quantity": 25.0, "securityId": "sec-s-us", "timeInForce": "UNTIL_CANCEL", "stopPrice": 157.13})
         stop = store.get_order(b["slOrderId"])
         self.assertEqual((stop["role"], stop["parentId"], stop["side"], stop["type"], stop["status"]), ("stop", oid, "SELL", "STOP", "sent"))
         # armed and resting: a quote below the target changes nothing
@@ -2685,19 +2686,180 @@ class BracketEngineTest(_EngineBase):
         b = store.get_bracket(b["id"])
         self.assertEqual((b["status"], b["outcome"]), ("done", "stopped"))
 
-    def test_a_stop_cancelled_by_hand_leaves_the_target_watched(self):
+    def test_a_stop_cancelled_by_hand_ends_the_bracket(self):
+        """The resting stop holds the position's shares. Cancelling it at Wealthsimple is the
+        person taking the position over: nothing of the bracket's may fire on those shares later."""
         oid, b = self._entry()
         store.update_order(oid, {"status": "filled", "filledQty": 25})
         self._tick()
         b = store.get_bracket(b["id"])
         store.update_order(b["slOrderId"], {"status": "cancelled"})
+        self.sent.clear()
         self._tick()
         b = store.get_bracket(b["id"])
-        self.assertEqual((b["status"], b["slKind"], b["slOrderId"]), ("armed", "", ""))
-        self.assertIn("stop cancelled at Wealthsimple", b["error"])
-        self.sent.clear()
+        self.assertEqual((b["status"], b["outcome"]), ("done", "stop cancelled at Wealthsimple by hand"))
+        self.assertEqual(self.sent, [], "nothing else of the bracket's rested, so nothing to cancel")
         self._tick(self._q(182.0))
-        self.assertEqual(store.get_bracket(b["id"])["status"], "target_placed", "no stop to cancel: the limit sell goes at once")
+        self.assertEqual(store.get_bracket(b["id"])["status"], "done", "the target never fires")
+        self.assertEqual([op for op, _ in self.sent], [])
+
+    def test_while_the_limit_sell_rests_the_stop_level_is_watched_and_swaps_it_for_a_market_sell(self):
+        """Wealthsimple holds one order on the shares: after the stop is cancelled for the
+        limit sell at the target, no stop exists there, so Bagholder watches the level."""
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        self._tick(self._q(182.0, bid=182.0))           # target reached: the stop's cancel goes
+        store.update_order(stop, {"status": "cancelled"})
+        self._tick(self._q(182.0, bid=182.0))           # confirmed: the limit sell is placed
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "target_placed")
+        limit = b["tpOrderId"]
+        self.sent.clear()
+        self._tick(self._q(181.0, bid=181.0))           # within reach of the target still: nothing happens
+        self.assertEqual(self.sent, [])
+        self._tick(self._q(157.0, bid=157.0))           # a crash to the stop level in one check: the limit sell's cancel goes
+        self.assertEqual([v["cancelOrderRequest"]["externalId"] for op, v in self.sent if op == "SoOrdersOrderCancel"], [limit])
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["tpOrderId"]), ("stopping", ""))
+        self.sent.clear()
+        self._tick(self._q(156.0, bid=156.0))           # not yet confirmed: nothing new
+        self.assertEqual([op for op, _ in self.sent if op == "SoOrdersOrderCreate"], [])
+        store.update_order(limit, {"status": "cancelled"})
+        self._tick(self._q(156.0, bid=156.0))
+        create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+        self.assertEqual((create[0]["executionType"], create[0]["orderType"], create[0]["quantity"]), ("MARKET", "SELL_QUANTITY", 25.0), "a market sell, the stop having been hit")
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "firing")
+        store.update_order(b["slOrderId"], {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["outcome"]), ("done", "stopped"))
+        self.assertEqual([o["status"] for o in store.list_orders() if o.get("role") in ("stop", "target")].count("pending"), 0, "nothing of the bracket's rests")
+
+    def test_the_limit_sell_gives_way_to_the_stop_order_once_the_target_is_out_of_reach(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        self._tick(self._q(182.0, bid=182.0))
+        store.update_order(stop, {"status": "cancelled"})
+        self._tick(self._q(182.0, bid=182.0))
+        b = store.get_bracket(b["id"])
+        limit = b["tpOrderId"]
+        self.sent.clear()
+        self._tick(self._q(180.5, bid=180.5))           # within a percent of 181.94: the limit stays
+        self.assertEqual(self.sent, [])
+        self._tick(self._q(179.0, bid=179.0))           # out of reach: the limit's cancel goes
+        self.assertEqual([v["cancelOrderRequest"]["externalId"] for op, v in self.sent if op == "SoOrdersOrderCancel"], [limit])
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["tpOrderId"], b["slOrderId"]), ("armed", "", ""))
+        self.sent.clear()
+        self._tick(self._q(179.0, bid=179.0))           # not confirmed yet: no stop order
+        self.assertEqual([op for op, _ in self.sent if op == "SoOrdersOrderCreate"], [])
+        store.update_order(limit, {"status": "cancelled"})
+        self._tick(self._q(179.0, bid=179.0))
+        create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+        self.assertEqual((create[0]["executionType"], create[0]["stopPrice"], create[0]["timeInForce"]), ("STOP", 157.13, "UNTIL_CANCEL"), "the stop order rests at Wealthsimple again")
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "armed")
+        self.assertTrue(b["slOrderId"])
+        self.assertEqual([o["status"] for o in store.list_orders() if o.get("role") == "target"], ["cancelled"], "no limit sell rests")
+
+    def test_a_trailing_level_keeps_following_the_high_while_the_limit_sell_rests(self):
+        oid, b = self._entry(stopLoss={"kind": "trail", "trail": 5, "trailUnit": "pct"}, takeProfit={"price": 175.0})
+        store.update_order(oid, {"status": "filled", "filledQty": 25, "avgFill": 165.38})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        self._tick(self._q(175.5, bid=175.5))
+        store.update_order(stop, {"status": "cancelled"})
+        self._tick(self._q(175.5, bid=175.5))
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "target_placed")
+        self._tick(self._q(180.0, bid=180.0))
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["highWater"], b["slPrice"]), (180.0, 171.0), "the level follows the high with no order to move")
+
+    def test_a_price_changed_by_hand_at_wealthsimple_is_adopted(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        store.update_order(b["slOrderId"], {"stopPrice": 160.0})
+        self._tick()
+        self.assertEqual(store.get_bracket(b["id"])["slPrice"], 160.0, "the bracket follows the level set by hand")
+
+    def test_an_ending_is_confirmed_before_the_bracket_is_done(self):
+        """A refused cancel is sent again on every check; the bracket reads closing until
+        Wealthsimple confirms nothing of its rests."""
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        with mock.patch.object(bagholder, "cancel_order", return_value={"ok": False, "error": "Wealthsimple is busy"}):
+            with self._live()[0], self._live()[1], self._live()[2], self._live()[3]:
+                bagholder.cancel_bracket(b["id"])
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["outcome"]), ("closing", "cancelled by the user"))
+        self.assertIn(store.get_order(stop)["status"], ("sent", "pending"), "the stop still rests: the cancel was refused")
+        self.sent.clear()
+        self._tick()
+        self.assertEqual([op for op, _ in self.sent], ["SoOrdersOrderCancel"], "the cancel is sent again")
+        self.assertEqual(store.get_bracket(b["id"])["status"], "closing")
+        store.update_order(stop, {"status": "cancelled"})
+        self._tick()
+        self.assertEqual(store.get_bracket(b["id"])["status"], "done")
+
+    def test_an_exit_resting_with_no_bracket_holding_it_is_swept(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        store.update_bracket(b["id"], {"status": "done", "outcome": "stopped", "slOrderId": ""})   # a bracket that ended with its stop somehow still resting
+        self.sent.clear()
+        self._tick()
+        self.assertEqual([v["cancelOrderRequest"]["externalId"] for op, v in self.sent if op == "SoOrdersOrderCancel"], [stop])
+
+    def test_a_sell_from_the_ticket_ends_the_bracket_on_those_shares_first(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        self.sent.clear()
+        with self._live()[0], self._live()[1], self._live()[2], self._live()[3], mock.patch.object(bagholder.time, "sleep"):
+            r = bagholder.place_order(self._ticket(side="SELL", stopLoss=None, takeProfit=None))
+        self.assertTrue(r["ok"], r)
+        ops = [op for op, _ in self.sent]
+        self.assertEqual(ops[0], "SoOrdersOrderCancel", "the resting stop goes first")
+        self.assertEqual(ops[-1], "SoOrdersOrderCreate", "then the sell")
+        self.assertLess(ops.index("SoOrdersOrderCancel"), ops.index("SoOrdersOrderCreate"))
+        self.assertEqual(store.get_bracket(b["id"])["outcome"], "sold from the ticket")
+        self.assertIn(store.get_bracket(b["id"])["status"], ("closing", "done"))
+        self.assertEqual(store.get_order(stop)["status"], "cancelling")
+
+    def test_selling_part_of_the_shares_keeps_the_bracket_on_the_rest(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        first = b["slOrderId"]
+        with self._live()[0], self._live()[1], self._live()[2], self._live()[3], mock.patch.object(bagholder.time, "sleep"):
+            r = bagholder.place_order(self._ticket(side="SELL", quantity=10, stopLoss=None, takeProfit=None))
+        self.assertTrue(r["ok"], r)
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["quantity"], b["slOrderId"]), ("armed", 15.0, ""))
+        store.update_order(first, {"status": "cancelled"})
+        self.sent.clear()
+        self._tick()
+        create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+        self.assertEqual((create[0]["executionType"], create[0]["quantity"], create[0]["stopPrice"]), ("STOP", 15.0, 157.13), "a stop on the fifteen left")
 
     def test_a_watched_stop_fires_as_a_market_sell_when_wealthsimple_takes_no_stop_order(self):
         oid, b = self._entry()
@@ -2747,30 +2909,68 @@ class BracketEngineTest(_EngineBase):
         self.assertEqual(store.get_bracket(b["id"])["slPrice"], 171.0)
         self._tick(self._q(171.5))
         self.assertEqual(store.get_bracket(b["id"])["slPrice"], 171.0, "a lower high never lowers the stop")
-        # a rise past the step moves it at once
-        self._tick(self._q(182.0))
-        self.assertEqual(store.get_bracket(b["id"])["slPrice"], 172.9)
+        # a rise past the step moves it at once (still under the target, whose turn would come first)
+        self._tick(self._q(181.5))
+        self.assertEqual(store.get_bracket(b["id"])["slPrice"], 172.43)
 
-    def test_the_balances_feed_never_ends_a_bracket(self):
+    def test_the_balances_feed_never_touches_a_bracket_with_a_resting_order(self):
         """2026-09-10: Wealthsimple's balances listed a held position on one read and omitted
-        it on the next; a live stop was cancelled on that word. Never again."""
+        it on the next; a live stop was cancelled on that word. A resting order of ours holds
+        the shares, so the balances cannot mean the position is gone."""
         oid, b = self._entry()
         store.update_order(oid, {"status": "filled", "filledQty": 25})
         self._tick()
         b = store.get_bracket(b["id"])
-        store.replace_balances([{"accountId": "acct-margin", "securityId": "sec-s-us", "quantity": 25}])
-        store.set_meta("balances_read_at", "2099-01-01T00:00:00Z")
-        self._tick()
-        self.assertTrue(store.get_bracket(b["id"])["seenHeld"], "the position was seen held")
         store.replace_balances([{"accountId": "acct-margin", "securityId": "sec-other", "quantity": 1}])
-        store.update_bracket(b["id"], {"armedAt": "2020-01-01T00:00:00Z"})
+        store.update_bracket(b["id"], {"armedAt": "2020-01-01T00:00:00Z", "seenHeld": True})
         self.sent.clear()
-        for _ in range(3):
+        for stamp in ("2099-01-01T00:00:00Z", "2099-01-01T01:00:00Z", "2099-01-01T02:00:00Z"):
+            store.set_meta("balances_read_at", stamp)
             self._tick()
         b = store.get_bracket(b["id"])
-        self.assertEqual(b["status"], "armed", "a read without the position changes nothing")
+        self.assertEqual(b["status"], "armed", "reads without the position change nothing while the stop rests")
         self.assertTrue(b["slOrderId"], "the stop still rests")
         self.assertEqual(self.sent, [], "nothing is cancelled on the balances' word")
+
+    def _watched_only(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        with mock.patch.object(bagholder, "_stop_allowed", return_value=False):
+            self._tick()
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["slMode"], b["slOrderId"]), ("armed", "watched", ""))
+        store.update_bracket(b["id"], {"armedAt": "2020-01-01T00:00:00Z"})
+        return oid, b
+
+    def test_a_watched_only_bracket_ends_on_the_second_balance_read_without_the_position(self):
+        oid, b = self._watched_only()
+        store.replace_balances([{"accountId": "acct-margin", "securityId": "sec-s-us", "quantity": 25}])
+        store.set_meta("balances_read_at", "2099-01-01T00:00:00Z")
+        with mock.patch.object(bagholder, "_stop_allowed", return_value=False):
+            self._tick()
+            self.assertTrue(store.get_bracket(b["id"])["seenHeld"])
+            store.replace_balances([{"accountId": "acct-margin", "securityId": "sec-other", "quantity": 1}])
+            store.set_meta("balances_read_at", "2099-01-01T01:00:00Z")
+            self._tick()
+            b = store.get_bracket(b["id"])
+            self.assertEqual((b["status"], b["missedAt"]), ("armed", "2099-01-01T01:00:00Z"), "one read never ends it")
+            self._tick()
+            self.assertEqual(store.get_bracket(b["id"])["status"], "armed", "the same read again is still one read")
+            store.set_meta("balances_read_at", "2099-01-01T02:00:00Z")
+            self._tick()
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "done")
+        self.assertIn("two balance reads", b["outcome"])
+
+    def test_a_watched_only_bracket_ends_when_the_activity_feed_shows_the_sale(self):
+        oid, b = self._watched_only()
+        store.insert_activity({"id": "act-sale", "transactionDate": "2026-09-10", "occurredAt": "2026-09-10T15:00:00Z", "accountId": "acct-margin", "securityId": "sec-s-us", "symbol": "QNC",
+                               "quantity": 25, "unitPrice": 170.0, "netCashAmount": 4250.0, "activityType": "Trade", "activitySubType": "SELL", "source": "csv"})
+        with mock.patch.object(bagholder, "_stop_allowed", return_value=False):
+            self._tick()
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "done")
+        self.assertIn("sold", b["outcome"])
 
     def test_a_rejected_exit_is_tried_again_spaced_out_for_as_long_as_the_bracket_lives(self):
         oid, b = self._entry()
@@ -2823,8 +3023,15 @@ class BracketEngineTest(_EngineBase):
         self.assertTrue(r["ok"])
         self.assertEqual([op for op, _ in self.sent], ["SoOrdersOrderCancel"])
         b = store.get_bracket(b["id"])
-        self.assertEqual((b["status"], b["outcome"]), ("cancelled", "cancelled by the user"))
+        self.assertEqual((b["status"], b["outcome"]), ("closing", "cancelled by the user"))
         self.assertEqual(store.get_order(oid)["status"], "filled", "the entry is not touched")
+        store.update_order(store.list_orders()[0]["id"] if store.list_orders()[0].get("role") == "stop" else "", {"status": "cancelled"})
+        for o in store.list_orders():
+            if o.get("role") == "stop":
+                store.update_order(o["id"], {"status": "cancelled"})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "done", "done once Wealthsimple confirms the cancel")
         self.assertIn("not live", bagholder.cancel_bracket(b["id"])["error"])
         self.assertEqual(bagholder.cancel_bracket("nope")["error"], "No such bracket.")
         self.assertEqual([x["id"] for x in bagholder.orders_payload()["brackets"]], [b["id"]])
@@ -2912,6 +3119,7 @@ class OrdersPanelTest(_EngineBase):
         store.update_order(oid, {"status": "filled", "filledQty": 25})
         self._tick()
         b = store.get_bracket(b["id"])
+        store.update_order(b["slOrderId"], {"status": "cancelled"})
         store.update_bracket(b["id"], {"slKind": "", "slOrderId": ""})   # no stop: the target goes straight out
         self._tick(self._q(182.0, bid=181.95))
         b = store.get_bracket(b["id"])
@@ -2993,22 +3201,150 @@ class OrderTickTest(_OrdersBase):
         self.assertEqual((req["limitPrice"], req["stopPrice"]), (0.9877, 1.0))
 
 
+class NinetyDayRollTest(_EngineBase):
+    """A resting exit is placed again before Wealthsimple's ninety days end."""
+
+    def _armed(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25, "avgFill": 165.38})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        self.assertTrue(b["slOrderId"])
+        return b
+
+    def _ending_in(self, order_id, seconds):
+        when = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        store.update_order(order_id, {"expiresAt": when})
+
+    def _creates(self):
+        return [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+
+    def _cancels(self):
+        return [v["cancelOrderRequest"]["externalId"] for op, v in self.sent if op == "SoOrdersOrderCancel"]
+
+    def test_a_stop_near_its_ninety_days_is_rolled_outside_the_session(self):
+        b = self._armed()
+        first = b["slOrderId"]
+        self._ending_in(first, 5 * 86400)
+        self.sent.clear()
+        self._tick(self._q(170.0, status="OPEN"))
+        self.assertEqual(self._cancels(), [], "five days left and the market open: it waits for the close")
+        self.assertEqual(store.get_bracket(b["id"])["slOrderId"], first)
+        self._tick(self._q(170.0, status="CLOSED"))
+        self.assertEqual(self._cancels(), [first], "closed: the stop is cancelled to be placed again")
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["slOrderId"], b["slPrice"]), ("armed", "", 157.13), "the level is kept")
+        self.assertEqual(self._creates(), [], "nothing new until the cancel is confirmed")
+        store.update_order(first, {"status": "cancelled", "wsStatus": "CANCELLED"})
+        self.sent.clear()
+        self._tick(self._q(170.0, status="CLOSED"))
+        b = store.get_bracket(b["id"])
+        self.assertTrue(b["slOrderId"] and b["slOrderId"] != first, "a new stop rests at Wealthsimple")
+        self.assertEqual((self._creates()[0]["executionType"], self._creates()[0]["stopPrice"], self._creates()[0]["timeInForce"]), ("STOP", 157.13, "UNTIL_CANCEL"))
+        self.assertEqual(b["status"], "armed")
+
+    def test_in_the_last_two_days_the_roll_does_not_wait_for_the_close(self):
+        b = self._armed()
+        first = b["slOrderId"]
+        self._ending_in(first, 86400)
+        self.sent.clear()
+        self._tick(self._q(170.0, status="OPEN"))
+        self.assertEqual(self._cancels(), [first])
+
+    def test_a_stop_with_time_left_is_left_alone(self):
+        b = self._armed()
+        self._ending_in(b["slOrderId"], 30 * 86400)
+        self.sent.clear()
+        self._tick(self._q(170.0, status="CLOSED"))
+        self.assertEqual(self._cancels(), [])
+        self.assertEqual(store.get_bracket(b["id"])["slOrderId"], b["slOrderId"])
+
+    def test_the_end_is_ninety_days_from_submission_when_wealthsimple_reports_none(self):
+        b = self._armed()
+        long_ago = (datetime.now(timezone.utc) - timedelta(days=86)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        store.update_order(b["slOrderId"], {"expiresAt": "", "submittedAt": long_ago})
+        self.sent.clear()
+        self._tick(self._q(170.0, status="CLOSED"))
+        self.assertEqual(self._cancels(), [b["slOrderId"]])
+
+    def test_a_trailing_stop_keeps_its_level_and_high_through_the_roll(self):
+        oid, b = self._entry(stopLoss={"kind": "trail", "trail": 5, "trailUnit": "pct"})
+        store.update_order(oid, {"status": "filled", "filledQty": 25, "avgFill": 165.38})
+        self._tick()
+        self._tick(self._q(180.0))   # the high moves the stop up
+        b = store.get_bracket(b["id"])
+        store.update_order(_latest_stop(b), {"status": "cancelled"})
+        self._tick(self._q(180.0))
+        b = store.get_bracket(b["id"])
+        level, high, cur = b["slPrice"], b["highWater"], b["slOrderId"]
+        self.assertEqual((level, high), (171.0, 180.0))
+        self._ending_in(cur, 86400)
+        self.sent.clear()
+        self._tick(self._q(180.0, status="CLOSED"))
+        store.update_order(cur, {"status": "cancelled"})
+        self._tick(self._q(180.0, status="CLOSED"))
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["slPrice"], b["highWater"]), (level, high))
+        self.assertEqual(self._creates()[-1]["stopPrice"], level)
+        self.assertTrue(b["slOrderId"] and b["slOrderId"] != cur)
+
+    def test_a_placed_target_near_its_ninety_days_is_rolled_too(self):
+        b = self._armed()
+        stop = b["slOrderId"]
+        self._tick(self._q(182.0, bid=182.0))   # target reached: the stop's cancel goes first
+        store.update_order(stop, {"status": "cancelled"})
+        self._tick(self._q(182.0, bid=182.0))
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "target_placed")
+        tp = b["tpOrderId"]
+        self._ending_in(tp, 86400)
+        self.sent.clear()
+        self._tick(self._q(182.0, bid=182.0, status="CLOSED"))
+        self.assertEqual(self._cancels(), [tp])
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["tpOrderId"]), ("target_placed", ""), "still the target's turn; not re-armed")
+        store.update_order(tp, {"status": "cancelled"})
+        self.sent.clear()
+        self._tick(self._q(182.0, bid=182.0, status="CLOSED"))
+        b = store.get_bracket(b["id"])
+        self.assertTrue(b["tpOrderId"] and b["tpOrderId"] != tp)
+        self.assertEqual((self._creates()[0]["executionType"], self._creates()[0]["limitPrice"], self._creates()[0]["timeInForce"]), ("LIMIT", 181.94, "UNTIL_CANCEL"))
+        self.assertEqual(b["status"], "target_placed")
+
+
+def _latest_stop(b):
+    rows = [o for o in store.list_orders() if o.get("parentId") == b["orderId"] and o.get("role") == "stop"]
+    return rows[0]["id"]
+
+
 class StopExpiryTest(_EngineBase):
-    def test_a_day_stop_that_expires_is_placed_again(self):
+    def test_exits_go_out_good_till_cancelled_whatever_the_entry_was(self):
+        """A Day entry's stop must not lapse at the close: every exit is placed
+        good till cancelled, and the bracket records that."""
+        oid, b = self._entry()
+        self.assertEqual(store.get_order(oid)["tif"], "DAY", "the entry keeps its own time in force")
+        self.assertEqual(b["tif"], "UNTIL_CANCEL")
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+        self.assertEqual((create[-1]["executionType"], create[-1]["timeInForce"]), ("STOP", "UNTIL_CANCEL"))
+        self.assertEqual(store.get_order(store.get_bracket(b["id"])["slOrderId"])["tif"], "UNTIL_CANCEL")
+
+    def test_a_stop_that_expires_is_placed_again_good_till_cancelled(self):
         oid, b = self._entry()
         store.update_order(oid, {"status": "filled", "filledQty": 25})
         self._tick()
         b = store.get_bracket(b["id"])
         first = b["slOrderId"]
-        store.update_order(first, {"status": "expired", "wsStatus": "EXPIRED"})
+        store.update_order(first, {"status": "expired", "wsStatus": "EXPIRED", "tif": "DAY"})   # a stop from before every exit went good till cancelled
         self.sent.clear()
         self._tick()
         b = store.get_bracket(b["id"])
         self.assertEqual((b["status"], b["slKind"], b["slPrice"]), ("armed", "stop", 157.13), "the leg stays")
         create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
-        self.assertEqual((create[0]["executionType"], create[0]["stopPrice"]), ("STOP", 157.13), "a new stop at the same level")
+        self.assertEqual((create[0]["executionType"], create[0]["stopPrice"], create[0]["timeInForce"]), ("STOP", 157.13, "UNTIL_CANCEL"), "a new stop at the same level, good till cancelled")
         self.assertNotEqual(b["slOrderId"], first)
-        # a stop cancelled by hand is different: the leg is dropped
+        # a stop cancelled by hand is different: the person took the position over, the bracket ends
         store.update_order(b["slOrderId"], {"status": "cancelled"})
         self._tick()
-        self.assertEqual(store.get_bracket(b["id"])["slKind"], "")
+        self.assertEqual(store.get_bracket(b["id"])["status"], "done")

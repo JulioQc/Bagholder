@@ -294,7 +294,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.7"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.8"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -1146,7 +1146,7 @@ function tkFormHtml(v) {
   const t = state.ticket, tx = t.text;
   const types = ((t.data && t.data.orderTypes) || TK_TYPES.map((x) => x[0]));
   const showLimit = t.type === "LIMIT" || t.type === "STOP_LIMIT", showStop = t.type === "STOP" || t.type === "STOP_LIMIT";
-  const showTif = t.type !== "MARKET" || v.slOn || v.tpOn;
+  const showTif = t.type !== "MARKET";   // the order's own; the brackets always go out good till cancelled
   const val = (key, fmt) => tx[key] != null ? tx[key] : fmt;
   let grid = tkField("Account", tkSelect("tk-account", tkAccounts().map((a) => [a.id, a.name]), t.accountId)) +
     tkField("Shares", tkInput("tk-qty", val("qty", qty(v.qtyN)))) +
@@ -1325,7 +1325,7 @@ function closeOrders() {
   render();
 }
 const ORDER_LIVE = { sent: 1, pending: 1, cancelling: 1 };
-const BRACKET_LIVE = { waiting: 1, armed: 1, firing: 1, target_placed: 1 };
+const BRACKET_LIVE = { waiting: 1, armed: 1, firing: 1, target_placed: 1, stopping: 1, closing: 1 };
 function orderPrice(o) {
   if (o.type === "MARKET") return "—";
   if (o.type === "STOP") return px(o.stopPrice);
@@ -1385,7 +1385,9 @@ function bracketLegs(b) {
     const text = "Stop loss at " + px(b.slPrice) + (b.slKind === "trail" ? " · trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") : "");
     let st = "Waiting for fill", on = false;
     if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
-    else if (b.status === "target_placed") st = "Cancelled";
+    else if (b.status === "target_placed") { on = true; st = "Watching"; }
+    else if (b.status === "stopping") { on = true; st = b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
+    else if (b.status === "closing") { st = b.outcome === "stopped" ? "Filled" : stopOrder || (orders.find((o) => o.parentId === b.orderId && o.role === "stop" && o.status === "cancelling")) ? "Cancelling" : "Cancelled"; on = b.outcome === "stopped"; }
     else if (done) { st = b.outcome === "stopped" ? "Filled" : "Cancelled"; on = b.outcome === "stopped"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
     legs.push({ key: "sl", text, state: st, on });
@@ -1395,7 +1397,9 @@ function bracketLegs(b) {
   if (b.tpPrice) {
     let st = "Waiting for fill", on = false;
     if (b.status === "armed" || b.status === "firing") { on = true; st = b.status === "firing" && b.attempts ? "Retrying · " + (b.error || "") : "Watching"; }
-    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : "At Wealthsimple"; }
+    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : b.tpOrderId ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
+    else if (b.status === "stopping") st = "Cancelling";
+    else if (b.status === "closing") { st = b.outcome === "target" ? "Filled" : (orders.find((o) => o.parentId === b.orderId && o.role === "target" && o.status === "cancelling")) ? "Cancelling" : "Cancelled"; on = b.outcome === "target"; }
     else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
     legs.push({ key: "tp", text: "Take profit at " + px(b.tpPrice), state: st, on });
