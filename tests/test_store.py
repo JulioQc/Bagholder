@@ -2824,3 +2824,24 @@ class OrderTickTest(_OrdersBase):
         self.assertEqual((row["stopLoss"]["price"], row["takeProfit"]["price"]), (1.65, 1.91))
         _, req, _ = bagholder.order_request(self._ticket(type="STOP_LIMIT", limitPrice=0.98765, stopPrice=1.005))
         self.assertEqual((req["limitPrice"], req["stopPrice"]), (0.9877, 1.0))
+
+
+class StopExpiryTest(_EngineBase):
+    def test_a_day_stop_that_expires_is_placed_again(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        first = b["slOrderId"]
+        store.update_order(first, {"status": "expired", "wsStatus": "EXPIRED"})
+        self.sent.clear()
+        self._tick()
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["slKind"], b["slPrice"]), ("armed", "stop", 157.13), "the leg stays")
+        create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+        self.assertEqual((create[0]["executionType"], create[0]["stopPrice"]), ("STOP", 157.13), "a new stop at the same level")
+        self.assertNotEqual(b["slOrderId"], first)
+        # a stop cancelled by hand is different: the leg is dropped
+        store.update_order(b["slOrderId"], {"status": "cancelled"})
+        self._tick()
+        self.assertEqual(store.get_bracket(b["id"])["slKind"], "")

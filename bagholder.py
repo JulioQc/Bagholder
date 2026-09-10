@@ -4506,7 +4506,11 @@ def _reconcile_step(b, entry):
         store.update_bracket(b["id"], {"status": "done", "outcome": "target"})
         sys.stderr.write("bagholder bracket: %s for %s: target filled\n" % (b["id"], b["symbol"]))
         return "done"
-    if b["status"] == "armed" and b.get("slMode") == "native" and b.get("slOrderId") and stop_row and stop_row["status"] in ("cancelled", "expired", "rejected", "failed"):
+    if b["status"] == "armed" and b.get("slMode") == "native" and b.get("slOrderId") and stop_row and stop_row["status"] == "expired":
+        # a Day stop lapsed at the close: placed again on the next check, at the same level
+        store.update_bracket(b["id"], {"slOrderId": "", "error": ""})
+        sys.stderr.write("bagholder bracket: %s for %s: stop expired at Wealthsimple; placed again\n" % (b["id"], b["symbol"]))
+    elif b["status"] == "armed" and b.get("slMode") == "native" and b.get("slOrderId") and stop_row and stop_row["status"] in ("cancelled", "rejected", "failed"):
         # not our doing (a move clears slOrderId first): the stop leg is gone, the target stays watched
         store.update_bracket(b["id"], {"slOrderId": "", "slKind": "", "error": "stop " + stop_row["status"] + " at Wealthsimple"})
         sys.stderr.write("bagholder bracket: %s for %s: stop %s at Wealthsimple; only the target is watched now\n" % (b["id"], b["symbol"], stop_row["status"]))
