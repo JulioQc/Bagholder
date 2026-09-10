@@ -293,7 +293,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.5"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.6"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -867,14 +867,47 @@ function fieldMatches(q) {
   });
   return out;
 }
+// Listings the book does not hold, found for the typed text at Yahoo Finance (never at
+// Wealthsimple): asked once per distinct text after a pause in typing, kept for the session.
+const _extCache = {};
+let _extTimer = 0;
+function extRows(q) {
+  q = (q || "").trim().toUpperCase();
+  if (!q) return [];
+  const book = new Set((((state.model && state.model.options) || {}).symbol || []).map((v) => String(v).toUpperCase()));
+  return (_extCache[q] || []).filter((r) => !book.has(r.symbol));
+}
+function extSchedule(q) {
+  clearTimeout(_extTimer);
+  const key = (q || "").trim().toUpperCase();
+  if (!key || _extCache[key]) return;
+  const book = (((state.model && state.model.options) || {}).symbol || []).map((v) => String(v).toUpperCase());
+  if (book.indexOf(key) >= 0) return;   // a symbol the book holds is never searched
+  _extTimer = setTimeout(() => {
+    api("GET", "/api/symbols/search?q=" + encodeURIComponent(key)).then((r) => {
+      if (!(r && r.ok)) return;   // a failed lookup is not remembered; the next keystroke asks again
+      _extCache[key] = r.matches || [];
+      if (state.picker === "fields" && (state.fieldQuery || "").trim().toUpperCase() === key) {
+        const body = document.getElementById("popFieldsBody"); if (body) body.innerHTML = popFieldsBodyHtml();
+      }
+    });
+  }, 300);
+}
+function extRowHtml(r, cls) {
+  return '<div class="pop-row' + cls + '" role="button" tabindex="-1" data-act="tkOpenExt" data-arg=\'' + attr({ symbol: r.symbol, exchange: r.exchange, currency: r.currency, name: r.name }) + "'>" + esc(r.symbol) +
+    (r.name ? '<span style="margin-left:8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink55)">' + esc(r.name) + "</span>" : "") +
+    '<span style="margin-left:auto;font-size:11px;color:var(--ink55);white-space:nowrap">' + esc(r.exchange) + '</span><span class="tk-rowbtns"><span class="tk-rowbtn buy" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.plus + '"/></svg></span></span></div>';
+}
 function popFieldsBodyHtml() {
   const f = state.filters;
   const q = state.fieldQuery == null ? f.search : state.fieldQuery;
   const matches = fieldMatches(q);
-  if (q && matches.length) {
-    const hi = Math.min(state.valueHi || 0, matches.length - 1);
+  const ext = q ? extRows(q) : [];
+  if (q && (matches.length || ext.length)) {
+    const hi = Math.min(state.valueHi || 0, matches.length + ext.length - 1);
     return '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' + matches.map((m, i) =>
-      popRowHtml(m.key, m.value, (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : ""), m.label)).join("") + "</div>";
+      popRowHtml(m.key, m.value, (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : ""), m.label)).join("") +
+      ext.map((r, i) => extRowHtml(r, matches.length + i === hi ? " hi" : "")).join("") + "</div>";
   }
   return (q ? '<div class="muted" style="padding:2px 7px 8px;font-size:12px">No match.</div>' : "") +
     '<div class="lbl" style="padding:2px 7px 7px">Filter by</div><div class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' +
@@ -949,7 +982,7 @@ function tkRememberedAccount(accounts) {
   try { const id = localStorage.getItem("bh2.ticketAccount"); if (id && accounts.some((a) => a.id === id)) return id; } catch (e) {}
   return "";
 }
-function openTicket(symbol, side) {
+function openTicket(symbol, side, listing) {
   const info = tkLookup(symbol);
   const accounts = tkAccounts();
   const held = info.position;
@@ -958,7 +991,7 @@ function openTicket(symbol, side) {
   if (!accountId) accountId = (accounts.find((a) => a.margin) || accounts[0] || {}).id || "";
   state.picker = null; state.menuOpen = false;
   state.ticket = {
-    step: "form", symbol, securityId: info.securityId, side: side === "SELL" ? "SELL" : "BUY", accountId,
+    step: "form", symbol, securityId: info.securityId, exchange: listing ? listing.exchange || "" : "", side: side === "SELL" ? "SELL" : "BUY", accountId,
     type: "LIMIT", tif: "DAY", qty: held && side === "SELL" ? held.qty : 1, limit: null, stop: null,
     sl: { on: true, kind: "stop", price: null, trail: null, unit: "pct" }, tp: { on: true, price: null },
     text: {}, data: null, error: "", busy: false, submitError: "",
@@ -975,7 +1008,7 @@ function tkFetch() {
   const t = state.ticket; if (!t) return;
   const seq = ++_tkSeq;
   clearTimeout(_tkTimer);
-  api("GET", "/api/order/quote?symbol=" + encodeURIComponent(t.symbol) + "&security=" + encodeURIComponent(t.securityId || "") + "&account=" + encodeURIComponent(t.accountId || "")).then((r) => {
+  api("GET", "/api/order/quote?symbol=" + encodeURIComponent(t.symbol) + "&security=" + encodeURIComponent(t.securityId || "") + "&account=" + encodeURIComponent(t.accountId || "") + "&exchange=" + encodeURIComponent(t.exchange || "")).then((r) => {
     const cur = state.ticket;
     if (!cur || seq !== _tkSeq) return;
     if (r && r.ok) {
@@ -2401,6 +2434,7 @@ function act(name, arg, ev) {
     case "openTrade": openTradeModal(); break;
     case "closeModal": state.modal = null; render(); break;
     case "tkOpen": openTicket(arg.symbol, arg.side); break;
+    case "tkOpenExt": openTicket(arg.symbol, "BUY", arg); break;
     case "cancelOrder": state.confirmOpen = "cancel:" + arg.id; render(); break;
     case "cancelOrderNow": cancelOrderNow(arg.id); break;
     case "cancelBracket": state.confirmOpen = "bracket:" + arg.id; render(); break;
@@ -2556,7 +2590,7 @@ function bind() {
       return;
     }
     if (e.target && e.target.id === "searchInput") {
-      const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList]")];
+      const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList], #popMatches [data-act=tkOpenExt]")];
       if (popoverBoxKeys(e, rows)) return;
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && rows.length) {
         e.preventDefault();
@@ -2572,7 +2606,7 @@ function bind() {
           // a value: toggled in its field, the box cleared for the next one
           let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {}
           clearTimeout(_rangeTimer);
-          act("toggleList", arg);
+          act(row.dataset.act === "tkOpenExt" ? "tkOpenExt" : "toggleList", arg);
         } else {
           // no value matches: the text is the free-text search, applied now
           clearTimeout(_rangeTimer); state.filters.search = e.target.value.trim(); state.fieldQuery = null; state.sel = null; loadModel();
@@ -2609,6 +2643,7 @@ function bind() {
       clearTimeout(_rangeTimer);
       const v = t.value; state.fieldQuery = v; state.valueHi = 0;
       const body = document.getElementById("popFieldsBody"); if (body) body.innerHTML = popFieldsBodyHtml();
+      extSchedule(v);
       return;
     }
   });

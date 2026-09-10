@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import gzip
 import io
+import json
 import os
 import re
 import shutil
@@ -2151,6 +2152,59 @@ class OrderTicketTest(_OrdersBase):
         self.assertAlmostEqual(md["marginRate"], 0.30, "a percentage becomes a fraction")
         bp = bagholder.parse_buying_power({"account": {"financials": {"current": {"tradingBalanceViewV2": {"buyingPower": {"quantity": 12680.45, "currency": "USD"}, "cash": {"quantity": 3420.18, "currency": "USD"}}}}}})
         self.assertEqual((bp["buyingPower"], bp["cash"], bp["currency"]), (12680.45, 3420.18, "USD"))
+
+    def test_symbol_search_asks_the_exchanges_directories_once_per_text(self):
+        nasdaq = {"data": [
+            {"symbol": "QNC", "name": "Quantum eMotion Corp. Common Shares", "exchange": "AMEX", "asset": "STOCKS"},
+            {"symbol": "QNCX", "name": "Quince Therapeutics, Inc. Common Stock", "exchange": "NASDAQ-GS", "asset": "STOCKS"},
+            {"symbol": "QNCQX", "name": "Some Fund", "exchange": "", "asset": "MUTUALFUNDS"},
+            {"symbol": "SPYI", "name": "NEOS S&P 500 High Income ETF", "exchange": "BAT", "asset": "ETF"},
+            {"symbol": "QNC.WS", "name": "Quantum eMotion Corp. Warrants", "exchange": "AMEX", "asset": "STOCKS"},
+        ]}
+        tsx = {"results": [{"symbol": "XNDU", "name": "Xanadu Quantum Technologies", "instruments": [{"symbol": "XNDU"}]}]}
+        tsxv = {"results": [{"symbol": "QNC", "name": "Quantum Emotion Corp.", "instruments": [{"symbol": "QNC"}]}]}
+        calls = []
+        def fake_get(url, ssl_context=None, headers=None):
+            calls.append(url)
+            self.assertIn("Accept", headers or {})
+            if "nasdaq.com" in url:
+                return json.dumps(nasdaq)
+            if "/search/tsx/" in url:
+                return json.dumps(tsx)
+            return json.dumps(tsxv)
+        bagholder._search_cache.clear()
+        with mock.patch.object(bagholder.market, "_get_text", side_effect=fake_get):
+            r = bagholder.symbol_search("qnc")
+            again = bagholder.symbol_search("QNC ")
+        self.assertTrue(r["ok"])
+        self.assertEqual([(m["symbol"], m["exchange"], m["currency"]) for m in r["matches"]],
+                         [("QNC", "NYSE", "USD"), ("QNC", "TSX-V", "CAD"), ("QNCX", "NASDAQ", "USD"), ("SPYI", "BATS", "USD"), ("XNDU", "TSX", "CAD")],
+                         "exact symbols first, then symbols starting with the text, then names; the mutual fund and the warrant are out")
+        self.assertEqual(r["matches"][0]["name"], "Quantum eMotion Corp.", "Nasdaq's 'Common Shares' tail dropped")
+        self.assertEqual(r["matches"][1]["name"], "Quantum Emotion Corp.")
+        self.assertEqual(len(calls), 3, "the three directories, once")
+        self.assertEqual(again["matches"], r["matches"])
+        self.assertEqual(bagholder.symbol_search("  ")["matches"], [])
+
+    def test_symbol_search_keeps_what_answered_and_forgets_a_partial_round(self):
+        def flaky(url, ssl_context=None, headers=None):
+            if "nasdaq.com" in url:
+                raise OSError("down")
+            return json.dumps({"results": [{"symbol": "V", "name": "Visa?", "instruments": []}]}) if "/tsx/" in url else json.dumps({"results": []})
+        bagholder._search_cache.clear()
+        with mock.patch.object(bagholder.market, "_get_text", side_effect=flaky):
+            r = bagholder.symbol_search("v")
+            self.assertTrue(r["ok"])
+            self.assertEqual([(m["symbol"], m["exchange"]) for m in r["matches"]], [("V", "TSX")])
+            self.assertNotIn("V", bagholder._search_cache, "a round a source missed is asked again next time")
+        with mock.patch.object(bagholder.market, "_get_text", side_effect=OSError("down")):
+            self.assertIn("Search failed", bagholder.symbol_search("zzz")["error"])
+
+    def test_ticket_quote_for_a_listing_the_book_lacks_says_so(self):
+        with mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}), mock.patch.object(bagholder, "graphql", side_effect=AssertionError("no call")):
+            r = bagholder.ticket_quote("NEWCO", "", "acct-margin", "NYSE")
+        self.assertFalse(r["ok"])
+        self.assertIn("No listing stored for NEWCO", r["error"])
 
     def test_collateral_account_names_the_margin_account_it_backs(self):
         """Wealthsimple marks an account linked as margin collateral with the feature
