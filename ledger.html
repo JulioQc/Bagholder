@@ -1400,14 +1400,10 @@ function ordersBodyHtml() {
   const entries = data.orders.filter((o) => o.role !== "stop" && o.role !== "target" && inOrdersScope(o.account));
   const newest = (a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0);
   const head = (label) => '<div class="od-head"><span class="od-group">' + label + '</span><span class="od-scope">' + esc(ordersScopeLabel()) + "</span></div>";
-  const group = (label, rows) => rows.length ? '<div class="od-group">' + label + "</div>" + rows.map(orderCardHtml).join("") : "";
   const tab = state.ordersTab;
   if (tab === "filled") {
     const rows = entries.filter((o) => o.status === "filled").sort(newest);
-    const today = new Date().toDateString();
-    const isToday = (o) => new Date(Date.parse(o.createdAt)).toDateString() === today;
-    const out = group("Today", rows.filter(isToday)) + group("Earlier", rows.filter((o) => !isToday(o)));
-    return head("Filled orders") + (out || '<div class="dim" style="font-size:12px">Nothing filled yet.</div>');
+    return head("Filled orders") + (rows.length ? rows.map(orderCardHtml).join("") : '<div class="dim" style="font-size:12px">Nothing filled yet.</div>');
   }
   if (tab === "cancelled") {
     const rows = entries.filter((o) => ["cancelled", "expired", "rejected", "failed", "dry"].indexOf(o.status) >= 0).sort(newest);
