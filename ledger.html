@@ -88,7 +88,7 @@ textarea.input{resize:none;line-height:1.5}
 .chip .cv:hover{background:var(--accent-900)}
 .chip .cx{cursor:pointer;border:0;font:400 12px Inter,system-ui,sans-serif;padding:3px 7px;background:transparent;color:var(--ink60);line-height:1.4}
 .chip .cx:hover{background:rgba(var(--neg-rgb),.3)}
-.pop{position:absolute;top:42px;right:0;z-index:7;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
+.pop{position:absolute;top:42px;right:0;z-index:30;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
 .pop-row{cursor:pointer;border:0;display:flex;align-items:center;gap:8px;text-align:left;font:400 12.5px Inter,system-ui,sans-serif;padding:6px 7px 6px 10px;border-radius:5px;background:transparent;color:rgba(var(--ink-rgb),.85);width:100%}
 .pop-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
 .pop-row.on{background:var(--accent-900);color:var(--accent-300);box-shadow:inset 3px 0 0 var(--chip-fg)}
@@ -181,6 +181,49 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .tk-rowbtn{width:22px;height:22px;border-radius:5px;border:0;background:transparent;color:rgba(var(--ink-rgb),.5);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .tk-rowbtn.buy:hover{background:rgba(var(--pos-rgb),.16);color:var(--pos)}
 .tk-rowbtn.sell:hover{background:rgba(var(--neg-rgb),.16);color:var(--neg)}
+/* orders panel */
+.od-badge{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:var(--bg);font:600 11px/18px var(--font);text-align:center;box-shadow:0 0 0 2px var(--bg)}
+.od-segs{display:flex;padding:3px;border-radius:10px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.10)}
+.od-seg{flex:1;padding:9px 8px;border-radius:8px;border:0;background:transparent;color:var(--ink60);font:500 13.5px var(--font);cursor:pointer}
+.od-seg.on{background:rgba(var(--accent-rgb),.16);color:var(--ink)}
+.od-list{display:flex;flex-direction:column;gap:12px}
+.od-group{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55);margin-top:2px}
+.od-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.od-scope{font-size:11px;color:var(--ink55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.od-value{flex:none;font-size:13px;color:var(--ink)}
+.od-state{flex:none;color:var(--ink55)}
+.od-state.neg{color:var(--neg)}
+.od-leg-text{color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.od-card{padding:14px 16px 12px;border-radius:10px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.08);display:flex;flex-direction:column;gap:6px}
+.od-row1{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.od-title{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.od-pill{flex:none;font-size:12px;font-weight:500;padding:2px 9px;border-radius:999px;background:rgba(var(--ink-rgb),.10);color:var(--ink75)}
+.od-pill.accent{background:rgba(var(--accent-rgb),.20);color:var(--accent-300)}
+.od-pill.pos{background:rgba(var(--pos-rgb),.16);color:var(--pos)}
+.od-pill.neg{background:rgba(var(--neg-rgb),.16);color:var(--neg)}
+.od-row2{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;color:var(--ink55)}
+.od-line{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.od-when{flex:none;white-space:nowrap}
+.od-fill{font-size:12.5px;color:var(--ink55)}
+.od-leg{display:flex;align-items:center;gap:7px;padding:9px 0 0;margin-top:6px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:12px}
+.od-dot{flex:none;width:6px;height:6px;border-radius:50%;background:rgba(var(--ink-rgb),.28)}
+.od-dot.on{background:var(--accent)}
+.od-leg-label{color:var(--ink55);flex:none}
+.od-leg-value{color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.od-leg-state{margin-left:auto;color:var(--ink55);white-space:nowrap}
+.od-link{border:0;background:transparent;cursor:pointer;font:500 12.5px var(--font);color:var(--accent);padding:0;white-space:nowrap}
+.od-link:hover{color:var(--accent-300)}
+.od-link.muted{color:var(--ink55)}
+.od-link.neg{color:var(--neg)}
+.od-link[disabled]{opacity:.4;cursor:default}
+.od-link[disabled]:hover{color:var(--accent)}
+.od-remove{align-self:flex-start;font-size:11.5px;margin-top:2px}
+.od-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:9px;margin-top:4px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:13px}
+.od-foot .od-when{font-size:12.5px;color:var(--ink55)}
+.od-foot-acts{display:flex;gap:14px;margin-left:auto}
+.od-edit{display:flex;flex-direction:column;gap:10px;padding:10px 0 2px}
+.od-edit-btns{display:flex;align-items:center;justify-content:flex-end;gap:14px}
+.od-save{padding:7px 14px}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:60px 20px}
 .spin{display:inline-block;width:10px;height:10px;border:2px solid rgba(var(--ink-rgb),.25);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -225,6 +268,10 @@ const state = {
   },
   orders: null,
   ordersError: "",
+  ordersOpen: false,
+  ordersTab: "pending",
+  orderEdit: null,
+  bracketEdit: null,
   menuOpen: false,
   picker: null,
   valueQuery: "",
@@ -246,7 +293,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.2"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.4"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -456,9 +503,9 @@ function pollStatus() {
   api("GET", "/api/status").then((st) => {
     // while the server restarts (an update) answers are not status payloads: keep asking
     if (!st || !st.protocol) { _pollTimer = setTimeout(pollStatus, 1000); return; }
-    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version]);
+    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version, state.status.openOrders]);
     applyStatus(st);
-    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version]);
+    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version, state.status.openOrders]);
     if (before !== after) renderHeaderOnly();
     const fast = state.status.syncing || state.status.capturing || state.busy || state.status.updating;
     _pollTimer = setTimeout(pollStatus, fast ? 2500 : 30000);
@@ -515,6 +562,8 @@ function headerHtml() {
         (state.status.updateBy === "image" ? esc(state.status.latestVersion) + " image available" : "Update available") + "</a>") : "") + "</div>" +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
     '<span style="font-size:12px;color:var(--ink55)">' + (state.notice ? '<span class="' + (state.noticeKind === "err" ? "status-err" : "") + '">' + esc(state.notice) + "</span>" : syncLine()) + "</span>" +
+    '<button class="btn btn-icon btn-secondary" aria-label="Orders" data-act="ordersOpen" style="position:relative"><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.receipt + '"/></svg>' +
+    (state.status.openOrders ? '<span class="od-badge">' + state.status.openOrders + "</span>" : "") + "</button>" +
     '<div style="position:relative" data-pop="filter">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Filters" data-act="openFields"><svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M230.6 49.5A15.8 15.8 0 0 0 216 40H40a16 16 0 0 0-12.6 25.9l68.6 81.1v55a16 16 0 0 0 25.6 13.3l32-21.3a16 16 0 0 0 7.4-13.3v-33.7l68.6-81.1a15.8 15.8 0 0 0 1-15.4Z"/></svg></button>' +
     (filtersActive() ? '<span style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);pointer-events:none"></span>' : "") +
@@ -530,6 +579,7 @@ const ICONS = {
   minus: "M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8Z",
   x: "M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z",
   caretDown: "M213.66 101.66l-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32Z",
+  receipt: "M72 104a8 8 0 0 1 8-8h96a8 8 0 0 1 0 16H80a8 8 0 0 1-8-8Zm8 40h96a8 8 0 0 0 0-16H80a8 8 0 0 0 0 16ZM232 56v152a8 8 0 0 1-11.58 7.15L192 200.94l-28.42 14.21a8 8 0 0 1-7.16 0L128 200.94l-28.42 14.21a8 8 0 0 1-7.16 0L64 200.94l-28.42 14.21A8 8 0 0 1 24 208V56a16 16 0 0 1 16-16h176a16 16 0 0 1 16 16Zm-16 0H40v139.06l20.42-10.22a8 8 0 0 1 7.16 0L96 199.06l28.42-14.22a8 8 0 0 1 7.16 0L160 199.06l28.42-14.22a8 8 0 0 1 7.16 0L216 195.06Z",
   palette: "M186.8 213.8A104.0 104.0 0 1 1 231.8 133.9A46.0 46.0 0 0 0 186.8 213.8ZM214.3 110.6A88.0 88.0 0 1 0 157.7 210.8A62.0 62.0 0 0 1 214.3 110.6ZM84 132m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM104 84m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM152 68m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM176 92m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0Z",
   caret: "M181.66 133.66l-80 80a8 8 0 0 1-11.32-11.32L164.69 128 90.34 53.66a8 8 0 0 1 11.32-11.32l80 80a8 8 0 0 1 0 11.32Z",
   check: "M229.66 77.66l-128 128a8 8 0 0 1-11.32 0l-56-56a8 8 0 0 1 11.32-11.32L96 188.69 218.34 66.34a8 8 0 0 1 11.32 11.32Z",
@@ -566,6 +616,12 @@ function menuHtml() {
     "</div>";
 }
 function confirmDialogHtml() {
+  if (/^bracket:/.test(state.confirmOpen)) {
+    const id = state.confirmOpen.slice(8), b = (state.orders && state.orders.brackets || []).find((x) => x.id === id), busy = state.busy === "cancel";
+    return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel bracket</h5>' +
+      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (b ? esc(b.symbol) + " · " + bracketLegs(b).map((l) => esc(l.text)).join(" · ") : "") + "</div>" +
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Keep bracket</button><button class="btn" data-act="cancelBracketNow" data-arg=\'' + attr({ id }) + '\' style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (busy ? "Cancelling…" : "Cancel bracket") + "</button></div></div></div>";
+  }
   if (/^cancel:/.test(state.confirmOpen)) {
     const id = state.confirmOpen.slice(7), o = state.orders && state.orders.orders.find((x) => x.id === id), busy = state.busy === "cancel";
     return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel order</h5>' +
@@ -767,7 +823,7 @@ function tabsHtml() {
   const t = (id, label) => '<button class="tabbtn' + (state.page === id && !((id === "trades" || id === "portfolio") && state.sel) ? " on" : "") + '" data-act="page" data-arg=\'' + attr({ page: id }) + "'>" + label + "</button>";
   const sel = (state.page === "trades" || state.page === "portfolio") && state.sel ? selById(state.sel) : null;
   return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
-    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("cashflow", "Cashflow") + t("orders", "Orders") +
+    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("cashflow", "Cashflow") +
     (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(sel.symbol) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(sel.symbol) + "</span></div>" : "") +
     '<div style="margin-left:auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 0"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;overflow-x:auto;padding-bottom:1px">' +
     chips().map((c) => '<span class="chip"><span class="cf">' + esc(c.field) + '</span><button class="cv" data-act="chipEdit" data-arg=\'' + attr({ key: c.key }) + "'>" + esc(c.value) + '</button><button class="cx" aria-label="Remove filter" data-act="chipRemove" data-arg=\'' + attr({ key: c.key }) + "'>×</button></span>").join("") +
@@ -879,16 +935,26 @@ function tkRowButtons(symbol) {
   const b = (side, label, path) => '<button class="tk-rowbtn ' + side.toLowerCase() + '" aria-label="' + label + " " + esc(symbol) + '" data-act="tkOpen" data-arg=\'' + attr({ symbol, side }) + '\'><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + path + '"/></svg></button>';
   return '<span class="tk-rowbtns">' + b("BUY", "Buy", ICONS.plus) + b("SELL", "Sell", ICONS.minus) + "</span>";
 }
+// The accounts a ticket can route to: the server's list once the quote has answered, the
+// book's own list before that, joined so an account chosen from either is never lost.
 function tkAccounts() {
   const t = state.ticket;
-  if (t && t.data && t.data.accounts) return t.data.accounts;
-  return ((state.model && state.model.accounts) || []).filter((a) => a.status !== "closed" && /^SELF_DIRECTED/.test(a.type) && !/CRYPTO|PREDICTIONS|MANAGED/.test(a.type)).map((a) => ({ id: a.id, name: a.name, type: a.type, margin: /MARGIN/.test(a.type) }));
+  const out = (t && t.data && t.data.accounts ? t.data.accounts : []).slice();
+  ((state.model && state.model.accounts) || []).filter((a) => a.status !== "closed" && /^SELF_DIRECTED/.test(a.type) && !/CRYPTO|PREDICTIONS|MANAGED/.test(a.type))
+    .forEach((a) => { if (!out.some((x) => x.id === a.id)) out.push({ id: a.id, name: a.name, type: a.type, margin: /MARGIN/.test(a.type) }); });
+  return out;
+}
+// the account picked last time, when it is still one the ticket offers
+function tkRememberedAccount(accounts) {
+  try { const id = localStorage.getItem("bh2.ticketAccount"); if (id && accounts.some((a) => a.id === id)) return id; } catch (e) {}
+  return "";
 }
 function openTicket(symbol, side) {
   const info = tkLookup(symbol);
   const accounts = tkAccounts();
   const held = info.position;
-  let accountId = held ? held.accountId : "";
+  let accountId = held && side === "SELL" ? held.accountId : "";   // a sell goes where the shares are
+  if (!accountId) accountId = tkRememberedAccount(accounts) || (held ? held.accountId : "");
   if (!accountId) accountId = (accounts.find((a) => a.margin) || accounts[0] || {}).id || "";
   state.picker = null; state.menuOpen = false;
   state.ticket = {
@@ -930,7 +996,7 @@ function tkVals() {
   const last = q.last != null ? q.last : null;
   const mult = q.multiplier || 1;
   const qtyN = t.qty != null ? t.qty : 0;
-  const limit = t.limit != null ? t.limit : last;
+  const limit = t.limit != null ? t.limit : tkTick(last);   // a quote can carry more decimals than an order may
   const stop = t.stop != null ? t.stop : (last != null ? +(last * (buy ? 1.02 : 0.98)).toFixed(2) : null);
   const entry = t.type === "MARKET" ? (buy ? (q.ask != null ? q.ask : last) : (q.bid != null ? q.bid : last)) : t.type === "STOP" ? stop : limit;
   const notional = entry != null ? qtyN * entry * mult : null;
@@ -959,6 +1025,8 @@ function tkVals() {
   return { buy, dir, last, mult, qtyN, limit, stop, entry, notional, slOn, tpOn, isTrail, trail, slPrice, tpPrice, risk, gain, slPct, tpPct, rr, cad, nav, acct, isMargin, after, typeWord, tifWord, trailWord, q, d };
 }
 function tkPlain(n) { return n == null ? "—" : Number.isInteger(n) ? String(n) : String(+n.toFixed(2)); }
+// a price an order may carry: two decimals from $1, four below it
+function tkTick(p) { return p == null || !isFinite(p) ? p : +p.toFixed(p >= 1 ? 2 : 4); }
 function tkAmt(n) { return n == null || !isFinite(n) ? "—" : money(n, "", Number.isInteger(+n.toFixed(2)) ? 0 : 2); }
 function tkSAmt(n) { return n == null || !isFinite(n) ? "—" : signedMoney(n, "", Number.isInteger(+n.toFixed(2)) ? 0 : 2); }
 function tkNum(v) { const n = parseFloat(String(v).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? null : n; }
@@ -1097,7 +1165,7 @@ function tkBlur(el) {
 function tkChange(el) {
   const t = state.ticket; if (!t) return;
   switch (el.id) {
-    case "tk-account": t.accountId = el.value; renderTicket(); tkFetch(); return;
+    case "tk-account": t.accountId = el.value; try { localStorage.setItem("bh2.ticketAccount", el.value); } catch (e) {} renderTicket(); tkFetch(); return;
     case "tk-type": t.type = el.value; break;
     case "tk-tif": t.tif = el.value; break;
     case "tk-slkind": t.sl.kind = el.value; break;
@@ -1144,17 +1212,28 @@ function loadOrders() {
   return api("GET", "/api/orders").then((r) => {
     if (seq !== _ordersSeq) return;
     if (r && r.ok) { state.orders = r; state.ordersError = ""; } else state.ordersError = (r && r.error) || "Could not load the orders.";
-    if (state.page === "orders") { const pg = document.getElementById("page"); if (pg) pg.innerHTML = pageHtml(); }
+    if (state.ordersOpen) renderOrders();
   });
 }
-// while the Orders tab is up the list is asked for again every ORDERS_POLL_MS
+// while the panel is up the list is asked for again every ORDERS_POLL_MS
 function ordersPoll() {
   clearTimeout(_ordersTimer);
-  if (state.page !== "orders") { _ordersTimer = 0; return; }
+  if (!state.ordersOpen) { _ordersTimer = 0; return; }
   _ordersTimer = -1;   // a load is in flight: a redraw meanwhile does not start another
-  loadOrders().then(() => { if (state.page === "orders") _ordersTimer = setTimeout(ordersPoll, ORDERS_POLL_MS); else _ordersTimer = 0; });
+  loadOrders().then(() => { if (state.ordersOpen) _ordersTimer = setTimeout(ordersPoll, ORDERS_POLL_MS); else _ordersTimer = 0; });
+}
+function openOrders() {
+  state.picker = null; state.menuOpen = false;
+  state.ordersOpen = true; state.orderEdit = null; state.bracketEdit = null;
+  render();
+}
+function closeOrders() {
+  state.ordersOpen = false; state.orderEdit = null; state.bracketEdit = null;
+  clearTimeout(_ordersTimer); _ordersTimer = 0;
+  render();
 }
 const ORDER_LIVE = { sent: 1, pending: 1, cancelling: 1 };
+const BRACKET_LIVE = { waiting: 1, armed: 1, firing: 1, target_placed: 1 };
 function orderPrice(o) {
   if (o.type === "MARKET") return "—";
   if (o.type === "STOP") return px(o.stopPrice);
@@ -1162,65 +1241,263 @@ function orderPrice(o) {
   return px(o.limitPrice);
 }
 function orderTypeWord(t) { return { MARKET: "Market", LIMIT: "Limit", STOP: "Stop", STOP_LIMIT: "Stop limit" }[t] || (t ? t.charAt(0) + t.slice(1).toLowerCase().replace(/_/g, " ") : "—"); }
-function orderBrackets(o) {
-  const parts = [];
-  if (o.stopLoss) parts.push(o.stopLoss.kind === "trail" ? "Trail " + (o.stopLoss.trailUnit === "amt" ? px(o.stopLoss.trail) : tkPlain(o.stopLoss.trail) + "%") : "Stop " + px(o.stopLoss.price));
-  if (o.takeProfit) parts.push("Target " + px(o.takeProfit.price));
-  return parts.length ? parts.join(" · ") : "—";
-}
-function orderStatus(o) {
-  const fill = o.filledQty ? qty(o.filledQty) + (o.avgFill ? " @ " + px(o.avgFill) : "") : "";
-  switch (o.status) {
-    case "pending": return o.wsStatus === "PARTIALLY_FILLED" && fill ? "Pending · filled " + fill : "Pending";
-    case "sent": return "Sent";
-    case "cancelling": return "Cancelling";
-    case "filled": return "Filled" + (fill ? " " + fill : "");
-    case "cancelled": return "Cancelled" + (fill ? " · filled " + fill : "");
-    case "expired": return "Expired" + (fill ? " · filled " + fill : "");
-    case "rejected": return "Rejected" + (o.error ? " · " + o.error : "");
-    case "failed": return "Failed" + (o.error ? " · " + o.error : "");
-    case "dry": return "Not sent";
-    default: return o.status || "—";
-  }
-}
-function orderWhen(iso) {
-  const t = Date.parse(iso); if (!isFinite(t)) return "—";
-  const d = new Date(t), p = (n) => String(n).padStart(2, "0");
-  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
-}
+function bracketOf(o) { return (state.orders && state.orders.brackets || []).find((b) => b.orderId === o.id) || null; }
+function orderById(id) { return (state.orders && state.orders.orders || []).find((x) => x.id === id) || null; }
 function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.quantity) + " " + o.symbol + " at " + (o.type === "MARKET" ? "market" : orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase()); }
-function ordersHtml() {
-  const data = state.orders;
-  const cols = [{ key: "placed", label: "Placed", width: "10.5%" }, { key: "symbol", label: "Symbol", width: "8%" }, { key: "side", label: "Side", width: "5%" }, { key: "type", label: "Type", width: "7.5%" },
-    { key: "qty", label: "Qty", align: "right", width: "6%" }, { key: "price", label: "Price", align: "right", width: "10%" }, { key: "tif", label: "Time in force", width: "8.5%" }, { key: "account", label: "Account", width: "10%" },
-    { key: "brackets", label: "Brackets", width: "15.5%" }, { key: "status", label: "Status" }, { key: "cancel", label: "", width: "64px" }];
-  let body;
-  if (!data && state.ordersError) body = '<tr><td colspan="11" class="status-err" style="padding:14px 6px">' + esc(state.ordersError) + "</td></tr>";
-  else if (!data) body = '<tr><td colspan="11" class="dim" style="padding:14px 6px"><span class="spin"></span>Loading…</td></tr>';
-  else {
-    const s = state.sort.orders, dir = s.dir === "asc" ? 1 : -1;
-    const keyOf = (o) => ({ placed: o.createdAt, symbol: o.symbol, side: o.side, type: o.type, qty: o.quantity, price: o.type === "STOP" ? o.stopPrice : o.limitPrice, tif: o.tif, account: o.account, brackets: orderBrackets(o), status: orderStatus(o) })[s.key];
-    const rows = data.orders.slice().sort((a, b) => {
-      const la = ORDER_LIVE[a.status] ? 0 : 1, lb = ORDER_LIVE[b.status] ? 0 : 1;
-      if (la !== lb) return la - lb;
-      const ka = keyOf(a), kb = keyOf(b);
-      if (ka == null && kb == null) return 0; if (ka == null) return 1; if (kb == null) return -1;
-      return (ka < kb ? -1 : ka > kb ? 1 : 0) * dir;
-    });
-    body = rows.length ? rows.map((o) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + orderWhen(o.createdAt) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(o.symbol) +
-      '</td><td style="font-variant-numeric:normal;color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + '</td><td style="font-variant-numeric:normal;color:var(--ink75)">' + esc(orderTypeWord(o.type)) +
-      '</td><td style="text-align:right">' + qty(o.quantity) + '</td><td style="text-align:right;color:var(--ink75);white-space:nowrap">' + orderPrice(o) + '</td><td style="font-variant-numeric:normal;color:var(--ink75)">' + (o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "—") +
-      '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(o.account || "—") + '</td><td style="color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(orderBrackets(o)) + '">' + orderBrackets(o) +
-      '</td><td style="font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' + (o.status === "rejected" || o.status === "failed" ? ";color:var(--neg)" : ORDER_LIVE[o.status] ? ";color:var(--accent-300)" : "") + '" title="' + esc(orderStatus(o)) + '">' + esc(orderStatus(o)) +
-      '</td><td style="text-align:right">' + (ORDER_LIVE[o.status] && o.status !== "cancelling" ? '<button class="pill" style="padding:2px 9px;width:auto;font-size:11px" data-act="cancelOrder" data-arg=\'' + attr({ id: o.id }) + "'>Cancel</button>" : "") + "</td></tr>").join("")
-      : '<tr><td colspan="11" class="dim" style="padding:14px 6px">No orders yet.</td></tr>';
+// `Limit 165.40 · Day · Trading (Margin)`; a filled order names its fill instead of its type
+// `Limit 165.40 · Day`; a filled order names its fill instead. The account is the panel's heading, not the card's.
+function orderDetailLine(o) {
+  if (o.status === "filled") return "Filled " + qty(o.filledQty || o.quantity) + (o.avgFill ? " at " + px(o.avgFill) : "");
+  const tif = o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "";
+  const how = o.type === "MARKET" ? "at market" : o.type === "STOP_LIMIT" ? "stop " + px(o.stopPrice) + " · limit " + px(o.limitPrice) : "at " + orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase();
+  return qty(o.quantity) + " " + how + (tif ? " · " + tif : "");
+}
+// the card's title: the side, then the listing as exchange and symbol, the quantity being the second line's
+function orderTitle(o) { return (o.exchange ? esc(o.exchange) + ": " : "") + esc(o.symbol); }
+function orderFillLine(o) {
+  const filled = o.filledQty || 0;
+  // a third line only for what the second cannot say: a partial fill on a pending order, or why it was refused
+  if (o.status === "rejected" || o.status === "failed") return o.error || "";
+  if (o.status !== "filled" && filled && filled < o.quantity) return qty(filled) + " of " + qty(o.quantity) + " filled" + (o.avgFill ? " at " + px(o.avgFill) : "");
+  return "";
+}
+function orderPill(o) {
+  const filled = o.filledQty || 0;
+  switch (o.status) {
+    case "pending": return filled && filled < o.quantity ? ["Partially filled", "accent"] : ["Pending", "accent"];
+    case "sent": return ["Pending", "accent"];
+    case "cancelling": return ["Cancelling", "accent"];
+    case "filled": return ["Filled", "pos"];
+    case "cancelled": return ["Cancelled", ""];
+    case "expired": return ["Expired", ""];
+    case "rejected": return ["Rejected", "neg"];
+    case "failed": return ["Failed", "neg"];
+    case "dry": return ["Not sent", ""];
+    default: return [o.status || "—", ""];
   }
-  return '<div class="card elev-sm" style="padding:16px 18px"><div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px"><h5>Orders</h5>' +
-    (data && !data.live ? '<span class="muted" style="font-size:11px">orders are off</span>' : "") + (data && data.refreshedAt ? '<span class="muted" style="font-size:11px;margin-left:auto">checked ' + esc(relTime(data.refreshedAt)) + "</span>" : "") + "</div>" +
-    '<div class="scroll-xy"><table class="table" style="min-width:1100px;width:100%;table-layout:fixed;font-size:12px"><thead><tr>' + th("orders", cols) + "</tr></thead><tbody>" + body + "</tbody></table></div></div>";
+}
+function orderWhenWord(iso) {
+  const t = Date.parse(iso); if (!isFinite(t)) return "—";
+  const d = new Date(t), now = new Date();
+  const h = d.getHours() % 12 || 12, m = String(d.getMinutes()).padStart(2, "0"), ap = d.getHours() < 12 ? "AM" : "PM";
+  const time = h + ":" + m + " " + ap;
+  if (d.toDateString() === now.toDateString()) return "Today " + time;
+  return MON[d.getMonth()] + " " + d.getDate() + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "") + ", " + time;
+}
+// the two legs of a bracket as the card shows them: [label, value, state, on]
+function bracketLegs(b) {
+  const legs = [];
+  const stopOrder = b.slOrderId ? orderById(b.slOrderId) : null, tpOrder = b.tpOrderId ? orderById(b.tpOrderId) : null;
+  const done = b.status === "done", off = b.status === "cancelled" || b.status === "failed";
+  if (b.slKind) {
+    const text = "Stop loss at " + px(b.slPrice) + (b.slKind === "trail" ? " · trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") : "");
+    let st = "Waiting for fill", on = false;
+    if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
+    else if (b.status === "target_placed") st = "Cancelled";
+    else if (done) { st = b.outcome === "stopped" ? "Filled" : "Cancelled"; on = b.outcome === "stopped"; }
+    else if (off) st = b.status === "failed" ? "Failed" : "Off";
+    legs.push({ key: "sl", text, state: st, on });
+  } else if (b.error && /^stop /.test(b.error) && !done) {
+    legs.push({ key: "sl", text: "Stop loss", state: "Cancelled", on: false });
+  }
+  if (b.tpPrice) {
+    let st = "Waiting for fill", on = false;
+    if (b.status === "armed" || b.status === "firing") { on = true; st = b.status === "firing" && b.attempts ? "Retrying · " + (b.error || "") : "Watching"; }
+    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : "At Wealthsimple"; }
+    else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
+    else if (off) st = b.status === "failed" ? "Failed" : "Off";
+    legs.push({ key: "tp", text: "Take profit at " + px(b.tpPrice), state: st, on });
+  }
+  return legs;
+}
+function bracketEditorHtml(b) {
+  // one editor for both legs: the level of each, Remove beneath each, Save for what changed
+  const e = state.bracketEdit || {};
+  const isTrail = b.slKind === "trail";
+  const slLabel = isTrail ? (b.slTrailUnit === "amt" ? "Trail" : "Trail %") : "Stop price";
+  const slCur = isTrail ? (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail)) : px(b.slPrice);
+  const field = (label, id, value, leg, removeLabel) => '<div class="tk-f"><span class="tk-l">' + label + '</span><input class="tk-in num" id="' + id + '" inputmode="decimal" autocomplete="off" value="' + esc(value) + '">' +
+    '<button class="od-link neg od-remove" data-act="bracketRemove" data-arg=\'' + attr({ id: b.id, leg }) + "'>" + removeLabel + "</button></div>";
+  return '<div class="od-edit"><div class="tk-grid">' +
+    (b.slKind ? field(slLabel, "od-sl", e.sl != null ? e.sl : slCur, "sl", "Remove stop loss") : "<div></div>") +
+    (b.tpPrice ? field("Limit price", "od-tp", e.tp != null ? e.tp : px(b.tpPrice), "tp", "Remove take profit") : "<div></div>") + "</div>" +
+    '<div class="od-edit-btns"><button class="od-link muted" data-act="bracketEditCancel">Cancel</button><button class="tk-go od-save" data-act="bracketEditSave" data-arg=\'' + attr({ id: b.id }) + "'" + (state.busy === "orders" ? " disabled" : "") + ">" + (state.busy === "orders" ? "Saving…" : "Save") + "</button></div>" +
+    (e.error ? '<div class="status-err" style="font-size:12px">' + esc(e.error) + "</div>" : "") + "</div>";
+}
+function orderEditorHtml(o) {
+  const e = state.orderEdit;
+  const hasLimit = o.type === "LIMIT" || o.type === "STOP_LIMIT";
+  return '<div class="od-edit"><div class="tk-grid">' +
+    '<label class="tk-f"><span class="tk-l">Shares</span><input class="tk-in num" id="od-qty" inputmode="decimal" autocomplete="off" value="' + esc(e.qty != null ? e.qty : qty(o.quantity)) + '"></label>' +
+    (hasLimit ? '<label class="tk-f"><span class="tk-l">Limit price</span><input class="tk-in num" id="od-limit" inputmode="decimal" autocomplete="off" value="' + esc(e.limit != null ? e.limit : px(o.limitPrice)) + '"></label>' : "<div></div>") + "</div>" +
+    '<div class="od-edit-btns"><button class="od-link muted" data-act="orderEditCancel">Cancel</button><button class="tk-go od-save" data-act="orderEditSave" data-arg=\'' + attr({ id: o.id }) + "'" + (state.busy === "orders" ? " disabled" : "") + ">" + (state.busy === "orders" ? "Saving…" : "Save") + "</button></div>" +
+    (e.error ? '<div class="status-err" style="font-size:12px">' + esc(e.error) + "</div>" : "") + "</div>";
+}
+// the two legs of a bracket: label, level, state; no actions in a row
+function bracketLegsHtml(b) {
+  return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-text num">' + esc(leg.text) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span></div>").join("");
+}
+// every card's foot: when, at the left; Edit and Cancel at the right while it is live, Edit dimmed where a change is not possible
+function cardFootHtml(when, live, editAct, editArg, canEdit, cancelAct, cancelArg, ended) {
+  // ended: [word, tone] for a finished card, shown where the actions would be
+  return '<div class="od-foot"><span class="od-when">' + esc(when) + "</span>" +
+    (live ? '<span class="od-foot-acts"><button class="od-link" data-act="' + editAct + '" data-arg=\'' + attr(editArg) + "'" + (canEdit ? "" : " disabled") + '>Edit</button><button class="od-link muted" data-act="' + cancelAct + '" data-arg=\'' + attr(cancelArg) + "'>Cancel</button></span>"
+      : ended ? '<span class="od-state' + (ended[1] === "neg" ? " neg" : "") + '">' + esc(ended[0]) + "</span>" : "") + "</div>";
+}
+// the accounts in scope, from the page's filter
+function ordersScope() { return (state.filters && state.filters.lists && state.filters.lists.account) || []; }
+function inOrdersScope(account) { const s = ordersScope(); return !s.length || s.indexOf(account) >= 0; }
+function ordersScopeLabel() { const s = ordersScope(); return s.length ? s.join(", ") : "All Accounts"; }
+// an armed bracket is a card of its own under Pending: the position it protects, its legs, the same foot as every card
+function bracketCardHtml(b) {
+  const entry = orderById(b.orderId);
+  const title = "Bracket " + ((entry && entry.exchange) ? esc(entry.exchange) + ": " : "") + esc(b.symbol);
+  const detail = entry && entry.avgFill ? "Bought " + esc(qty(b.quantity)) + " at " + px(entry.avgFill) : "Bought " + esc(qty(b.quantity));
+  const value = entry && entry.avgFill ? money(b.quantity * entry.avgFill * orderMultiplier(entry), "", 2) : "";
+  const editing = state.bracketEdit && state.bracketEdit.id === b.id;
+  return '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:var(--accent-300)">Bracket</span> ' + title.slice(8) + '</span><span class="od-value num">' + value + "</span></div>" +
+    '<div class="od-row2"><span class="od-line">' + detail + "</span></div>" +
+    bracketLegsHtml(b) + (editing ? bracketEditorHtml(b) : "") +
+    cardFootHtml(orderWhenWord(b.armedAt || b.createdAt), BRACKET_LIVE[b.status] && !editing, "bracketEdit", { id: b.id }, true, "cancelBracket", { id: b.id }) + "</div>";
+}
+function cancelBracketNow(id) {
+  const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id);
+  state.busy = "cancel"; render();
+  api("POST", "/api/bracket/cancel", { id }).then((r) => {
+    state.busy = ""; state.confirmOpen = "";
+    state.notice = r && r.ok ? "Bracket cancelled · " + (b ? b.symbol : "") : (r && r.error) || "Could not cancel the bracket.";
+    state.noticeKind = r && r.ok ? "ok" : "err";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, r && r.ok ? 10000 : 6000);
+    render();
+    loadOrders();
+  });
+}
+function orderCardHtml(o) {
+  const fill = orderFillLine(o);
+  const live = ORDER_LIVE[o.status] && o.status !== "cancelling";
+  const canEdit = live && o.type !== "STOP";   // Wealthsimple's modify has no stop price
+  const editing = state.orderEdit && state.orderEdit.id === o.id;
+  // the tab already says pending or filled; only the ended tab has states worth a word
+  const ended = state.ordersTab === "cancelled" ? orderPill(o) : null;
+  let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + orderTitle(o) + '</span><span class="od-value num">' + esc(orderValue(o)) + "</span></div>" +
+    '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + "</span></div>" +
+    (fill ? '<div class="od-fill">' + esc(fill) + "</div>" : "");
+  // a bracket still waiting for this order's fill shows on the order; once armed it is a card of its own
+  const waiting = live ? bracketOf(o) : null;
+  if (waiting && waiting.status === "waiting") html += bracketLegsHtml(waiting);
+  if (editing) html += orderEditorHtml(o);
+  html += cardFootHtml(orderWhenWord(o.createdAt), live && !editing, "orderEdit", { id: o.id }, canEdit, "cancelOrder", { id: o.id }, ended);
+  return html + "</div>";
+}
+// what the order is worth: quantity × price, contracts × 100; a filled order, what it filled for
+function orderMultiplier(o) { return /\s\d{2}[A-Z]{3}\d{2}\s[\d.]+\s(CALL|PUT)$/.test(o.symbol || "") ? 100 : 1; }
+function orderValue(o) {
+  const mult = orderMultiplier(o);
+  if (o.status === "filled" && o.avgFill) return money((o.filledQty || o.quantity) * o.avgFill * mult, "", 2);
+  const price = o.type === "MARKET" ? o.avgFill : o.type === "STOP" ? o.stopPrice : o.limitPrice;
+  if (!(price > 0)) return "";
+  return (o.type === "MARKET" ? "≈ " : "") + money(o.quantity * price * mult, "", 2);
+}
+function ordersBodyHtml() {
+  const data = state.orders;
+  if (!data && state.ordersError) return '<div class="status-err" style="font-size:12px">' + esc(state.ordersError) + "</div>";
+  if (!data) return '<div class="dim" style="font-size:12px"><span class="spin"></span>Loading…</div>';
+  const entries = data.orders.filter((o) => o.role !== "stop" && o.role !== "target" && inOrdersScope(o.account));
+  const newest = (a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0);
+  const head = (label) => '<div class="od-head"><span class="od-group">' + label + '</span><span class="od-scope">' + esc(ordersScopeLabel()) + "</span></div>";
+  const tab = state.ordersTab;
+  if (tab === "filled") {
+    const rows = entries.filter((o) => o.status === "filled").sort(newest);
+    return head("Filled orders") + (rows.length ? rows.map(orderCardHtml).join("") : '<div class="dim" style="font-size:12px">Nothing filled yet.</div>');
+  }
+  if (tab === "cancelled") {
+    const rows = entries.filter((o) => ["cancelled", "expired", "rejected", "failed", "dry"].indexOf(o.status) >= 0).sort(newest);
+    return head("Cancelled and rejected") + (rows.length ? rows.map(orderCardHtml).join("") : '<div class="dim" style="font-size:12px">Nothing cancelled or rejected.</div>');
+  }
+  // Pending: the orders resting at Wealthsimple, and each armed bracket as a card of its own, newest first together
+  const cards = entries.filter((o) => ORDER_LIVE[o.status]).map((o) => ({ at: o.createdAt, html: orderCardHtml(o) }))
+    .concat((data.brackets || []).filter((b) => BRACKET_LIVE[b.status] && b.status !== "waiting" && (() => { const e = orderById(b.orderId); return !e || inOrdersScope(e.account); })()).map((b) => ({ at: b.armedAt || b.createdAt, html: bracketCardHtml(b) })))
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  return head("Pending orders") + (cards.length ? cards.map((c) => c.html).join("") : '<div class="dim" style="font-size:12px">No pending orders.</div>');
+}
+const ORDERS_TABS = ["pending", "filled", "cancelled"];
+function ordersPanelHtml() {
+  const seg = (id, label) => '<button class="od-seg' + (state.ordersTab === id ? " on" : "") + '" data-act="ordersTab" data-arg=\'' + attr({ tab: id }) + "'>" + label + "</button>";
+  return '<div id="odWrap"><div class="tk-scrim" data-act="ordersClose"></div><div class="tk" role="dialog" aria-label="Orders">' +
+    '<div class="tk-hd"><span class="tk-title">Orders</span><button class="tk-x" aria-label="Close" data-act="ordersClose"><svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.x + '"/></svg></button></div>' +
+    '<div class="tk-body" style="gap:16px"><div class="od-segs">' + seg("pending", "Pending") + seg("filled", "Filled") + seg("cancelled", "Cancelled") + "</div>" +
+    '<div id="odBody" class="od-list">' + ordersBodyHtml() + "</div></div></div></div>";
+}
+function renderOrders() {
+  const old = document.getElementById("odWrap");
+  if (!state.ordersOpen) { if (old) old.remove(); return; }
+  const tmp = document.createElement("div"); tmp.innerHTML = ordersPanelHtml();
+  if (old) old.replaceWith(tmp.firstElementChild); else document.getElementById("app").appendChild(tmp.firstElementChild);
+}
+function openOrdersCount() { return ((state.orders && state.orders.orders) || []).filter((o) => o.role !== "stop" && o.role !== "target" && ORDER_LIVE[o.status]).length; }
+function orderEditSave(id) {
+  const o = orderById(id), e = state.orderEdit; if (!o || !e) return;
+  const q = document.getElementById("od-qty"), l = document.getElementById("od-limit");
+  const quantity = q ? tkNum(q.value) : o.quantity, limitPrice = l ? tkNum(l.value) : null;
+  if (!(quantity > 0)) { e.error = "Shares must be more than zero."; renderOrders(); return; }
+  if (l && !(limitPrice > 0)) { e.error = "A limit price is required."; renderOrders(); return; }
+  state.busy = "orders"; e.error = ""; renderOrders();
+  api("POST", "/api/order/modify", { id, quantity, limitPrice }).then((r) => {
+    state.busy = "";
+    if (!r || !r.ok) { if (state.orderEdit) state.orderEdit.error = (r && r.error) || "Could not change the order."; renderOrders(); return; }
+    state.orderEdit = null;
+    state.notice = "Order changed · " + orderLine(Object.assign({}, o, { quantity, limitPrice: limitPrice != null ? limitPrice : o.limitPrice })); state.noticeKind = "ok";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
+    renderHeaderOnly();
+    loadOrders();
+  });
+}
+function bracketEditSave(id) {
+  const e = state.bracketEdit; const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id); if (!b || !e) return;
+  const sl = document.getElementById("od-sl"), tp = document.getElementById("od-tp");
+  const calls = [];
+  if (sl) {
+    const v = tkNum(sl.value);
+    if (!(v > 0)) { e.error = b.slKind === "trail" ? "A trail is required." : "A stop price is required."; renderOrders(); return; }
+    const cur = b.slKind === "trail" ? b.slTrail : b.slPrice;
+    if (v !== cur) calls.push(b.slKind === "trail" ? { id, leg: "sl", trail: v } : { id, leg: "sl", price: v });
+  }
+  if (tp) {
+    const v = tkNum(tp.value);
+    if (!(v > 0)) { e.error = "A limit price is required."; renderOrders(); return; }
+    if (v !== b.tpPrice) calls.push({ id, leg: "tp", price: v });
+  }
+  if (!calls.length) { state.bracketEdit = null; renderOrders(); return; }
+  state.busy = "orders"; e.error = ""; renderOrders();
+  const run = (i) => {
+    if (i >= calls.length) {
+      state.busy = ""; state.bracketEdit = null;
+      state.notice = "Bracket changed · " + b.symbol; state.noticeKind = "ok";
+      setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
+      renderHeaderOnly(); loadOrders(); return;
+    }
+    api("POST", "/api/bracket/adjust", calls[i]).then((r) => {
+      if (!r || !r.ok) { state.busy = ""; if (state.bracketEdit) state.bracketEdit.error = (r && r.error) || "Could not change the bracket."; renderOrders(); loadOrders(); return; }
+      run(i + 1);
+    });
+  };
+  run(0);
+}
+function bracketRemove(id, leg) {
+  const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id); if (!b) return;
+  state.busy = "orders"; renderOrders();
+  api("POST", "/api/bracket/adjust", { id, leg, remove: true }).then((r) => {
+    state.busy = "";
+    if (!r || !r.ok) { if (state.bracketEdit) state.bracketEdit.error = (r && r.error) || "Could not remove the leg."; renderOrders(); return; }
+    state.bracketEdit = null;
+    state.notice = (leg === "sl" ? "Stop loss removed · " : "Take profit removed · ") + b.symbol; state.noticeKind = "ok";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
+    renderHeaderOnly();
+    loadOrders();
+  });
 }
 function cancelOrderNow(id) {
-  const o = state.orders && state.orders.orders.find((x) => x.id === id);
+  const o = orderById(id);
   state.busy = "cancel"; render();
   api("POST", "/api/order/cancel", { id }).then((r) => {
     state.busy = ""; state.confirmOpen = "";
@@ -1882,7 +2159,6 @@ function emptyHtml() {
 }
 function pageHtml() {
   const m = state.model;
-  if (state.page === "orders") return ordersHtml();
   if (state.loadError && !m) return '<div class="empty"><div class="status-err">' + esc(state.loadError) + '</div><button class="btn btn-secondary" data-act="reload">Retry</button></div>';
   if (!m) return '<div class="empty muted"><span class="spin"></span>Loading…</div>';
   if (!m.activityCount) return emptyHtml();
@@ -1901,9 +2177,9 @@ function render() {
   const boxes = [...root.querySelectorAll(".scroll, .scroll-xy")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
   const focusId = document.activeElement ? document.activeElement.id : "";
   const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
-  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "") + (state.ticket ? ticketHtml() : "");
+  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "") + (state.ordersOpen ? ordersPanelHtml() : "") + (state.ticket ? ticketHtml() : "");
   if (state.loginView) loginFrameLoop();   // a redraw makes a new image element: reattach the stream
-  if (state.page === "orders" && !_ordersTimer) ordersPoll(); else if (state.page !== "orders" && _ordersTimer) { clearTimeout(_ordersTimer); _ordersTimer = 0; }
+  if (state.ordersOpen && !_ordersTimer) ordersPoll(); else if (!state.ordersOpen && _ordersTimer) { clearTimeout(_ordersTimer); _ordersTimer = 0; }
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
   if (focusId === "valueQuery" || focusId === "searchInput") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
@@ -1922,7 +2198,7 @@ function renderHeaderOnly() {
   tmp.innerHTML = headerHtml();
   hdr.replaceWith(tmp.firstElementChild);
 }
-const PAGES = ["dashboard", "trades", "portfolio", "cashflow", "orders"];
+const PAGES = ["dashboard", "trades", "portfolio", "cashflow"];
 function hashState() {
   const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
   const parts = raw.split("/");
@@ -2125,6 +2401,18 @@ function act(name, arg, ev) {
     case "tkOpen": openTicket(arg.symbol, arg.side); break;
     case "cancelOrder": state.confirmOpen = "cancel:" + arg.id; render(); break;
     case "cancelOrderNow": cancelOrderNow(arg.id); break;
+    case "cancelBracket": state.confirmOpen = "bracket:" + arg.id; render(); break;
+    case "cancelBracketNow": cancelBracketNow(arg.id); break;
+    case "ordersOpen": openOrders(); break;
+    case "ordersClose": closeOrders(); break;
+    case "ordersTab": state.ordersTab = arg.tab; state.orderEdit = null; state.bracketEdit = null; renderOrders(); break;
+    case "orderEdit": state.orderEdit = { id: arg.id, error: "" }; state.bracketEdit = null; renderOrders(); { const q = document.getElementById("od-qty"); if (q) q.focus(); } break;
+    case "orderEditCancel": state.orderEdit = null; renderOrders(); break;
+    case "orderEditSave": orderEditSave(arg.id); break;
+    case "bracketEdit": state.bracketEdit = { id: arg.id, error: "" }; state.orderEdit = null; renderOrders(); { const l = document.getElementById("od-sl") || document.getElementById("od-tp"); if (l) { l.focus(); l.select(); } } break;
+    case "bracketEditCancel": state.bracketEdit = null; renderOrders(); break;
+    case "bracketEditSave": bracketEditSave(arg.id); break;
+    case "bracketRemove": bracketRemove(arg.id, arg.leg); break;
     case "tkClose": closeTicket(); break;
     case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.trail = null; t.tp.price = null; t.limit = null; t.stop = null; renderTicket(); } break;
     case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
@@ -2205,6 +2493,24 @@ function bind() {
       // the ticket has the keyboard: Esc closes it, Enter in a field commits the field
       if (e.key === "Escape") { e.preventDefault(); closeTicket(); return; }
       if (e.key === "Enter" && e.target && /^tk-/.test(e.target.id || "") && e.target.tagName === "INPUT") { e.preventDefault(); e.target.blur(); }
+      return;
+    }
+    // ⌘O (Ctrl+O elsewhere) opens the orders panel; pressed again it closes it
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "o") {
+      e.preventDefault();
+      if (state.ordersOpen) closeOrders(); else openOrders();
+      return;
+    }
+    if (state.ordersOpen && !state.confirmOpen && !state.picker && !((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k")) {
+      // the orders panel has the keyboard (⌘K and an open filter popover pass through): Esc closes an
+      // editor, then the panel; Enter saves an editor; Left and Right move between its tabs
+      if (e.key === "Escape") { e.preventDefault(); if (state.orderEdit || state.bracketEdit) { state.orderEdit = null; state.bracketEdit = null; renderOrders(); } else closeOrders(); return; }
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.metaKey && !e.ctrlKey && !e.altKey && !(e.target && ["INPUT", "TEXTAREA", "SELECT"].indexOf(e.target.tagName) >= 0)) {
+        const j = ORDERS_TABS.indexOf(state.ordersTab) + (e.key === "ArrowRight" ? 1 : -1);
+        if (j >= 0 && j < ORDERS_TABS.length) { e.preventDefault(); state.ordersTab = ORDERS_TABS[j]; state.orderEdit = null; state.bracketEdit = null; renderOrders(); }
+        return;
+      }
+      if (e.key === "Enter" && e.target && /^od-/.test(e.target.id || "")) { e.preventDefault(); if (state.orderEdit) orderEditSave(state.orderEdit.id); else if (state.bracketEdit) bracketEditSave(state.bracketEdit.id); }
       return;
     }
     // ⌘K (Ctrl+K elsewhere): the filter popover on Symbol, search box focused
@@ -2296,12 +2602,11 @@ function bind() {
     if (t.id === "rangeInput") { clearTimeout(_rangeTimer); const key = t.dataset.key, v = t.value.trim(); _rangeTimer = setTimeout(() => { state.filters.ranges[key].v = v === "" ? null : Number(v.replace(/[$,]/g, "")); if (v !== "" && isNaN(state.filters.ranges[key].v)) state.filters.ranges[key].v = null; loadModel(); }, 500); return; }
     if (t.id === "valueQuery") { state.valueQuery = t.value; state.valueHi = 0; const active = FIELDS.find((x) => x.key === state.picker); const box = document.getElementById("popValues"); if (active && box) box.innerHTML = popValuesHtml(active); return; }
     if (t.id === "searchInput") {
-      // typed text lists matching values first; only when nothing matches does it become the free-text search
+      // typed text only lists matching values; nothing filters until a value is chosen or Enter
+      // makes the text the free-text search
       clearTimeout(_rangeTimer);
       const v = t.value; state.fieldQuery = v; state.valueHi = 0;
       const body = document.getElementById("popFieldsBody"); if (body) body.innerHTML = popFieldsBodyHtml();
-      if (!fieldMatches(v).length) _rangeTimer = setTimeout(() => { if (state.filters.search !== v.trim()) { state.filters.search = v.trim(); state.sel = null; loadModel(); } }, 400);
-      else if (state.filters.search) { state.filters.search = ""; state.sel = null; loadModel(); }
       return;
     }
   });
