@@ -4561,6 +4561,7 @@ def orders_payload(kick=False):
 BRACKET_POLL_SEC = 5
 BRACKET_RETRY_SEC = (60, 300, 900, 3600)   # the wait after a refused placement: a minute, five, fifteen, then every hour
 TRAIL_MIN_MOVE = 0.005          # a trailing stop moves only when it would rise by half a percent of its level: each move is a cancel and a new order
+TARGET_BACK_OFF = 0.01          # the limit sell resting at the target gives way to the stop order again when the bid is this far under the target
 BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed", "stopping", "closing")
 BRACKET_RESTING = ("sent", "pending")            # an exit order Wealthsimple holds
 BRACKET_INFLIGHT = ("sent", "pending", "cancelling")   # ... or is still deciding about
@@ -4740,9 +4741,9 @@ def _arm_step(b, entry):
         sys.stderr.write("bagholder bracket: %s armed for %s x %s\n" % (b["id"], qty_text(filled), b["symbol"]))
     if b["status"] != "armed" or not b["slKind"] or b.get("slOrderId"):
         return
-    # a stop leg with no resting order: the previous one (if any) must be gone first
-    prev = _exit_row(b, "stop")
-    if prev and prev["status"] in ("pending", "sent", "cancelling"):
+    # a stop leg with no resting order: nothing of the bracket's may still be in flight at
+    # Wealthsimple (the previous stop, or the limit sell giving way): one order on the shares
+    if not _nothing_resting(b):
         return
     native = _stop_allowed(b["securityId"])
     if not native:
@@ -4993,9 +4994,12 @@ def _watch_step(b, quote):
         return
     now = datetime.now(timezone.utc)
     now_s = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    trigger = bid if bid is not None else last
+    at_target = bool(b.get("tpPrice")) and trigger >= b["tpPrice"]
     # trailing: the level follows the high (while the limit sell rests too: the level is
-    # what Bagholder watches for then)
-    if b["slKind"] == "trail" and b["status"] in ("armed", "target_placed"):
+    # what Bagholder watches for then); not on the check that reaches the target, whose
+    # cancel of the stop takes the place of a move
+    if b["slKind"] == "trail" and (b["status"] == "target_placed" or (b["status"] == "armed" and not at_target)):
         high = max(b.get("highWater") or 0.0, last)
         if high != b.get("highWater"):
             store.update_bracket(b["id"], {"highWater": high})
@@ -5042,7 +5046,10 @@ def _watch_step(b, quote):
         if stop_row and stop_row["status"] == "cancelled":
             _fire_target(b)
     # while the limit sell rests at the target there is no stop at Wealthsimple: the stop
-    # level is watched here, and reaching it cancels the limit sell for a market sell
+    # level is watched here, and reaching it cancels the limit sell for a market sell; and
+    # once the target is out of reach, a percent under it, the limit sell gives way to the
+    # stop order again, so the state with no stop at Wealthsimple lasts only while the
+    # target is actually in reach
     if b["status"] == "target_placed" and b["slKind"] and b.get("slPrice") and b.get("tpOrderId"):
         trigger = bid if bid is not None else last
         if trigger <= b["slPrice"]:
@@ -5053,11 +5060,19 @@ def _watch_step(b, quote):
             store.update_bracket(b["id"], {"status": "stopping", "tpOrderId": "", "error": "", "attempts": 0})
             sys.stderr.write("bagholder bracket: %s for %s: stop level %s reached at %s while the limit sell rested; its cancel sent, market sell follows\n" % (b["id"], b["symbol"], b["slPrice"], trigger))
             return
+        if b.get("tpPrice") and trigger < b["tpPrice"] * (1 - TARGET_BACK_OFF):
+            err = _cancel_exit(b["tpOrderId"])
+            if err:
+                _fail(b, "target not cancelled for the stop: " + err)
+                return
+            store.update_bracket(b["id"], {"status": "armed", "tpOrderId": "", "slOrderId": "", "error": "", "attempts": 0})
+            sys.stderr.write("bagholder bracket: %s for %s: target out of reach at %s; the limit sell's cancel sent, the stop order goes back\n" % (b["id"], b["symbol"], trigger))
+            return
     # the market sell once the limit sell's cancel is confirmed
     if b["status"] == "stopping":
         tp_row = _exit_row(b, "target")
         if tp_row and tp_row["status"] in ("cancelled", "expired"):
-            if not _may_retry(b):
+            if not _may_retry(b) or not _nothing_resting(b):
                 return
             oid, err = _place_exit(b, "MARKET", b.get("slPrice"), "stop")
             if err:
@@ -5068,7 +5083,7 @@ def _watch_step(b, quote):
 
 
 def _fire_target(b):
-    if not _may_retry(b):
+    if not _may_retry(b) or not _nothing_resting(b):
         return
     oid, err = _place_exit(b, "LIMIT", b["tpPrice"], "target")
     if err:

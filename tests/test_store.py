@@ -2718,9 +2718,9 @@ class BracketEngineTest(_EngineBase):
         self.assertEqual(b["status"], "target_placed")
         limit = b["tpOrderId"]
         self.sent.clear()
-        self._tick(self._q(170.0, bid=170.0))           # a pullback above the stop: nothing happens
+        self._tick(self._q(181.0, bid=181.0))           # within reach of the target still: nothing happens
         self.assertEqual(self.sent, [])
-        self._tick(self._q(157.0, bid=157.0))           # the stop level: the limit sell's cancel goes
+        self._tick(self._q(157.0, bid=157.0))           # a crash to the stop level in one check: the limit sell's cancel goes
         self.assertEqual([v["cancelOrderRequest"]["externalId"] for op, v in self.sent if op == "SoOrdersOrderCancel"], [limit])
         b = store.get_bracket(b["id"])
         self.assertEqual((b["status"], b["tpOrderId"]), ("stopping", ""))
@@ -2738,6 +2738,36 @@ class BracketEngineTest(_EngineBase):
         b = store.get_bracket(b["id"])
         self.assertEqual((b["status"], b["outcome"]), ("done", "stopped"))
         self.assertEqual([o["status"] for o in store.list_orders() if o.get("role") in ("stop", "target")].count("pending"), 0, "nothing of the bracket's rests")
+
+    def test_the_limit_sell_gives_way_to_the_stop_order_once_the_target_is_out_of_reach(self):
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        self._tick(self._q(182.0, bid=182.0))
+        store.update_order(stop, {"status": "cancelled"})
+        self._tick(self._q(182.0, bid=182.0))
+        b = store.get_bracket(b["id"])
+        limit = b["tpOrderId"]
+        self.sent.clear()
+        self._tick(self._q(180.5, bid=180.5))           # within a percent of 181.94: the limit stays
+        self.assertEqual(self.sent, [])
+        self._tick(self._q(179.0, bid=179.0))           # out of reach: the limit's cancel goes
+        self.assertEqual([v["cancelOrderRequest"]["externalId"] for op, v in self.sent if op == "SoOrdersOrderCancel"], [limit])
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["tpOrderId"], b["slOrderId"]), ("armed", "", ""))
+        self.sent.clear()
+        self._tick(self._q(179.0, bid=179.0))           # not confirmed yet: no stop order
+        self.assertEqual([op for op, _ in self.sent if op == "SoOrdersOrderCreate"], [])
+        store.update_order(limit, {"status": "cancelled"})
+        self._tick(self._q(179.0, bid=179.0))
+        create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+        self.assertEqual((create[0]["executionType"], create[0]["stopPrice"], create[0]["timeInForce"]), ("STOP", 157.13, "UNTIL_CANCEL"), "the stop order rests at Wealthsimple again")
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "armed")
+        self.assertTrue(b["slOrderId"])
+        self.assertEqual([o["status"] for o in store.list_orders() if o.get("role") == "target"], ["cancelled"], "no limit sell rests")
 
     def test_a_trailing_level_keeps_following_the_high_while_the_limit_sell_rests(self):
         oid, b = self._entry(stopLoss={"kind": "trail", "trail": 5, "trailUnit": "pct"}, takeProfit={"price": 175.0})
@@ -2879,9 +2909,9 @@ class BracketEngineTest(_EngineBase):
         self.assertEqual(store.get_bracket(b["id"])["slPrice"], 171.0)
         self._tick(self._q(171.5))
         self.assertEqual(store.get_bracket(b["id"])["slPrice"], 171.0, "a lower high never lowers the stop")
-        # a rise past the step moves it at once
-        self._tick(self._q(182.0))
-        self.assertEqual(store.get_bracket(b["id"])["slPrice"], 172.9)
+        # a rise past the step moves it at once (still under the target, whose turn would come first)
+        self._tick(self._q(181.5))
+        self.assertEqual(store.get_bracket(b["id"])["slPrice"], 172.43)
 
     def test_the_balances_feed_never_touches_a_bracket_with_a_resting_order(self):
         """2026-09-10: Wealthsimple's balances listed a held position on one read and omitted
@@ -3089,6 +3119,7 @@ class OrdersPanelTest(_EngineBase):
         store.update_order(oid, {"status": "filled", "filledQty": 25})
         self._tick()
         b = store.get_bracket(b["id"])
+        store.update_order(b["slOrderId"], {"status": "cancelled"})
         store.update_bracket(b["id"], {"slKind": "", "slOrderId": ""})   # no stop: the target goes straight out
         self._tick(self._q(182.0, bid=181.95))
         b = store.get_bracket(b["id"])
