@@ -607,6 +607,12 @@ function menuHtml() {
     "</div>";
 }
 function confirmDialogHtml() {
+  if (/^bracket:/.test(state.confirmOpen)) {
+    const id = state.confirmOpen.slice(8), b = (state.orders && state.orders.brackets || []).find((x) => x.id === id), busy = state.busy === "cancel";
+    return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel bracket</h5>' +
+      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (b ? esc(qty(b.quantity) + " " + b.symbol) + " · " + bracketLegs(b).map((l) => esc(l.label + " " + l.value)).join(" · ") : "") + "</div>" +
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Keep bracket</button><button class="btn" data-act="cancelBracketNow" data-arg=\'' + attr({ id }) + '\' style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (busy ? "Cancelling…" : "Cancel bracket") + "</button></div></div></div>";
+  }
   if (/^cancel:/.test(state.confirmOpen)) {
     const id = state.confirmOpen.slice(7), o = state.orders && state.orders.orders.find((x) => x.id === id), busy = state.busy === "cancel";
     return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel order</h5>' +
@@ -1326,7 +1332,19 @@ function bracketCardHtml(b) {
   return '<div class="od-card"><div class="od-row1"><span class="od-title">' + esc(qty(b.quantity)) + " " + esc(b.symbol) + '</span><span class="od-pill accent">Bracket</span></div>' +
     '<div class="od-row2"><span class="od-line">' + detail + '</span><span class="od-when num">' + value + "</span></div>" +
     bracketLegsHtml(b) +
-    '<div class="od-foot"><span class="od-when">' + esc(orderWhenWord(b.armedAt || b.createdAt)) + "</span></div></div>";
+    '<div class="od-foot"><span class="od-when">' + esc(orderWhenWord(b.armedAt || b.createdAt)) + '</span><span class="od-foot-acts"><button class="od-link muted" data-act="cancelBracket" data-arg=\'' + attr({ id: b.id }) + "'>Cancel</button></span></div></div>";
+}
+function cancelBracketNow(id) {
+  const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id);
+  state.busy = "cancel"; render();
+  api("POST", "/api/bracket/cancel", { id }).then((r) => {
+    state.busy = ""; state.confirmOpen = "";
+    state.notice = r && r.ok ? "Bracket cancelled · " + (b ? qty(b.quantity) + " " + b.symbol : "") : (r && r.error) || "Could not cancel the bracket.";
+    state.noticeKind = r && r.ok ? "ok" : "err";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, r && r.ok ? 10000 : 6000);
+    render();
+    loadOrders();
+  });
 }
 function orderCardHtml(o) {
   const pill = orderPill(o);
@@ -2335,6 +2353,8 @@ function act(name, arg, ev) {
     case "tkOpen": openTicket(arg.symbol, arg.side); break;
     case "cancelOrder": state.confirmOpen = "cancel:" + arg.id; render(); break;
     case "cancelOrderNow": cancelOrderNow(arg.id); break;
+    case "cancelBracket": state.confirmOpen = "bracket:" + arg.id; render(); break;
+    case "cancelBracketNow": cancelBracketNow(arg.id); break;
     case "ordersOpen": openOrders(); break;
     case "ordersClose": closeOrders(); break;
     case "ordersTab": state.ordersTab = arg.tab; state.orderEdit = null; state.bracketEdit = null; renderOrders(); break;
