@@ -36,6 +36,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 import csvimport
+import exposure
 import market
 import model
 import store
@@ -709,7 +710,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-10.8"
+PROTOCOL = "2026-09-10.9"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -2318,6 +2319,71 @@ def refresh_portfolio():
     except Exception as e:
         sys.stderr.write("bagholder portfolio: failed: %s\n" % (e.__class__.__name__ + (": " + str(e) if str(e) else "")))
         return {"ok": False, "skipped": "error"}
+
+
+EXPOSURE_CHECK_SEC = 30 * 60
+EXPOSURE_FIRST_SEC = 20
+
+
+EXPOSURE_WORKERS = 4
+
+
+def refresh_exposures():
+    """The exposure record of every held security that has none or an old one, read
+    from records outside Wealthsimple (exposure.py): shares first, four securities at
+    a time (the pause between requests is per site, and the families are independent),
+    each record shown as soon as it lands. Never raises."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    snap = store.snapshot()
+    secs = {sec["id"]: sec for sec in (snap.get("securities") or []) if sec.get("id")}
+    positions = model.base_model().get("positions") or []
+    held = {_s(p.get("securityId")) for p in positions if p.get("kind") == "Shares"}
+    held |= {_s(b.get("securityId")) for b in (snap.get("balances") or []) if (_num(b.get("quantity"), 0.0) or 0.0) > 0 and _s(b.get("securityId")).startswith("sec-s-")}
+    held = sorted(sid for sid in held if sid and not sid.startswith("sec-c-"))
+    todo = [sid for sid in exposure.stale(held) if sid in secs]
+    todo.sort(key=lambda sid: 1 if exposure.is_fund(secs[sid].get("name"), secs[sid].get("symbol")) else 0)
+    # a contract's exposure is its underlying's: the share is classified under its own key
+    unders = sorted({(_s(p.get("underlying")).upper(), _s(p.get("currency"))) for p in positions if p.get("kind") == "Options" and p.get("underlying")})
+    unders = [(u, c) for u, c in unders if exposure.stale([exposure.SHARE_KEY + u + ":" + (market.tmx_form("", c) or "")])]
+
+    def one(job):
+        if _stop.is_set():
+            return None
+        if job[0] == "sec":
+            sec = job[1]
+            rec = exposure.refresh_security(sec)
+            cov = rec.get("coverage") or 0.0
+            return "bagholder exposure: %s %s: %s (%d%% covered)%s" % (sec.get("symbol"), "fund" if exposure.is_fund(sec.get("name"), sec.get("symbol")) else "share",
+                                                                      rec.get("source") or "no source", int(round(cov * 100)), (": " + rec["error"]) if rec.get("error") else "")
+        under, ccy = job[1], job[2]
+        try:
+            exposure.share_exposure(under, "", ccy)
+            return "bagholder exposure: %s (an option's underlying) classified" % under
+        except Exception as e:
+            return "bagholder exposure: %s (an option's underlying): %s" % (under, str(e) or e.__class__.__name__)
+
+    jobs = [("sec", secs[sid]) for sid in todo] + [("under", u, c) for u, c in unders]
+    done = 0
+    if jobs:
+        with ThreadPoolExecutor(max_workers=EXPOSURE_WORKERS, thread_name_prefix="bagholder-exposure") as pool:
+            for fut in as_completed([pool.submit(one, j) for j in jobs]):
+                line = fut.result()
+                if line:
+                    done += 1
+                    sys.stderr.write(line + "\n")
+                    model.invalidate()   # each record shows as soon as it lands: the data version moves with the table
+    return {"ok": True, "held": len(held), "refreshed": done}
+
+
+def exposure_loop():
+    """Soon after start and every half hour: the held securities' exposure records."""
+    wait = EXPOSURE_FIRST_SEC
+    while not _stop.wait(wait):
+        wait = EXPOSURE_CHECK_SEC
+        try:
+            refresh_exposures()
+        except Exception as e:
+            sys.stderr.write("bagholder exposure: refresh failed: %s\n" % (str(e) or e.__class__.__name__))
 
 
 def portfolio_loop():
@@ -6295,6 +6361,7 @@ def main():
     threading.Thread(target=portfolio_loop, name="bagholder-portfolio-loop", daemon=True).start()
     threading.Thread(target=orders_loop, name="bagholder-orders-loop", daemon=True).start()
     threading.Thread(target=bracket_loop, name="bagholder-bracket-loop", daemon=True).start()
+    threading.Thread(target=exposure_loop, name="bagholder-exposure-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()

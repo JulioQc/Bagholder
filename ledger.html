@@ -307,7 +307,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.8"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.9"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -2079,11 +2079,15 @@ function portfolioSlices(pf) {
   items.forEach((x, i) => { x.color = "var(--pie-" + ((i % 11) + 1) + ")"; });
   return { total: pf.marketValue || 0, items };
 }
-function portfolioPieHtml(pf) {
-  const p = portfolioSlices(pf);
+// One donut card for Allocation, Sectors and Regions: the slices, the centre reading the
+// label and total or the hovered slice, the legend as an aligned grid. `key` names the
+// card's elements and the hover registry.
+const _donuts = {};
+function donutCardHtml(key, title, centreLabel, items, total, empty) {
+  _donuts[key] = { items, total, centreLabel };
   const R = 44, W = 14, C = 60, SIZE = 264;
   let acc = 0;
-  const arcs = p.items.map((x, i) => {
+  const arcs = items.map((x, i) => {
     const a0 = acc * 2 * Math.PI - Math.PI / 2, a1 = (acc + x.share) * 2 * Math.PI - Math.PI / 2;
     acc += x.share;
     if (x.share >= 0.9999) return '<circle cx="' + C + '" cy="' + C + '" r="' + R + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '"/>';
@@ -2092,25 +2096,47 @@ function portfolioPieHtml(pf) {
     return '<path d="' + d + '" fill="none" stroke="' + x.color + '" stroke-width="' + W + '" data-slice="' + i + '" style="cursor:default"/>';
   }).join("");
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0">' +
-    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Allocation</h5></div>' +
-    (p.items.length ? '<div id="ppiePlot" data-hover="ppie" style="display:flex;gap:16px;align-items:center;justify-content:center;flex:1;min-height:0">' +
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>' + esc(title) + "</h5></div>" +
+    (items.length ? '<div id="' + key + 'Plot" data-hover="' + key + '" style="display:flex;gap:16px;align-items:center;justify-content:center;flex:1;min-height:0">' +
       '<div style="position:relative;flex:none;width:max(200px, min(' + SIZE + 'px, 100% - 140px));aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
-      '<div id="ppieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">Market value</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(p.total) + "</div></div></div>" +
-      '<div id="ppieLegend" class="scroll" style="flex:0 1 auto;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
-      p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.label) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + pctPlain(x.share) + "</span></span>").join("") +
-      "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No open positions in scope.</div>') + "</div>";
+      '<div id="' + key + 'Centre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">' + esc(centreLabel) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(total) + "</div></div></div>" +
+      '<div id="' + key + 'Legend" class="scroll" style="flex:0 1 auto;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:12px;row-gap:9px;align-content:center;align-items:center;font-size:12.5px">' +
+      items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.label) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + pctPlain(x.share) + "</span></span>").join("") +
+      "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">' + esc(empty) + "</div>") + "</div>";
 }
-function ppieHover(e) {
-  const el = e.target.closest("[data-slice]"); const plot = document.getElementById("ppiePlot"); if (!plot) return;
+function portfolioPieHtml(pf) {
+  const p = portfolioSlices(pf);
+  return donutCardHtml("ppie", "Allocation", "Market value", p.items, p.total, "No open positions in scope.");
+}
+// the Sectors and Regions cards: the model's slices, ten at most plus Other, Not classified last in the neutral grey
+function exposureSlices(rows) {
+  const known = (rows || []).filter((x) => x.name !== "Not classified"), unc = (rows || []).find((x) => x.name === "Not classified");
+  const top = known.slice(0, 10), rest = known.slice(10);
+  const items = top.map((x) => ({ label: x.name, v: x.value, share: x.share }));
+  if (rest.length) items.push({ label: "Other (" + rest.length + ")", v: rest.reduce((a, x) => a + x.value, 0), share: rest.reduce((a, x) => a + x.share, 0) });
+  items.forEach((x, i) => { x.color = "var(--pie-" + ((i % 11) + 1) + ")"; });
+  if (unc) items.push({ label: unc.name, v: unc.value, share: unc.share, color: "rgba(var(--ink-rgb),.28)" });
+  const total = (rows || []).reduce((a, x) => a + x.value, 0);
+  return { total, items };
+}
+function exposureCardsHtml(pf) {
+  const sec = exposureSlices(pf.sectors), reg = exposureSlices(pf.regions);
+  const total = pf.marketValue || 0;   // the centre reads what Allocation's does
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch">' +
+    donutCardHtml("xsec", "Sectors", "Market value", sec.items, total, "No open positions in scope.") +
+    donutCardHtml("xreg", "Regions", "Market value", reg.items, total, "No open positions in scope.") + "</div>";
+}
+function donutHover(e, key) {
+  const el = e.target.closest("[data-slice]"); const plot = document.getElementById(key + "Plot"); if (!plot) return;
   const i = el ? +el.dataset.slice : -1;
   plot.querySelectorAll("svg [data-slice]").forEach((s) => { s.style.opacity = i < 0 || +s.dataset.slice === i ? "1" : ".35"; });
-  plot.querySelectorAll("#ppieLegend [data-slice]").forEach((s) => { const on = i < 0 || +s.dataset.slice === i; [...s.children].forEach((c) => { c.style.opacity = on ? "1" : ".45"; }); });
-  const centre = document.getElementById("ppieCentre"); if (!centre || !state.model) return;
-  const p = portfolioSlices(state.model.portfolio || {});
-  const x = i >= 0 ? p.items[i] : null;
+  plot.querySelectorAll("#" + key + "Legend [data-slice]").forEach((s) => { const on = i < 0 || +s.dataset.slice === i; [...s.children].forEach((c) => { c.style.opacity = on ? "1" : ".45"; }); });
+  const centre = document.getElementById(key + "Centre"); const d = _donuts[key]; if (!centre || !d) return;
+  const x = i >= 0 ? d.items[i] : null;
   centre.innerHTML = x ? '<div class="lbl">' + esc(x.label) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(x.v) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + pctPlain(x.share) + "</div>"
-    : '<div class="lbl">Market value</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(p.total) + "</div>";
+    : '<div class="lbl">' + esc(d.centreLabel) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(d.total) + "</div>";
 }
+function ppieHover(e) { donutHover(e, "ppie"); }
 function ppieLeave() { ppieHover({ target: document.body }); }
 function portfolioHtml(m) {
   const p = state.sel ? positionById(state.sel) : null;
@@ -2130,7 +2156,8 @@ function portfolioHtml(m) {
       '<td style="text-align:right;white-space:nowrap;color:' + (r.dayChange == null ? "var(--ink55)" : color(r.dayChange)) + '">' + (r.dayChange == null ? "—" : signedMoney(r.dayChange, r.currency)) + "</td>" +
       '<td style="text-align:right;color:' + (r.percentChange == null ? "var(--ink55)" : color(r.percentChange)) + '">' + (r.percentChange == null ? "—" : pct(r.percentChange / 100, 2)) + "</td>" +
       '<td style="text-align:right;padding-right:0;white-space:nowrap;font-weight:500;color:' + color(r.unreal) + '">' + signedMoney(r.unreal, r.currency) + " (" + pct(r.unrealPct) + ")</td></tr>").join("") +
-    "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No open positions match these filters.</div>') + "</div></div></div></div>";
+    "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No open positions match these filters.</div>') + "</div></div></div>" +
+    exposureCardsHtml(pf) + "</div>";
 }
 
 // ---------------------------------------------------------------------------
@@ -2753,13 +2780,13 @@ function bind() {
   document.addEventListener("mousemove", (e) => {
     const h = e.target.closest("[data-hover]");
     if (!h) return;
-    if (h.dataset.hover === "eq") eqHover(e); else if (h.dataset.hover === "mo") moHover(e); else if (h.dataset.hover === "cf") cfHover(e); else if (h.dataset.hover === "pie") pieHover(e); else if (h.dataset.hover === "ppie") ppieHover(e);
+    if (h.dataset.hover === "eq") eqHover(e); else if (h.dataset.hover === "mo") moHover(e); else if (h.dataset.hover === "cf") cfHover(e); else if (h.dataset.hover === "pie") pieHover(e); else if (h.dataset.hover === "ppie" || h.dataset.hover === "xsec" || h.dataset.hover === "xreg") donutHover(e, h.dataset.hover);
   });
   document.addEventListener("mouseout", (e) => {
     const h = e.target.closest("[data-hover]");
     if (!h) return;
     if (e.relatedTarget && h.contains(e.relatedTarget)) return;
-    if (h.dataset.hover === "eq") eqLeave(); else if (h.dataset.hover === "mo") moLeave(); else if (h.dataset.hover === "cf") cfLeave(); else if (h.dataset.hover === "pie") pieLeave(); else if (h.dataset.hover === "ppie") ppieLeave();
+    if (h.dataset.hover === "eq") eqLeave(); else if (h.dataset.hover === "mo") moLeave(); else if (h.dataset.hover === "cf") cfLeave(); else if (h.dataset.hover === "pie") pieLeave(); else if (h.dataset.hover === "ppie" || h.dataset.hover === "xsec" || h.dataset.hover === "xreg") donutHover({ target: document.body }, h.dataset.hover);
     else if (h.dataset.hover === "theme" && state.themeOpen) { state.themeOpen = false; renderHeaderOnly(); }
   });
   // the Theme row opens its list on hover, as a submenu does; the click stays for touch

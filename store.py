@@ -280,6 +280,18 @@ def _init_schema(conn):
             updated_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS exposures (
+            key TEXT PRIMARY KEY,
+            sectors TEXT,
+            countries TEXT,
+            coverage REAL,
+            source TEXT,
+            as_of TEXT,
+            industry TEXT,
+            error TEXT,
+            fetched_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS orders (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
@@ -2033,6 +2045,7 @@ def data_version():
                 "SELECT COUNT(*), SUM(quantity) FROM balances",
                 "SELECT COUNT(*), MAX(id) FROM accounts",
                 "SELECT COUNT(*), MAX(fetched_at) FROM margin",
+                "SELECT COUNT(*), MAX(fetched_at) FROM exposures",
                 "SELECT COUNT(*), SUM(COALESCE(net_liquidation_value, 0)) FROM accounts",
             ):
                 row = conn.execute(sql).fetchone()
@@ -2233,6 +2246,7 @@ def snapshot():
                 "accounts": accounts,
                 "balances": balances,
             "margin": margin,
+            "exposures": {r["key"]: _exposure_from_row(r) for r in conn.execute("SELECT * FROM exposures").fetchall()},
                 "navHistory": nav,
                 "navByAccount": nav_by_account,
                 "syncedAt": synced,
@@ -2479,6 +2493,57 @@ def symbol_for_security(security_id):
             _init_schema(conn)
             r = conn.execute("SELECT symbol FROM activities WHERE security_id = ? AND symbol IS NOT NULL AND symbol != '' ORDER BY occurred_at DESC LIMIT 1", (_s(security_id),)).fetchone()
             return _s(r["symbol"]) if r else ""
+        finally:
+            conn.close()
+
+
+def replace_exposure(key, rec):
+    """One exposure record: sectors and countries as {name: fraction}, the share of
+    the holding they cover, the source and its as-of date."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute(
+                "INSERT INTO exposures (key, sectors, countries, coverage, source, as_of, industry, error, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET sectors = excluded.sectors, countries = excluded.countries, coverage = excluded.coverage, source = excluded.source, "
+                "as_of = excluded.as_of, industry = excluded.industry, error = excluded.error, fetched_at = excluded.fetched_at",
+                (_s(key), json.dumps(rec.get("sectors") or {}), json.dumps(rec.get("countries") or {}), _num(rec.get("coverage"), 0.0), _s(rec.get("source")), _s(rec.get("asOf")),
+                 _s(rec.get("industry")), _s(rec.get("error")), _now_iso()),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def _exposure_from_row(r):
+    def js(v):
+        try:
+            return json.loads(v) if v else {}
+        except (TypeError, ValueError):
+            return {}
+    return {"sectors": js(r["sectors"]), "countries": js(r["countries"]), "coverage": r["coverage"] or 0.0, "source": r["source"] or "", "asOf": r["as_of"] or "",
+            "industry": r["industry"] or "", "error": r["error"] or "", "fetchedAt": r["fetched_at"] or ""}
+
+
+def exposure_record(key):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            r = conn.execute("SELECT * FROM exposures WHERE key = ?", (_s(key),)).fetchone()
+            return _exposure_from_row(r) if r else None
+        finally:
+            conn.close()
+
+
+def exposures_map():
+    """Every record keyed by what it is for: a security id, or a share/fund key."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            return {r["key"]: _exposure_from_row(r) for r in conn.execute("SELECT * FROM exposures").fetchall()}
         finally:
             conn.close()
 
