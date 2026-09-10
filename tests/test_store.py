@@ -2600,36 +2600,31 @@ class BracketEngineTest(_EngineBase):
         self._tick(self._q(182.0))
         self.assertEqual(store.get_bracket(b["id"])["slPrice"], 172.9)
 
-    def test_a_position_sold_elsewhere_ends_the_bracket_and_cancels_its_orders(self):
+    def test_the_balances_feed_never_ends_a_bracket(self):
+        """2026-09-10: Wealthsimple's balances listed a held position on one read and omitted
+        it on the next; a live stop was cancelled on that word. Never again."""
         oid, b = self._entry()
         store.update_order(oid, {"status": "filled", "filledQty": 25})
         self._tick()
         b = store.get_bracket(b["id"])
-        store.replace_balances([{"accountId": "acct-margin", "securityId": "sec-other", "quantity": 1}])
-        store.set_meta("balances_read_at", "2020-01-01T00:00:00Z")
-        self._tick()
-        self.assertEqual(store.get_bracket(b["id"])["status"], "armed", "a balances read older than the arming proves nothing")
+        store.replace_balances([{"accountId": "acct-margin", "securityId": "sec-s-us", "quantity": 25}])
         store.set_meta("balances_read_at", "2099-01-01T00:00:00Z")
         self._tick()
-        self.assertEqual(store.get_bracket(b["id"])["status"], "armed", "a read that never showed the position held proves nothing: Wealthsimple's balances lag a fill")
-        # the position shows up in a read, then disappears: still nothing within ten minutes of arming
-        store.replace_balances([{"accountId": "acct-margin", "securityId": "sec-s-us", "quantity": 25}])
-        self._tick()
-        self.assertTrue(store.get_bracket(b["id"])["seenHeld"])
+        self.assertTrue(store.get_bracket(b["id"])["seenHeld"], "the position was seen held")
         store.replace_balances([{"accountId": "acct-margin", "securityId": "sec-other", "quantity": 1}])
-        self._tick()
-        self.assertEqual(store.get_bracket(b["id"])["status"], "armed", "too soon after arming")
         store.update_bracket(b["id"], {"armedAt": "2020-01-01T00:00:00Z"})
         self.sent.clear()
-        self._tick()
+        for _ in range(3):
+            self._tick()
         b = store.get_bracket(b["id"])
-        self.assertEqual((b["status"], b["outcome"]), ("cancelled", "position closed elsewhere"))
-        self.assertEqual([op for op, _ in self.sent], ["SoOrdersOrderCancel"])
+        self.assertEqual(b["status"], "armed", "a read without the position changes nothing")
+        self.assertTrue(b["slOrderId"], "the stop still rests")
+        self.assertEqual(self.sent, [], "nothing is cancelled on the balances' word")
 
-    def test_a_rejected_exit_is_tried_again_spaced_out_then_the_bracket_fails_loudly(self):
+    def test_a_rejected_exit_is_tried_again_spaced_out_for_as_long_as_the_bracket_lives(self):
         oid, b = self._entry()
         store.update_order(oid, {"status": "filled", "filledQty": 25})
-        self.rejections = ["Market closed"] * 5
+        self.rejections = ["Market closed"] * 6
         self._tick()
         b = store.get_bracket(b["id"])
         self.assertEqual((b["status"], b["attempts"]), ("armed", 1))
@@ -2637,19 +2632,20 @@ class BracketEngineTest(_EngineBase):
         self.sent.clear()
         self._tick()
         self.assertEqual([op for op, _ in self.sent if op == "SoOrdersOrderCreate"], [], "no second try within the minute")
-        # each later try comes only after its wait: a minute, five, fifteen, an hour
-        for n, wait in enumerate((60, 300, 900, 3600), start=2):
+        # each later try comes only after its wait: a minute, five, fifteen, then every hour, without end
+        for n in range(2, 7):
             with mock.patch.object(store, "_now_iso", return_value="2020-01-01T00:00:00Z"):
                 store.update_bracket(b["id"], {"error": "Market closed"})   # the last failure, long enough ago
             self._tick()
             b = store.get_bracket(b["id"])
-            self.assertEqual(b["attempts"], n, "attempt %d after %d s" % (n, wait))
-        self.assertEqual(b["status"], "failed")
-        self.sent.clear()
+            self.assertEqual((b["status"], b["attempts"]), ("armed", n), "attempt %d, still armed" % n)
+        # the seventh attempt, past the six refusals, is accepted: the stop rests and the count clears
         with mock.patch.object(store, "_now_iso", return_value="2020-01-01T00:00:00Z"):
             store.update_bracket(b["id"], {"error": "Market closed"})
         self._tick()
-        self.assertEqual([op for op, _ in self.sent if op == "SoOrdersOrderCreate"], [], "a failed bracket is left alone")
+        b = store.get_bracket(b["id"])
+        self.assertTrue(b["slOrderId"])
+        self.assertEqual((b["status"], b["attempts"], b["error"]), ("armed", 0, ""))
 
     def test_with_orders_off_nothing_is_placed_and_the_line_is_printed_once(self):
         with mock.patch.object(bagholder, "ORDERS_LIVE", False):

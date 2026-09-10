@@ -1274,7 +1274,7 @@ function bracketLegs(b) {
   if (b.slKind) {
     const value = b.slKind === "trail" ? "Trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") + " · " + px(b.slPrice) + " now" : "Market at " + px(b.slPrice);
     let st = "Waiting for fill", on = false;
-    if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : "Placing"; }
+    if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
     else if (b.status === "target_placed") st = "Cancelled";
     else if (done) { st = b.outcome === "stopped" ? "Filled" : "Cancelled"; on = b.outcome === "stopped"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
@@ -1284,7 +1284,7 @@ function bracketLegs(b) {
   }
   if (b.tpPrice) {
     let st = "Waiting for fill", on = false;
-    if (b.status === "armed" || b.status === "firing") { on = true; st = "Watching"; }
+    if (b.status === "armed" || b.status === "firing") { on = true; st = b.status === "firing" && b.attempts ? "Retrying · " + (b.error || "") : "Watching"; }
     else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : "At Wealthsimple"; }
     else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";

@@ -4327,9 +4327,7 @@ def orders_payload(kick=False):
 # brackets: the stop loss and take profit Bagholder watches for a filled order
 # ---------------------------------------------------------------------------
 BRACKET_POLL_SEC = 5
-BRACKET_MAX_ATTEMPTS = 5        # a rejected exit is tried this many times, spaced out, then the bracket fails loudly
-BRACKET_RETRY_SEC = (60, 300, 900, 3600)   # the wait before the second, third, fourth and fifth attempt
-POSITION_GONE_MIN_SEC = 600     # a position is never read as sold elsewhere within ten minutes of arming
+BRACKET_RETRY_SEC = (60, 300, 900, 3600)   # the wait after a refused placement: a minute, five, fifteen, then every hour
 TRAIL_MIN_MOVE = 0.005          # a trailing stop moves only when it would rise by half a percent of its level: each move is a cancel and a new order
 BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed")
 _bracket_lock = threading.Lock()
@@ -4430,13 +4428,12 @@ def _may_retry(b):
 
 
 def _fail(b, msg):
+    """A refused placement: the reason is kept on the bracket and the leg is tried again,
+    a minute later, then five, fifteen, and every hour after that, for as long as the
+    bracket lives. A stop that only waits for the market to take it is never given up."""
     attempts = int(b.get("attempts") or 0) + 1
-    if attempts >= BRACKET_MAX_ATTEMPTS:
-        store.update_bracket(b["id"], {"status": "failed", "error": msg, "attempts": attempts})
-        sys.stderr.write("bagholder bracket: %s for %s FAILED after %d attempts: %s\n" % (b["id"], b["symbol"], attempts, msg))
-    else:
-        store.update_bracket(b["id"], {"error": msg, "attempts": attempts})
-        sys.stderr.write("bagholder bracket: %s for %s: %s (attempt %d)\n" % (b["id"], b["symbol"], msg, attempts))
+    store.update_bracket(b["id"], {"error": msg, "attempts": attempts})
+    sys.stderr.write("bagholder bracket: %s for %s: %s (attempt %d; next in %d s)\n" % (b["id"], b["symbol"], msg, attempts, BRACKET_RETRY_SEC[min(attempts, len(BRACKET_RETRY_SEC)) - 1]))
 
 
 def _arm_step(b, entry):
@@ -4535,25 +4532,18 @@ def _reconcile_step(b, entry):
         store.update_bracket(b["id"], {"status": "armed", "tpOrderId": "", "slOrderId": "", "error": "target " + tp_row["status"] + "; stop placed again"})
         sys.stderr.write("bagholder bracket: %s for %s: target order %s; arming again\n" % (b["id"], b["symbol"], tp_row["status"]))
         return "rearm"
+    # A position sold elsewhere is NOT inferred from Wealthsimple's balances: that feed
+    # omitted a held position on one read and listed it on the next (2026-09-10), and a
+    # live stop was cancelled on its word. Wealthsimple itself refuses a sell of shares
+    # that are not there, and that refusal shows on the leg. The balances are only noted.
     if b["status"] in ("armed", "firing", "target_placed") and b.get("armedAt"):
-        # Wealthsimple's balances lag a fill by minutes: a position counts as gone only
-        # once a read has shown it held, and never within ten minutes of arming
         read_at = store.get_meta("balances_read_at", "")
         if read_at and read_at > b["armedAt"]:
             held = store.position_quantity(b["accountId"], b["securityId"])
             if held is not None and held > 0 and not b.get("seenHeld"):
                 store.update_bracket(b["id"], {"seenHeld": True})
-                b = dict(b, seenHeld=True)
-            try:
-                armed_for = (datetime.now(timezone.utc) - datetime.strptime(b["armedAt"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds()
-            except ValueError:
-                armed_for = 0
-            gone = (held is None and store.balances_count()) or (held is not None and held <= 0)
-            if gone and b.get("seenHeld") and armed_for >= POSITION_GONE_MIN_SEC:
-                _cancel_exit(b.get("slOrderId")); _cancel_exit(b.get("tpOrderId"))
-                store.update_bracket(b["id"], {"status": "cancelled", "outcome": "position closed elsewhere"})
-                sys.stderr.write("bagholder bracket: %s for %s off: the position is gone\n" % (b["id"], b["symbol"]))
-                return "done"
+            elif (held is None or held <= 0) and b.get("seenHeld"):
+                _say_once((b["id"], "balances", read_at), "bagholder bracket: %s for %s: the balances read at %s does not list the position; the bracket stays\n" % (b["id"], b["symbol"], read_at))
     return ""
 
 
