@@ -2703,6 +2703,57 @@ class BracketEngineTest(_EngineBase):
         self.assertEqual(store.get_bracket(b["id"])["status"], "done", "the target never fires")
         self.assertEqual([op for op, _ in self.sent], [])
 
+    def test_while_the_limit_sell_rests_the_stop_level_is_watched_and_swaps_it_for_a_market_sell(self):
+        """Wealthsimple holds one order on the shares: after the stop is cancelled for the
+        limit sell at the target, no stop exists there, so Bagholder watches the level."""
+        oid, b = self._entry()
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        self._tick(self._q(182.0, bid=182.0))           # target reached: the stop's cancel goes
+        store.update_order(stop, {"status": "cancelled"})
+        self._tick(self._q(182.0, bid=182.0))           # confirmed: the limit sell is placed
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "target_placed")
+        limit = b["tpOrderId"]
+        self.sent.clear()
+        self._tick(self._q(170.0, bid=170.0))           # a pullback above the stop: nothing happens
+        self.assertEqual(self.sent, [])
+        self._tick(self._q(157.0, bid=157.0))           # the stop level: the limit sell's cancel goes
+        self.assertEqual([v["cancelOrderRequest"]["externalId"] for op, v in self.sent if op == "SoOrdersOrderCancel"], [limit])
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["tpOrderId"]), ("stopping", ""))
+        self.sent.clear()
+        self._tick(self._q(156.0, bid=156.0))           # not yet confirmed: nothing new
+        self.assertEqual([op for op, _ in self.sent if op == "SoOrdersOrderCreate"], [])
+        store.update_order(limit, {"status": "cancelled"})
+        self._tick(self._q(156.0, bid=156.0))
+        create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+        self.assertEqual((create[0]["executionType"], create[0]["orderType"], create[0]["quantity"]), ("MARKET", "SELL_QUANTITY", 25.0), "a market sell, the stop having been hit")
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "firing")
+        store.update_order(b["slOrderId"], {"status": "filled", "filledQty": 25})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["status"], b["outcome"]), ("done", "stopped"))
+        self.assertEqual([o["status"] for o in store.list_orders() if o.get("role") in ("stop", "target")].count("pending"), 0, "nothing of the bracket's rests")
+
+    def test_a_trailing_level_keeps_following_the_high_while_the_limit_sell_rests(self):
+        oid, b = self._entry(stopLoss={"kind": "trail", "trail": 5, "trailUnit": "pct"}, takeProfit={"price": 175.0})
+        store.update_order(oid, {"status": "filled", "filledQty": 25, "avgFill": 165.38})
+        self._tick()
+        b = store.get_bracket(b["id"])
+        stop = b["slOrderId"]
+        self._tick(self._q(175.5, bid=175.5))
+        store.update_order(stop, {"status": "cancelled"})
+        self._tick(self._q(175.5, bid=175.5))
+        b = store.get_bracket(b["id"])
+        self.assertEqual(b["status"], "target_placed")
+        self._tick(self._q(180.0, bid=180.0))
+        b = store.get_bracket(b["id"])
+        self.assertEqual((b["highWater"], b["slPrice"]), (180.0, 171.0), "the level follows the high with no order to move")
+
     def test_a_price_changed_by_hand_at_wealthsimple_is_adopted(self):
         oid, b = self._entry()
         store.update_order(oid, {"status": "filled", "filledQty": 25})

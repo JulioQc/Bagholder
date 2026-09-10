@@ -4561,7 +4561,7 @@ def orders_payload(kick=False):
 BRACKET_POLL_SEC = 5
 BRACKET_RETRY_SEC = (60, 300, 900, 3600)   # the wait after a refused placement: a minute, five, fifteen, then every hour
 TRAIL_MIN_MOVE = 0.005          # a trailing stop moves only when it would rise by half a percent of its level: each move is a cancel and a new order
-BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed", "closing")
+BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed", "stopping", "closing")
 BRACKET_RESTING = ("sent", "pending")            # an exit order Wealthsimple holds
 BRACKET_INFLIGHT = ("sent", "pending", "cancelling")   # ... or is still deciding about
 # Wealthsimple ends a good-till-cancelled order ninety days after it is placed and reports
@@ -4840,7 +4840,7 @@ def _closed_elsewhere(b):
     """Only a bracket with nothing resting at Wealthsimple can see its shares sold
     elsewhere (a resting order of ours holds them). Then the sale shows in the
     activity feed, or the balances omit the position on two successive reads."""
-    if b["status"] not in ("armed", "firing", "target_placed") or not b.get("armedAt") or not _nothing_resting(b):
+    if b["status"] not in ("armed", "firing", "target_placed", "stopping") or not b.get("armedAt") or not _nothing_resting(b):
         return ""
     sold = store.sold_since(b["accountId"], b["securityId"], b["armedAt"], b.get("symbol"))
     if sold and sold >= (b.get("quantity") or 0):
@@ -4993,8 +4993,9 @@ def _watch_step(b, quote):
         return
     now = datetime.now(timezone.utc)
     now_s = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    # trailing: the level follows the high
-    if b["slKind"] == "trail" and b["status"] == "armed":
+    # trailing: the level follows the high (while the limit sell rests too: the level is
+    # what Bagholder watches for then)
+    if b["slKind"] == "trail" and b["status"] in ("armed", "target_placed"):
         high = max(b.get("highWater") or 0.0, last)
         if high != b.get("highWater"):
             store.update_bracket(b["id"], {"highWater": high})
@@ -5040,6 +5041,30 @@ def _watch_step(b, quote):
         stop_row = _exit_row(b, "stop")
         if stop_row and stop_row["status"] == "cancelled":
             _fire_target(b)
+    # while the limit sell rests at the target there is no stop at Wealthsimple: the stop
+    # level is watched here, and reaching it cancels the limit sell for a market sell
+    if b["status"] == "target_placed" and b["slKind"] and b.get("slPrice") and b.get("tpOrderId"):
+        trigger = bid if bid is not None else last
+        if trigger <= b["slPrice"]:
+            err = _cancel_exit(b["tpOrderId"])
+            if err:
+                _fail(b, "target not cancelled for the stop: " + err)
+                return
+            store.update_bracket(b["id"], {"status": "stopping", "tpOrderId": "", "error": "", "attempts": 0})
+            sys.stderr.write("bagholder bracket: %s for %s: stop level %s reached at %s while the limit sell rested; its cancel sent, market sell follows\n" % (b["id"], b["symbol"], b["slPrice"], trigger))
+            return
+    # the market sell once the limit sell's cancel is confirmed
+    if b["status"] == "stopping":
+        tp_row = _exit_row(b, "target")
+        if tp_row and tp_row["status"] in ("cancelled", "expired"):
+            if not _may_retry(b):
+                return
+            oid, err = _place_exit(b, "MARKET", b.get("slPrice"), "stop")
+            if err:
+                _fail(b, "stop not placed: " + err)
+            elif oid:
+                store.update_bracket(b["id"], {"slOrderId": oid, "status": "firing", "error": "", "attempts": 0})
+                sys.stderr.write("bagholder bracket: %s for %s: market sell placed at the stop\n" % (b["id"], b["symbol"]))
 
 
 def _fire_target(b):
@@ -5081,13 +5106,17 @@ def bracket_tick(quotes=None):
                     prev = _exit_row(b, "target")
                     if prev and prev["status"] in ("sent", "pending", "cancelling"):
                         refresh_orders(only_id=prev["id"])
+                elif b["status"] == "stopping":
+                    prev = _exit_row(b, "target")
+                    if prev and prev["status"] in ("sent", "pending", "cancelling"):
+                        refresh_orders(only_id=prev["id"])
                 elif b["status"] == "closing":
                     for o in _own_exit_rows(b):
                         if o["status"] == "cancelling":
                             refresh_orders(only_id=o["id"])
         orders = {o["id"]: o for o in store.list_orders()}
         if quotes is None:
-            ids = sorted({b["securityId"] for b in live if b["status"] in ("armed", "firing", "target_placed")})
+            ids = sorted({b["securityId"] for b in live if b["status"] in ("armed", "firing", "target_placed", "stopping")})
             quotes = {}
             if ids:
                 sess = _ticket_session()
@@ -5107,7 +5136,7 @@ def bracket_tick(quotes=None):
                 b = store.get_bracket(b["id"])
                 _arm_step(b, entry)
                 b = store.get_bracket(b["id"])
-                if b["status"] in ("armed", "firing"):
+                if b["status"] in ("armed", "firing", "target_placed", "stopping"):
                     _watch_step(b, quotes.get(b["securityId"]))
             except Exception as e:
                 sys.stderr.write("bagholder bracket: %s tick failed: %s\n" % (b["id"], str(e) or e.__class__.__name__))
