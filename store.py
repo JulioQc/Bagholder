@@ -278,6 +278,7 @@ def _init_schema(conn):
     _ensure_activity_security_id(conn)
     _migrate_spy_meta(conn)
     _ensure_quote_columns(conn)
+    _ensure_order_columns(conn)
     _migrate_history_sources(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES (?, ?) "
@@ -1330,6 +1331,13 @@ def _ensure_quote_columns(conn):
             conn.execute("ALTER TABLE quotes ADD COLUMN %s REAL" % col)
 
 
+def _ensure_order_columns(conn):
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(orders)").fetchall()}
+    for col, typ in (("source", "TEXT"), ("ws_status", "TEXT"), ("filled_qty", "REAL"), ("avg_fill", "REAL"), ("submitted_at", "TEXT"), ("expires_at", "TEXT")):
+        if col not in cols:
+            conn.execute("ALTER TABLE orders ADD COLUMN %s %s" % (col, typ))
+
+
 def _migrate_spy_meta(conn):
     """One-shot: copy the legacy meta.spy_by_date map into benchmark_prices."""
     row = conn.execute(
@@ -2228,6 +2236,12 @@ def _order_from_row(r):
         "error": r["error"] or "",
         "request": js(r["request"]),
         "updatedAt": r["updated_at"] or "",
+        "source": r["source"] or "bagholder",
+        "wsStatus": r["ws_status"] or "",
+        "filledQty": r["filled_qty"],
+        "avgFill": r["avg_fill"],
+        "submittedAt": r["submitted_at"] or "",
+        "expiresAt": r["expires_at"] or "",
     }
 
 
@@ -2240,8 +2254,9 @@ def insert_order(row):
             now = _now_iso()
             conn.execute(
                 "INSERT INTO orders (id, created_at, account_id, account, security_id, symbol, currency, side, type, quantity, "
-                "limit_price, stop_price, tif, stop_loss, take_profit, status, ws_order_id, error, request, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "limit_price, stop_price, tif, stop_loss, take_profit, status, ws_order_id, error, request, updated_at, "
+                "source, ws_status, filled_qty, avg_fill, submitted_at, expires_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     _s(row.get("id")), _s(row.get("createdAt")) or now, _s(row.get("accountId")), _s(row.get("account")),
                     _s(row.get("securityId")), _s(row.get("symbol")), _s(row.get("currency")), _s(row.get("side")), _s(row.get("type")),
@@ -2249,6 +2264,8 @@ def insert_order(row):
                     json.dumps(row["stopLoss"]) if row.get("stopLoss") else None, json.dumps(row["takeProfit"]) if row.get("takeProfit") else None,
                     _s(row.get("status")), _s(row.get("wsOrderId")), _s(row.get("error")),
                     json.dumps(row["request"], sort_keys=True) if row.get("request") else None, now,
+                    _s(row.get("source")) or "bagholder", _s(row.get("wsStatus")), _num(row.get("filledQty"), None), _num(row.get("avgFill"), None),
+                    _s(row.get("submittedAt")), _s(row.get("expiresAt")),
                 ),
             )
             conn.commit()
@@ -2258,12 +2275,17 @@ def insert_order(row):
 
 def update_order(order_id, patch):
     """Status, Wealthsimple's order id, or an error on an existing ticket."""
-    cols = {"status": "status", "wsOrderId": "ws_order_id", "error": "error"}
+    text = {"status": "status", "wsOrderId": "ws_order_id", "error": "error", "wsStatus": "ws_status", "submittedAt": "submitted_at", "expiresAt": "expires_at", "tif": "tif", "currency": "currency"}
+    nums = {"filledQty": "filled_qty", "avgFill": "avg_fill", "quantity": "quantity", "limitPrice": "limit_price", "stopPrice": "stop_price"}
     sets, vals = [], []
-    for k, col in cols.items():
+    for k, col in text.items():
         if k in (patch or {}):
             sets.append(col + " = ?")
             vals.append(_s(patch[k]))
+    for k, col in nums.items():
+        if k in (patch or {}):
+            sets.append(col + " = ?")
+            vals.append(_num(patch[k], None))
     if not sets:
         return
     sets.append("updated_at = ?")

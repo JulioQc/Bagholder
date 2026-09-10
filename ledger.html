@@ -221,7 +221,10 @@ const state = {
     execs: { key: "when", dir: "desc" },
     yoc: { key: "ttm", dir: "desc" },
     cash: { key: "date", dir: "desc" },
+    orders: { key: "placed", dir: "desc" },
   },
+  orders: null,
+  ordersError: "",
   menuOpen: false,
   picker: null,
   valueQuery: "",
@@ -243,7 +246,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.1"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.2"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -563,6 +566,12 @@ function menuHtml() {
     "</div>";
 }
 function confirmDialogHtml() {
+  if (/^cancel:/.test(state.confirmOpen)) {
+    const id = state.confirmOpen.slice(7), o = state.orders && state.orders.orders.find((x) => x.id === id), busy = state.busy === "cancel";
+    return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel order</h5>' +
+      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + esc(o ? orderLine(o) : "") + "</div>" +
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Keep order</button><button class="btn" data-act="cancelOrderNow" data-arg=\'' + attr({ id }) + '\' style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (busy ? "Cancelling…" : "Cancel order") + "</button></div></div></div>";
+  }
   const clear = state.confirmOpen === "clear";
   const busy = state.busy === "clearing";
   return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>' + (clear ? "Clear data" : "Disconnect") + "</h5>" +
@@ -758,7 +767,7 @@ function tabsHtml() {
   const t = (id, label) => '<button class="tabbtn' + (state.page === id && !((id === "trades" || id === "portfolio") && state.sel) ? " on" : "") + '" data-act="page" data-arg=\'' + attr({ page: id }) + "'>" + label + "</button>";
   const sel = (state.page === "trades" || state.page === "portfolio") && state.sel ? selById(state.sel) : null;
   return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
-    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("cashflow", "Cashflow") +
+    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("cashflow", "Cashflow") + t("orders", "Orders") +
     (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(sel.symbol) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(sel.symbol) + "</span></div>" : "") +
     '<div style="margin-left:auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 0"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;overflow-x:auto;padding-bottom:1px">' +
     chips().map((c) => '<span class="chip"><span class="cf">' + esc(c.field) + '</span><button class="cv" data-act="chipEdit" data-arg=\'' + attr({ key: c.key }) + "'>" + esc(c.value) + '</button><button class="cx" aria-label="Remove filter" data-act="chipRemove" data-arg=\'' + attr({ key: c.key }) + "'>×</button></span>").join("") +
@@ -1121,6 +1130,105 @@ function tkSubmit() {
     state.notice = tkNotice(v, r.status === "sent"); state.noticeKind = "ok";
     setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);   // longer than the other notices: it names the whole order
     closeTicket();
+  });
+}
+
+
+// ---------------------------------------------------------------------------
+// orders: every order the app placed or Wealthsimple reports as pending, with Cancel
+// ---------------------------------------------------------------------------
+const ORDERS_POLL_MS = 10000;
+let _ordersTimer = 0, _ordersSeq = 0;
+function loadOrders() {
+  const seq = ++_ordersSeq;
+  return api("GET", "/api/orders").then((r) => {
+    if (seq !== _ordersSeq) return;
+    if (r && r.ok) { state.orders = r; state.ordersError = ""; } else state.ordersError = (r && r.error) || "Could not load the orders.";
+    if (state.page === "orders") { const pg = document.getElementById("page"); if (pg) pg.innerHTML = pageHtml(); }
+  });
+}
+// while the Orders tab is up the list is asked for again every ORDERS_POLL_MS
+function ordersPoll() {
+  clearTimeout(_ordersTimer);
+  if (state.page !== "orders") { _ordersTimer = 0; return; }
+  _ordersTimer = -1;   // a load is in flight: a redraw meanwhile does not start another
+  loadOrders().then(() => { if (state.page === "orders") _ordersTimer = setTimeout(ordersPoll, ORDERS_POLL_MS); else _ordersTimer = 0; });
+}
+const ORDER_LIVE = { sent: 1, pending: 1, cancelling: 1 };
+function orderPrice(o) {
+  if (o.type === "MARKET") return "—";
+  if (o.type === "STOP") return px(o.stopPrice);
+  if (o.type === "STOP_LIMIT") return "Stop " + px(o.stopPrice) + " · " + px(o.limitPrice);
+  return px(o.limitPrice);
+}
+function orderTypeWord(t) { return { MARKET: "Market", LIMIT: "Limit", STOP: "Stop", STOP_LIMIT: "Stop limit" }[t] || (t ? t.charAt(0) + t.slice(1).toLowerCase().replace(/_/g, " ") : "—"); }
+function orderBrackets(o) {
+  const parts = [];
+  if (o.stopLoss) parts.push(o.stopLoss.kind === "trail" ? "Trail " + (o.stopLoss.trailUnit === "amt" ? px(o.stopLoss.trail) : tkPlain(o.stopLoss.trail) + "%") : "Stop " + px(o.stopLoss.price));
+  if (o.takeProfit) parts.push("Target " + px(o.takeProfit.price));
+  return parts.length ? parts.join(" · ") : "—";
+}
+function orderStatus(o) {
+  const fill = o.filledQty ? qty(o.filledQty) + (o.avgFill ? " @ " + px(o.avgFill) : "") : "";
+  switch (o.status) {
+    case "pending": return o.wsStatus === "PARTIALLY_FILLED" && fill ? "Pending · filled " + fill : "Pending";
+    case "sent": return "Sent";
+    case "cancelling": return "Cancelling";
+    case "filled": return "Filled" + (fill ? " " + fill : "");
+    case "cancelled": return "Cancelled" + (fill ? " · filled " + fill : "");
+    case "expired": return "Expired" + (fill ? " · filled " + fill : "");
+    case "rejected": return "Rejected" + (o.error ? " · " + o.error : "");
+    case "failed": return "Failed" + (o.error ? " · " + o.error : "");
+    case "dry": return "Not sent";
+    default: return o.status || "—";
+  }
+}
+function orderWhen(iso) {
+  const t = Date.parse(iso); if (!isFinite(t)) return "—";
+  const d = new Date(t), p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.quantity) + " " + o.symbol + " at " + (o.type === "MARKET" ? "market" : orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase()); }
+function ordersHtml() {
+  const data = state.orders;
+  const cols = [{ key: "placed", label: "Placed", width: "10.5%" }, { key: "symbol", label: "Symbol", width: "8%" }, { key: "side", label: "Side", width: "5%" }, { key: "type", label: "Type", width: "7.5%" },
+    { key: "qty", label: "Qty", align: "right", width: "6%" }, { key: "price", label: "Price", align: "right", width: "10%" }, { key: "tif", label: "Time in force", width: "8.5%" }, { key: "account", label: "Account", width: "10%" },
+    { key: "brackets", label: "Brackets", width: "15.5%" }, { key: "status", label: "Status" }, { key: "cancel", label: "", width: "64px" }];
+  let body;
+  if (!data && state.ordersError) body = '<tr><td colspan="11" class="status-err" style="padding:14px 6px">' + esc(state.ordersError) + "</td></tr>";
+  else if (!data) body = '<tr><td colspan="11" class="dim" style="padding:14px 6px"><span class="spin"></span>Loading…</td></tr>';
+  else {
+    const s = state.sort.orders, dir = s.dir === "asc" ? 1 : -1;
+    const keyOf = (o) => ({ placed: o.createdAt, symbol: o.symbol, side: o.side, type: o.type, qty: o.quantity, price: o.type === "STOP" ? o.stopPrice : o.limitPrice, tif: o.tif, account: o.account, brackets: orderBrackets(o), status: orderStatus(o) })[s.key];
+    const rows = data.orders.slice().sort((a, b) => {
+      const la = ORDER_LIVE[a.status] ? 0 : 1, lb = ORDER_LIVE[b.status] ? 0 : 1;
+      if (la !== lb) return la - lb;
+      const ka = keyOf(a), kb = keyOf(b);
+      if (ka == null && kb == null) return 0; if (ka == null) return 1; if (kb == null) return -1;
+      return (ka < kb ? -1 : ka > kb ? 1 : 0) * dir;
+    });
+    body = rows.length ? rows.map((o) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + orderWhen(o.createdAt) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(o.symbol) +
+      '</td><td style="font-variant-numeric:normal;color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + '</td><td style="font-variant-numeric:normal;color:var(--ink75)">' + esc(orderTypeWord(o.type)) +
+      '</td><td style="text-align:right">' + qty(o.quantity) + '</td><td style="text-align:right;color:var(--ink75);white-space:nowrap">' + orderPrice(o) + '</td><td style="font-variant-numeric:normal;color:var(--ink75)">' + (o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "—") +
+      '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(o.account || "—") + '</td><td style="color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(orderBrackets(o)) + '">' + orderBrackets(o) +
+      '</td><td style="font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' + (o.status === "rejected" || o.status === "failed" ? ";color:var(--neg)" : ORDER_LIVE[o.status] ? ";color:var(--accent-300)" : "") + '" title="' + esc(orderStatus(o)) + '">' + esc(orderStatus(o)) +
+      '</td><td style="text-align:right">' + (ORDER_LIVE[o.status] && o.status !== "cancelling" ? '<button class="pill" style="padding:2px 9px;width:auto;font-size:11px" data-act="cancelOrder" data-arg=\'' + attr({ id: o.id }) + "'>Cancel</button>" : "") + "</td></tr>").join("")
+      : '<tr><td colspan="11" class="dim" style="padding:14px 6px">No orders yet.</td></tr>';
+  }
+  return '<div class="card elev-sm" style="padding:16px 18px"><div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px"><h5>Orders</h5>' +
+    (data && !data.live ? '<span class="muted" style="font-size:11px">orders are off</span>' : "") + (data && data.refreshedAt ? '<span class="muted" style="font-size:11px;margin-left:auto">checked ' + esc(relTime(data.refreshedAt)) + "</span>" : "") + "</div>" +
+    '<div class="scroll-xy"><table class="table" style="min-width:1100px;width:100%;table-layout:fixed;font-size:12px"><thead><tr>' + th("orders", cols) + "</tr></thead><tbody>" + body + "</tbody></table></div></div>";
+}
+function cancelOrderNow(id) {
+  const o = state.orders && state.orders.orders.find((x) => x.id === id);
+  state.busy = "cancel"; render();
+  api("POST", "/api/order/cancel", { id }).then((r) => {
+    state.busy = ""; state.confirmOpen = "";
+    state.notice = r && r.ok ? "Cancel sent · " + (o ? orderLine(o) : "") : (r && r.error) || "Could not cancel the order.";
+    state.noticeKind = r && r.ok ? "ok" : "err";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, r && r.ok ? 10000 : 6000);
+    render();
+    loadOrders();
   });
 }
 
@@ -1774,6 +1882,7 @@ function emptyHtml() {
 }
 function pageHtml() {
   const m = state.model;
+  if (state.page === "orders") return ordersHtml();
   if (state.loadError && !m) return '<div class="empty"><div class="status-err">' + esc(state.loadError) + '</div><button class="btn btn-secondary" data-act="reload">Retry</button></div>';
   if (!m) return '<div class="empty muted"><span class="spin"></span>Loading…</div>';
   if (!m.activityCount) return emptyHtml();
@@ -1794,6 +1903,7 @@ function render() {
   const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
   root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "") + (state.ticket ? ticketHtml() : "");
   if (state.loginView) loginFrameLoop();   // a redraw makes a new image element: reattach the stream
+  if (state.page === "orders" && !_ordersTimer) ordersPoll(); else if (state.page !== "orders" && _ordersTimer) { clearTimeout(_ordersTimer); _ordersTimer = 0; }
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
   if (focusId === "valueQuery" || focusId === "searchInput") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
@@ -1812,7 +1922,7 @@ function renderHeaderOnly() {
   tmp.innerHTML = headerHtml();
   hdr.replaceWith(tmp.firstElementChild);
 }
-const PAGES = ["dashboard", "trades", "portfolio", "cashflow"];
+const PAGES = ["dashboard", "trades", "portfolio", "cashflow", "orders"];
 function hashState() {
   const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
   const parts = raw.split("/");
@@ -2013,6 +2123,8 @@ function act(name, arg, ev) {
     case "openTrade": openTradeModal(); break;
     case "closeModal": state.modal = null; render(); break;
     case "tkOpen": openTicket(arg.symbol, arg.side); break;
+    case "cancelOrder": state.confirmOpen = "cancel:" + arg.id; render(); break;
+    case "cancelOrderNow": cancelOrderNow(arg.id); break;
     case "tkClose": closeTicket(); break;
     case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.trail = null; t.tp.price = null; t.limit = null; t.stop = null; renderTicket(); } break;
     case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
