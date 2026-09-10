@@ -885,16 +885,26 @@ function tkRowButtons(symbol) {
   const b = (side, label, path) => '<button class="tk-rowbtn ' + side.toLowerCase() + '" aria-label="' + label + " " + esc(symbol) + '" data-act="tkOpen" data-arg=\'' + attr({ symbol, side }) + '\'><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + path + '"/></svg></button>';
   return '<span class="tk-rowbtns">' + b("BUY", "Buy", ICONS.plus) + b("SELL", "Sell", ICONS.minus) + "</span>";
 }
+// The accounts a ticket can route to: the server's list once the quote has answered, the
+// book's own list before that, joined so an account chosen from either is never lost.
 function tkAccounts() {
   const t = state.ticket;
-  if (t && t.data && t.data.accounts) return t.data.accounts;
-  return ((state.model && state.model.accounts) || []).filter((a) => a.status !== "closed" && /^SELF_DIRECTED/.test(a.type) && !/CRYPTO|PREDICTIONS|MANAGED/.test(a.type)).map((a) => ({ id: a.id, name: a.name, type: a.type, margin: /MARGIN/.test(a.type) }));
+  const out = (t && t.data && t.data.accounts ? t.data.accounts : []).slice();
+  ((state.model && state.model.accounts) || []).filter((a) => a.status !== "closed" && /^SELF_DIRECTED/.test(a.type) && !/CRYPTO|PREDICTIONS|MANAGED/.test(a.type))
+    .forEach((a) => { if (!out.some((x) => x.id === a.id)) out.push({ id: a.id, name: a.name, type: a.type, margin: /MARGIN/.test(a.type) }); });
+  return out;
+}
+// the account picked last time, when it is still one the ticket offers
+function tkRememberedAccount(accounts) {
+  try { const id = localStorage.getItem("bh2.ticketAccount"); if (id && accounts.some((a) => a.id === id)) return id; } catch (e) {}
+  return "";
 }
 function openTicket(symbol, side) {
   const info = tkLookup(symbol);
   const accounts = tkAccounts();
   const held = info.position;
-  let accountId = held ? held.accountId : "";
+  let accountId = held && side === "SELL" ? held.accountId : "";   // a sell goes where the shares are
+  if (!accountId) accountId = tkRememberedAccount(accounts) || (held ? held.accountId : "");
   if (!accountId) accountId = (accounts.find((a) => a.margin) || accounts[0] || {}).id || "";
   state.picker = null; state.menuOpen = false;
   state.ticket = {
@@ -1103,7 +1113,7 @@ function tkBlur(el) {
 function tkChange(el) {
   const t = state.ticket; if (!t) return;
   switch (el.id) {
-    case "tk-account": t.accountId = el.value; renderTicket(); tkFetch(); return;
+    case "tk-account": t.accountId = el.value; try { localStorage.setItem("bh2.ticketAccount", el.value); } catch (e) {} renderTicket(); tkFetch(); return;
     case "tk-type": t.type = el.value; break;
     case "tk-tif": t.tif = el.value; break;
     case "tk-slkind": t.sl.kind = el.value; break;
