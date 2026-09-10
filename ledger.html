@@ -1247,15 +1247,15 @@ function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.qu
 // `Limit 165.40 · Day · Trading (Margin)`; a filled order names its fill instead of its type
 // `Limit 165.40 · Day`; a filled order names its fill instead. The account is the panel's heading, not the card's.
 function orderDetailLine(o) {
-  if (o.status === "filled" && o.avgFill) return "Filled at " + px(o.avgFill);
+  if (o.status === "filled") return "Filled " + qty(o.filledQty || o.quantity) + (o.avgFill ? " at " + px(o.avgFill) : "");
   const tif = o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "";
   return orderTypeWord(o.type) + (o.type === "MARKET" ? "" : " " + orderPrice(o)) + (tif ? " · " + tif : "");
 }
 function orderFillLine(o) {
   const filled = o.filledQty || 0;
+  // a third line only for what the second cannot say: a partial fill on a pending order, or why it was refused
   if (o.status === "rejected" || o.status === "failed") return o.error || "";
-  if (o.status === "filled") return qty(filled || o.quantity) + " filled" + (o.avgFill ? " · avg " + px(o.avgFill) : "");
-  if (filled && filled < o.quantity) return qty(filled) + " of " + qty(o.quantity) + " filled" + (o.avgFill ? " · avg " + px(o.avgFill) : "");
+  if (o.status !== "filled" && filled && filled < o.quantity) return qty(filled) + " of " + qty(o.quantity) + " filled" + (o.avgFill ? " at " + px(o.avgFill) : "");
   return "";
 }
 function orderPill(o) {
