@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 import csvimport
@@ -389,10 +389,14 @@ fragment SecuritySearchResult on Security {
   id
   buyable
   status
+  currency
+  securityType
+  wsTradeEligible
   stock {
     symbol
     name
     primaryExchange
+    primaryMic
     __typename
   }
   securityGroups {
@@ -705,7 +709,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-10.5"
+PROTOCOL = "2026-09-10.6"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -3850,6 +3854,104 @@ def resolve_security(symbol="", security_id=""):
     return same[0] if same else None
 
 
+# --------------------------------------------------------------------------
+# symbol search: the ⌘K box asks the exchanges' own directories, never
+# Wealthsimple, for a text the book has no symbol for; one round per distinct
+# text while the app runs (Nasdaq's autocomplete for US listings, TSX's company
+# directory for the TSX and the TSX-V), the three asked together
+# --------------------------------------------------------------------------
+
+NASDAQ_SEARCH_URL = "https://api.nasdaq.com/api/autocomplete/slookup/10?search=%s"
+TSX_SEARCH_URL = "https://www.tsx.com/json/company-directory/search/%s/%s"
+SEARCH_HEADERS = {"User-Agent": market.UA, "Accept": "application/json, text/plain, */*", "Accept-Language": "en-CA,en;q=0.9"}
+# Nasdaq's exchange code -> the exchange as the book names it
+NASDAQ_EXCHANGES = {"NYSE": "NYSE", "AMEX": "NYSE", "PSE": "NYSE", "NASDAQ-GS": "NASDAQ", "NASDAQ-GM": "NASDAQ", "NASDAQ-CM": "NASDAQ", "NASDAQ": "NASDAQ", "BAT": "BATS"}
+NASDAQ_ASSETS = ("STOCKS", "ETF")
+NASDAQ_DERIVATIVE_SUFFIXES = ("WS", "W", "U", "RT", "R")   # warrants, units and rights listed beside a share
+NASDAQ_NAME_TAILS = (" Common Stock", " Common Shares", " Ordinary Shares", " Class A Common Stock", " Class A Ordinary Shares")
+SEARCH_MAX = 12
+_search_cache = {}
+
+
+def parse_nasdaq_search(data):
+    """Nasdaq's autocomplete answer into US listings: shares and ETFs on the
+    exchanges Wealthsimple trades, [{symbol, name, exchange, currency}]."""
+    out = []
+    for q in ((data or {}).get("data") or []) if isinstance(data, dict) else []:
+        if not isinstance(q, dict) or _s(q.get("asset")).upper() not in NASDAQ_ASSETS:
+            continue
+        ex = NASDAQ_EXCHANGES.get(_s(q.get("exchange")).upper())
+        sym = _s(q.get("symbol")).upper()
+        if not ex or not sym or sym.rsplit(".", 1)[-1] in NASDAQ_DERIVATIVE_SUFFIXES:
+            continue
+        name = _s(q.get("name"))
+        for tail in NASDAQ_NAME_TAILS:
+            if name.endswith(tail):
+                name = name[: -len(tail)].rstrip(" ,")
+                break
+        out.append({"symbol": sym, "name": name, "exchange": ex, "currency": "USD"})
+    return out
+
+
+def parse_tsx_search(data, exchange):
+    """TSX's directory answer into that exchange's listings, one per issuer."""
+    out = []
+    for r in ((data or {}).get("results") or []) if isinstance(data, dict) else []:
+        sym = _s(r.get("symbol")).upper() if isinstance(r, dict) else ""
+        if sym:
+            out.append({"symbol": sym, "name": _s(r.get("name")), "exchange": exchange, "currency": "CAD"})
+    return out
+
+
+def rank_search(text, rows):
+    """Exact symbols first, then symbols starting with the text, then the rest,
+    each group in the order the sources gave; duplicates dropped; at most SEARCH_MAX."""
+    key = _s(text).strip().upper()
+    seen, out = set(), []
+    for r in rows:
+        k = (r["symbol"], r["exchange"])
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(r)
+    out.sort(key=lambda r: 0 if r["symbol"] == key else 1 if r["symbol"].startswith(key) else 2)
+    return out[:SEARCH_MAX]
+
+
+def symbol_search(text):
+    """The listings the directories find for the text, remembered for the process.
+    A source that fails leaves the others' answer; nothing is remembered when
+    none answered."""
+    text = _s(text).strip()
+    if not text:
+        return {"ok": True, "matches": []}
+    key = text.upper()
+    if key in _search_cache:
+        return {"ok": True, "matches": _search_cache[key]}
+    q = quote(text, safe="")
+    jobs = [("nasdaq", NASDAQ_SEARCH_URL % q, lambda d: parse_nasdaq_search(d)),
+            ("tsx", TSX_SEARCH_URL % ("tsx", q), lambda d: parse_tsx_search(d, "TSX")),
+            ("tsxv", TSX_SEARCH_URL % ("tsxv", q), lambda d: parse_tsx_search(d, "TSX-V"))]
+    answers, errors = {}, {}
+
+    def run(name, url, parse):
+        try:
+            answers[name] = parse(json.loads(market._get_text(url, headers=SEARCH_HEADERS)))
+        except Exception as e:
+            errors[name] = str(e) or e.__class__.__name__
+    threads = [threading.Thread(target=run, args=j, daemon=True) for j in jobs]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=market.TIMEOUT_SEC + 2)
+    if not answers:
+        return {"ok": False, "error": "Search failed: " + "; ".join(errors.values()), "matches": []}
+    rows = rank_search(text, [r for name, _, _ in jobs for r in answers.get(name, [])])
+    if not errors:
+        _search_cache[key] = rows
+    return {"ok": True, "matches": rows}
+
+
 def parse_quote(node):
     """One securities(ids) node into the ticket's quote card. Prices in the
     security's currency; the day's change against Wealthsimple's previous baseline."""
@@ -3922,17 +4024,67 @@ def fetch_quotes(sess, security_ids):
     return out
 
 
-def ticket_quote(symbol="", security_id="", account_id=""):
+LOOKUP_TYPES = ("EQUITY", "EXCHANGE_TRADED_FUND")
+CANADIAN_SUFFIXES = (".TO", ".V", ".CN", ".NE")
+
+
+def _bare_symbol(sym):
+    sym = _s(sym).upper()
+    for suf in CANADIAN_SUFFIXES:
+        if sym.endswith(suf):
+            return sym[: -len(suf)]
+    return sym
+
+
+def parse_listing_search(data, symbol, exchange):
+    """The one result of a securitySearch answer that is the listing asked for: same
+    bare symbol (Wealthsimple writes a Canadian listing as QNC.TO whatever its
+    venue), same exchange, a share or an ETF; the stored shape, or None."""
+    want_sym, want_ex = _bare_symbol(symbol), _s(exchange).strip().upper()
+    for r in (((data or {}).get("securitySearch") or {}).get("results") or []) if isinstance(data, dict) else []:
+        if not isinstance(r, dict) or not r.get("id"):
+            continue
+        stock = r.get("stock") if isinstance(r.get("stock"), dict) else {}
+        if _bare_symbol(stock.get("symbol")) != want_sym or _s(stock.get("primaryExchange")).upper() != want_ex:
+            continue
+        if _s(r.get("securityType")).upper() not in LOOKUP_TYPES:
+            continue
+        return {"id": _s(r["id"]), "symbol": _s(stock.get("symbol")).upper(), "name": _s(stock.get("name")), "primaryExchange": _s(stock.get("primaryExchange")),
+                "primaryMic": _s(stock.get("primaryMic")), "currency": _s(r.get("currency")).upper(), "underlyingId": None}
+    return None
+
+
+def lookup_listing(sess, symbol, exchange):
+    """Wealthsimple's listing for a symbol the book has never held: its id, which
+    an order is placed against, asked once by symbol and kept with the book's
+    listings, so the symbol is never asked for again. None when Wealthsimple
+    has no such listing."""
+    try:
+        data = graphql(sess, "FetchSecuritySearchResult", {"query": _s(symbol).strip()})
+    except Exception as e:
+        sys.stderr.write("bagholder ticket: listing search for %s failed: %s\n" % (symbol, e))
+        return None
+    sec = parse_listing_search(data, symbol, exchange)
+    if sec:
+        store.upsert_securities([sec])
+    return sec
+
+
+def ticket_quote(symbol="", security_id="", account_id="", exchange=""):
     """Everything the ticket shows for one security in one account: the quote card,
     the order types Wealthsimple allows for it, its margin rate, the account's buying
     power and cash for it, the margin account's available margin, today's USD rate.
     Errors are answers, not exceptions: the page prints them in the panel."""
     sec = resolve_security(symbol, security_id)
-    if not sec:
+    if not sec and not _s(exchange):
         return {"ok": False, "error": "No listing stored for " + (_s(symbol) or _s(security_id)) + "."}
     sess = _ticket_session()
     if not sess:
         return {"ok": False, "error": "Not connected."}
+    if not sec:
+        sec = lookup_listing(sess, _s(symbol).strip().upper(), _s(exchange))
+    if not sec:
+        return {"ok": False, "error": "No listing stored for " + (_s(symbol) or _s(security_id)) + "."}
     try:
         quotes = fetch_quotes(sess, [sec["id"]])
     except PermissionError:
@@ -5488,7 +5640,14 @@ class Handler(BaseHTTPRequestHandler):
                 return
             qs = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             first = lambda k: (qs.get(k) or [""])[0]
-            self._send(200, ticket_quote(first("symbol"), first("security"), first("account")))
+            self._send(200, ticket_quote(first("symbol"), first("security"), first("account"), first("exchange")))
+            return
+        if path == "/api/symbols/search":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            qs = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            self._send(200, symbol_search((qs.get("q") or [""])[0]))
             return
         if path == "/api/orders":
             if not self._gate():
