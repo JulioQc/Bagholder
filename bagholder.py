@@ -644,6 +644,14 @@ mutation SoOrdersOrderCancel($cancelOrderRequest: CancelOrderRequest!) {
 }
 """.strip()
 
+Q_SO_ORDERS_ORDER_MODIFY = """
+mutation SoOrdersOrderModify($input: SoOrders_ModifyOrderInput!) {
+  soOrdersModifyOrder(input: $input) {
+    errors { code message }
+  }
+}
+""".strip()
+
 Q_SO_ORDERS_ORDER_CREATE = """
 mutation SoOrdersOrderCreate($input: SoOrders_CreateOrderInput!) {
   soOrdersCreateOrder(input: $input) {
@@ -689,7 +697,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-10.3"
+PROTOCOL = "2026-09-10.4"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -748,6 +756,7 @@ QUERIES = {
     "FetchSoOrdersExtendedOrder": Q_FETCH_SO_ORDERS_EXTENDED_ORDER,
     "OrderServiceExtendedOrderFeed": Q_ORDER_SERVICE_EXTENDED_ORDER_FEED,
     "SoOrdersOrderCancel": Q_SO_ORDERS_ORDER_CANCEL,
+    "SoOrdersOrderModify": Q_SO_ORDERS_ORDER_MODIFY,
 }
 
 SKIP_TYPE_MARKERS = (
@@ -4640,6 +4649,141 @@ def cancel_bracket(bracket_id):
     return {"ok": True, "id": b["id"]}
 
 
+def modify_order(order_id, quantity=None, limit_price=None):
+    """Change a resting order's quantity or limit price at Wealthsimple, as its web app
+    does (SoOrdersOrderModify with the external id, newLimitPrice, newQuantity)."""
+    row = store.get_order(order_id)
+    if not row:
+        return {"ok": False, "error": "No such order."}
+    if row["status"] not in ("sent", "pending"):
+        return {"ok": False, "error": "That order is not open."}
+    if row["type"] == "STOP":
+        return {"ok": False, "error": "A stop order cannot be changed; cancel it and place another."}
+    q = _num(quantity, None)
+    lp = _num(limit_price, None)
+    if q is not None and q <= 0:
+        return {"ok": False, "error": "Shares must be more than zero."}
+    if lp is not None and lp <= 0:
+        return {"ok": False, "error": "A limit price must be more than zero."}
+    if row["type"] in ("LIMIT", "STOP_LIMIT") and lp is None and q is None:
+        return {"ok": False, "error": "Nothing to change."}
+    inp = {"externalId": row["id"]}
+    if lp is not None and row["type"] in ("LIMIT", "STOP_LIMIT") and lp != row.get("limitPrice"):
+        inp["newLimitPrice"] = lp
+    if q is not None and q != row.get("quantity"):
+        inp["newQuantity"] = q
+    if len(inp) == 1:
+        return {"ok": True, "id": row["id"], "unchanged": True}
+    if not ORDERS_LIVE:
+        return {"ok": False, "error": "Orders are off (BAGHOLDER_DRY_ORDERS): nothing is sent to Wealthsimple."}
+    sess = _ticket_session()
+    if not sess:
+        return {"ok": False, "error": "Not connected."}
+    try:
+        data = graphql(sess, "SoOrdersOrderModify", {"input": inp})
+    except PermissionError:
+        return {"ok": False, "error": "Wealthsimple refused the session. Connect Wealthsimple again."}
+    except Exception as e:
+        msg = str(e) or e.__class__.__name__
+        sys.stderr.write("bagholder orders: modify %s failed: %s\n" % (row["id"], msg))
+        return {"ok": False, "error": "Change failed: " + msg}
+    errs = ((data or {}).get("soOrdersModifyOrder") or {}).get("errors") or []
+    if errs:
+        first = errs[0] if isinstance(errs[0], dict) else {"message": str(errs[0])}
+        msg = _s(first.get("message") or first.get("code"))
+        sys.stderr.write("bagholder orders: modify %s refused: %s\n" % (row["id"], msg))
+        return {"ok": False, "error": "Wealthsimple refused the change: " + msg}
+    patch = {}
+    if "newLimitPrice" in inp:
+        patch["limitPrice"] = lp
+    if "newQuantity" in inp:
+        patch["quantity"] = q
+    store.update_order(row["id"], patch)
+    b = store.bracket_for_order(row["id"])
+    if b and b["status"] == "waiting" and "newQuantity" in inp:
+        store.update_bracket(b["id"], {"quantity": q})
+    sys.stderr.write("bagholder orders: modify %s accepted: %s\n" % (row["id"], json.dumps({k: v for k, v in inp.items() if k != "externalId"}, sort_keys=True)))
+    threading.Thread(target=refresh_orders, args=(row["id"],), name="bagholder-order-refresh", daemon=True).start()
+    return {"ok": True, "id": row["id"]}
+
+
+def adjust_bracket(bracket_id, leg, price=None, trail=None, remove=False):
+    """Move one leg of a live bracket, or remove it. A resting stop is cancelled and the
+    engine places it again at the new level on its next check; a placed target order is
+    cancelled and the target is watched again at the new level."""
+    b = store.get_bracket(bracket_id)
+    if not b:
+        return {"ok": False, "error": "No such bracket."}
+    if b["status"] not in BRACKET_LIVE:
+        return {"ok": False, "error": "That bracket is not live."}
+    leg = _s(leg).lower()
+    if leg not in ("sl", "tp"):
+        return {"ok": False, "error": "Which leg?"}
+    if remove:
+        if leg == "sl":
+            err = _cancel_exit(b.get("slOrderId"))
+            if err:
+                return {"ok": False, "error": err}
+            patch = {"slKind": "", "slOrderId": "", "slMode": "", "error": ""}
+            if not b.get("tpPrice"):
+                patch.update({"status": "cancelled", "outcome": "both legs removed"})
+            store.update_bracket(b["id"], patch)
+        else:
+            err = _cancel_exit(b.get("tpOrderId"))
+            if err:
+                return {"ok": False, "error": err}
+            patch = {"tpPrice": None, "tpOrderId": "", "error": ""}
+            if b["status"] == "target_placed":
+                patch["status"] = "armed"
+            if not b.get("slKind"):
+                patch.update({"status": "cancelled", "outcome": "both legs removed"})
+            store.update_bracket(b["id"], patch)
+        sys.stderr.write("bagholder bracket: %s for %s: %s removed by the user\n" % (b["id"], b["symbol"], "stop loss" if leg == "sl" else "take profit"))
+        return {"ok": True, "id": b["id"]}
+    if leg == "sl":
+        if not b.get("slKind"):
+            return {"ok": False, "error": "This bracket has no stop loss."}
+        if b["slKind"] == "trail":
+            t = _num(trail, None)
+            if not t or t <= 0:
+                return {"ok": False, "error": "A trail is required."}
+            high = b.get("highWater") or b.get("slPrice") or 0.0
+            nb = dict(b, slTrail=t)
+            new_price = round(high - (_trail_distance(nb, high) or 0.0), 2) if high else b.get("slPrice")
+            patch = {"slTrail": t, "slPrice": new_price}
+        else:
+            p = _num(price, None)
+            if not p or p <= 0:
+                return {"ok": False, "error": "A stop price is required."}
+            patch = {"slPrice": p}
+        if b.get("slOrderId") and b["status"] == "armed":
+            err = _cancel_exit(b["slOrderId"])
+            if err:
+                return {"ok": False, "error": err}
+            patch["slOrderId"] = ""
+            patch["movedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        patch["error"] = ""
+        store.update_bracket(b["id"], patch)
+        sys.stderr.write("bagholder bracket: %s for %s: stop moved to %s by the user\n" % (b["id"], b["symbol"], patch.get("slPrice")))
+        return {"ok": True, "id": b["id"]}
+    p = _num(price, None)
+    if not p or p <= 0:
+        return {"ok": False, "error": "A limit price is required."}
+    patch = {"tpPrice": p, "error": ""}
+    if b["status"] == "target_placed" and b.get("tpOrderId"):
+        err = _cancel_exit(b["tpOrderId"])
+        if err:
+            return {"ok": False, "error": err}
+        patch.update({"tpOrderId": "", "status": "armed"})
+    store.update_bracket(b["id"], patch)
+    sys.stderr.write("bagholder bracket: %s for %s: target moved to %s by the user\n" % (b["id"], b["symbol"], p))
+    return {"ok": True, "id": b["id"]}
+
+
+def open_orders_count():
+    return sum(1 for o in store.list_orders() if o["status"] in LIVE_STATUSES and o.get("role", "entry") == "entry")
+
+
 def qty_text(q):
     return ("%d" % q) if float(q).is_integer() else ("%.6f" % q).rstrip("0").rstrip(".")
 
@@ -4672,6 +4816,7 @@ def status_payload():
             "updateBy": "image" if UPDATES_OFF else "app",
             "loginView": LOGIN_VIEW,
             "ordersLive": ORDERS_LIVE,
+            "openOrders": open_orders_count(),
             "updating": str(_state.get("updating") or ""),
             "updateError": str(_state.get("updateError") or ""),
         }
@@ -5424,6 +5569,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/order/cancel":
             body = self._read_json()
             self._send(200, cancel_order((body or {}).get("id") if isinstance(body, dict) else ""))
+            return
+        if path == "/api/order/modify":
+            body = self._read_json()
+            body = body if isinstance(body, dict) else {}
+            self._send(200, modify_order(body.get("id"), body.get("quantity"), body.get("limitPrice")))
+            return
+        if path == "/api/bracket/adjust":
+            body = self._read_json()
+            body = body if isinstance(body, dict) else {}
+            self._send(200, adjust_bracket(body.get("id"), body.get("leg"), body.get("price"), body.get("trail"), bool(body.get("remove"))))
             return
         if path == "/api/bracket/cancel":
             body = self._read_json()

@@ -181,6 +181,38 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .tk-rowbtn{width:22px;height:22px;border-radius:5px;border:0;background:transparent;color:rgba(var(--ink-rgb),.5);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .tk-rowbtn.buy:hover{background:rgba(var(--pos-rgb),.16);color:var(--pos)}
 .tk-rowbtn.sell:hover{background:rgba(var(--neg-rgb),.16);color:var(--neg)}
+/* orders panel */
+.od-badge{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:var(--bg);font:600 11px/18px var(--font);text-align:center;box-shadow:0 0 0 2px var(--bg)}
+.od-segs{display:flex;padding:3px;border-radius:10px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.10)}
+.od-seg{flex:1;padding:9px 8px;border-radius:8px;border:0;background:transparent;color:var(--ink60);font:500 13.5px var(--font);cursor:pointer}
+.od-seg.on{background:rgba(var(--accent-rgb),.16);color:var(--ink)}
+.od-list{display:flex;flex-direction:column;gap:12px}
+.od-group{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55);margin-top:2px}
+.od-card{padding:14px 16px 12px;border-radius:10px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.08);display:flex;flex-direction:column;gap:6px}
+.od-row1{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.od-title{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.od-pill{flex:none;font-size:12px;font-weight:500;padding:2px 9px;border-radius:999px;background:rgba(var(--ink-rgb),.10);color:var(--ink75)}
+.od-pill.accent{background:rgba(var(--accent-rgb),.20);color:var(--accent-300)}
+.od-pill.pos{background:rgba(var(--pos-rgb),.16);color:var(--pos)}
+.od-pill.neg{background:rgba(var(--neg-rgb),.16);color:var(--neg)}
+.od-row2{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;color:var(--ink55)}
+.od-line{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.od-when{flex:none;white-space:nowrap}
+.od-fill{font-size:12.5px;color:var(--ink55)}
+.od-leg{display:flex;align-items:center;gap:8px;padding:9px 0 0;margin-top:6px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:12.5px}
+.od-dot{flex:none;width:6px;height:6px;border-radius:50%;background:rgba(var(--ink-rgb),.28)}
+.od-dot.on{background:var(--accent)}
+.od-leg-label{color:var(--ink55);flex:none}
+.od-leg-value{color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.od-leg-state{margin-left:auto;color:var(--ink55);white-space:nowrap}
+.od-link{border:0;background:transparent;cursor:pointer;font:500 12.5px var(--font);color:var(--accent);padding:0;white-space:nowrap}
+.od-link:hover{color:var(--accent-300)}
+.od-link.muted{color:var(--ink55)}
+.od-link.neg{color:var(--neg)}
+.od-foot{display:flex;justify-content:flex-end;gap:14px;padding-top:9px;margin-top:4px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:13px}
+.od-edit{display:flex;flex-direction:column;gap:10px;padding:10px 0 2px}
+.od-edit-btns{display:flex;align-items:center;justify-content:flex-end;gap:14px}
+.od-save{padding:7px 14px}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:60px 20px}
 .spin{display:inline-block;width:10px;height:10px;border:2px solid rgba(var(--ink-rgb),.25);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -225,6 +257,10 @@ const state = {
   },
   orders: null,
   ordersError: "",
+  ordersOpen: false,
+  ordersTab: "open",
+  orderEdit: null,
+  bracketEdit: null,
   menuOpen: false,
   picker: null,
   valueQuery: "",
@@ -246,7 +282,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.3"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.4"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -456,9 +492,9 @@ function pollStatus() {
   api("GET", "/api/status").then((st) => {
     // while the server restarts (an update) answers are not status payloads: keep asking
     if (!st || !st.protocol) { _pollTimer = setTimeout(pollStatus, 1000); return; }
-    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version]);
+    const before = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version, state.status.openOrders]);
     applyStatus(st);
-    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version]);
+    const after = JSON.stringify([state.status.lastSync, state.status.syncing, state.status.connected, state.status.syncStep, state.status.error, state.status.capturing, state.status.protocol, state.status.updateAvailable, state.status.version, state.status.openOrders]);
     if (before !== after) renderHeaderOnly();
     const fast = state.status.syncing || state.status.capturing || state.busy || state.status.updating;
     _pollTimer = setTimeout(pollStatus, fast ? 2500 : 30000);
@@ -515,6 +551,8 @@ function headerHtml() {
         (state.status.updateBy === "image" ? esc(state.status.latestVersion) + " image available" : "Update available") + "</a>") : "") + "</div>" +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' +
     '<span style="font-size:12px;color:var(--ink55)">' + (state.notice ? '<span class="' + (state.noticeKind === "err" ? "status-err" : "") + '">' + esc(state.notice) + "</span>" : syncLine()) + "</span>" +
+    '<button class="btn btn-icon btn-secondary" aria-label="Orders" data-act="ordersOpen" style="position:relative"><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.receipt + '"/></svg>' +
+    (state.status.openOrders ? '<span class="od-badge">' + state.status.openOrders + "</span>" : "") + "</button>" +
     '<div style="position:relative" data-pop="filter">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Filters" data-act="openFields"><svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M230.6 49.5A15.8 15.8 0 0 0 216 40H40a16 16 0 0 0-12.6 25.9l68.6 81.1v55a16 16 0 0 0 25.6 13.3l32-21.3a16 16 0 0 0 7.4-13.3v-33.7l68.6-81.1a15.8 15.8 0 0 0 1-15.4Z"/></svg></button>' +
     (filtersActive() ? '<span style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);pointer-events:none"></span>' : "") +
@@ -530,6 +568,7 @@ const ICONS = {
   minus: "M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8Z",
   x: "M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z",
   caretDown: "M213.66 101.66l-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32Z",
+  receipt: "M72 104a8 8 0 0 1 8-8h96a8 8 0 0 1 0 16H80a8 8 0 0 1-8-8Zm8 40h96a8 8 0 0 0 0-16H80a8 8 0 0 0 0 16ZM232 56v152a8 8 0 0 1-11.58 7.15L192 200.94l-28.42 14.21a8 8 0 0 1-7.16 0L128 200.94l-28.42 14.21a8 8 0 0 1-7.16 0L64 200.94l-28.42 14.21A8 8 0 0 1 24 208V56a16 16 0 0 1 16-16h176a16 16 0 0 1 16 16Zm-16 0H40v139.06l20.42-10.22a8 8 0 0 1 7.16 0L96 199.06l28.42-14.22a8 8 0 0 1 7.16 0L160 199.06l28.42-14.22a8 8 0 0 1 7.16 0L216 195.06Z",
   palette: "M186.8 213.8A104.0 104.0 0 1 1 231.8 133.9A46.0 46.0 0 0 0 186.8 213.8ZM214.3 110.6A88.0 88.0 0 1 0 157.7 210.8A62.0 62.0 0 0 1 214.3 110.6ZM84 132m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM104 84m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM152 68m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM176 92m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0Z",
   caret: "M181.66 133.66l-80 80a8 8 0 0 1-11.32-11.32L164.69 128 90.34 53.66a8 8 0 0 1 11.32-11.32l80 80a8 8 0 0 1 0 11.32Z",
   check: "M229.66 77.66l-128 128a8 8 0 0 1-11.32 0l-56-56a8 8 0 0 1 11.32-11.32L96 188.69 218.34 66.34a8 8 0 0 1 11.32 11.32Z",
@@ -566,12 +605,6 @@ function menuHtml() {
     "</div>";
 }
 function confirmDialogHtml() {
-  if (/^bracket:/.test(state.confirmOpen)) {
-    const id = state.confirmOpen.slice(8), b = state.orders && state.orders.brackets.find((x) => x.id === id), busy = state.busy === "cancel";
-    return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel bracket</h5>' +
-      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (b ? esc(b.symbol) + " · " + esc(orderBrackets({ id: b.orderId })) : "") + "</div>" +
-      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Keep bracket</button><button class="btn" data-act="cancelBracketNow" data-arg=\'' + attr({ id }) + '\' style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (busy ? "Cancelling…" : "Cancel bracket") + "</button></div></div></div>";
-  }
   if (/^cancel:/.test(state.confirmOpen)) {
     const id = state.confirmOpen.slice(7), o = state.orders && state.orders.orders.find((x) => x.id === id), busy = state.busy === "cancel";
     return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel order</h5>' +
@@ -773,7 +806,7 @@ function tabsHtml() {
   const t = (id, label) => '<button class="tabbtn' + (state.page === id && !((id === "trades" || id === "portfolio") && state.sel) ? " on" : "") + '" data-act="page" data-arg=\'' + attr({ page: id }) + "'>" + label + "</button>";
   const sel = (state.page === "trades" || state.page === "portfolio") && state.sel ? selById(state.sel) : null;
   return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
-    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("cashflow", "Cashflow") + t("orders", "Orders") +
+    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("cashflow", "Cashflow") +
     (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(sel.symbol) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(sel.symbol) + "</span></div>" : "") +
     '<div style="margin-left:auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 0"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;overflow-x:auto;padding-bottom:1px">' +
     chips().map((c) => '<span class="chip"><span class="cf">' + esc(c.field) + '</span><button class="cv" data-act="chipEdit" data-arg=\'' + attr({ key: c.key }) + "'>" + esc(c.value) + '</button><button class="cx" aria-label="Remove filter" data-act="chipRemove" data-arg=\'' + attr({ key: c.key }) + "'>×</button></span>").join("") +
@@ -1160,17 +1193,28 @@ function loadOrders() {
   return api("GET", "/api/orders").then((r) => {
     if (seq !== _ordersSeq) return;
     if (r && r.ok) { state.orders = r; state.ordersError = ""; } else state.ordersError = (r && r.error) || "Could not load the orders.";
-    if (state.page === "orders") { const pg = document.getElementById("page"); if (pg) pg.innerHTML = pageHtml(); }
+    if (state.ordersOpen) renderOrders();
   });
 }
-// while the Orders tab is up the list is asked for again every ORDERS_POLL_MS
+// while the panel is up the list is asked for again every ORDERS_POLL_MS
 function ordersPoll() {
   clearTimeout(_ordersTimer);
-  if (state.page !== "orders") { _ordersTimer = 0; return; }
+  if (!state.ordersOpen) { _ordersTimer = 0; return; }
   _ordersTimer = -1;   // a load is in flight: a redraw meanwhile does not start another
-  loadOrders().then(() => { if (state.page === "orders") _ordersTimer = setTimeout(ordersPoll, ORDERS_POLL_MS); else _ordersTimer = 0; });
+  loadOrders().then(() => { if (state.ordersOpen) _ordersTimer = setTimeout(ordersPoll, ORDERS_POLL_MS); else _ordersTimer = 0; });
+}
+function openOrders() {
+  state.picker = null; state.menuOpen = false;
+  state.ordersOpen = true; state.orderEdit = null; state.bracketEdit = null;
+  render();
+}
+function closeOrders() {
+  state.ordersOpen = false; state.orderEdit = null; state.bracketEdit = null;
+  clearTimeout(_ordersTimer); _ordersTimer = 0;
+  render();
 }
 const ORDER_LIVE = { sent: 1, pending: 1, cancelling: 1 };
+const BRACKET_LIVE = { waiting: 1, armed: 1, firing: 1, target_placed: 1 };
 function orderPrice(o) {
   if (o.type === "MARKET") return "—";
   if (o.type === "STOP") return px(o.stopPrice);
@@ -1178,100 +1222,188 @@ function orderPrice(o) {
   return px(o.limitPrice);
 }
 function orderTypeWord(t) { return { MARKET: "Market", LIMIT: "Limit", STOP: "Stop", STOP_LIMIT: "Stop limit" }[t] || (t ? t.charAt(0) + t.slice(1).toLowerCase().replace(/_/g, " ") : "—"); }
-const BRACKET_LIVE = { waiting: 1, armed: 1, firing: 1, target_placed: 1 };
 function bracketOf(o) { return (state.orders && state.orders.brackets || []).find((b) => b.orderId === o.id) || null; }
-function bracketState(b) {
-  switch (b.status) {
-    case "waiting": return "waiting for the fill";
-    case "armed": return b.slKind ? (b.slMode === "watched" ? "armed · stop watched here" : b.slOrderId ? "armed" : "arming") : "armed";
-    case "firing": return "firing";
-    case "target_placed": return "target order placed";
-    case "done": return b.outcome === "target" ? "target hit" : "stopped";
-    case "failed": return "failed" + (b.error ? " · " + b.error : "");
-    default: return "off" + (b.outcome ? " · " + b.outcome : "");
-  }
-}
-function orderBrackets(o) {
-  if (o.role === "stop" || o.role === "target") {
-    const entry = state.orders && state.orders.orders.find((x) => x.id === o.parentId);
-    return (o.role === "stop" ? "Stop loss for " : "Take profit for ") + (entry ? entry.symbol : o.symbol);
-  }
-  const b = bracketOf(o), parts = [];
-  if (b) {
-    if (b.slKind) parts.push((b.slKind === "trail" ? "Trail " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") + " at " : "Stop ") + px(b.slPrice));
-    if (b.tpPrice) parts.push("Target " + px(b.tpPrice));
-    return parts.join(" · ") + " · " + bracketState(b);
-  }
-  if (o.stopLoss) parts.push(o.stopLoss.kind === "trail" ? "Trail " + (o.stopLoss.trailUnit === "amt" ? px(o.stopLoss.trail) : tkPlain(o.stopLoss.trail) + "%") : "Stop " + px(o.stopLoss.price));
-  if (o.takeProfit) parts.push("Target " + px(o.takeProfit.price));
-  return parts.length ? parts.join(" · ") : "—";
-}
-function orderStatus(o) {
-  const fill = o.filledQty ? qty(o.filledQty) + (o.avgFill ? " @ " + px(o.avgFill) : "") : "";
-  switch (o.status) {
-    case "pending": return o.wsStatus === "PARTIALLY_FILLED" && fill ? "Pending · filled " + fill : "Pending";
-    case "sent": return "Sent";
-    case "cancelling": return "Cancelling";
-    case "filled": return "Filled" + (fill ? " " + fill : "");
-    case "cancelled": return "Cancelled" + (fill ? " · filled " + fill : "");
-    case "expired": return "Expired" + (fill ? " · filled " + fill : "");
-    case "rejected": return "Rejected" + (o.error ? " · " + o.error : "");
-    case "failed": return "Failed" + (o.error ? " · " + o.error : "");
-    case "dry": return "Not sent";
-    default: return o.status || "—";
-  }
-}
-function orderWhen(iso) {
-  const t = Date.parse(iso); if (!isFinite(t)) return "—";
-  const d = new Date(t), p = (n) => String(n).padStart(2, "0");
-  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
-}
+function orderById(id) { return (state.orders && state.orders.orders || []).find((x) => x.id === id) || null; }
 function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.quantity) + " " + o.symbol + " at " + (o.type === "MARKET" ? "market" : orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase()); }
-function ordersHtml() {
-  const data = state.orders;
-  const cols = [{ key: "placed", label: "Placed", width: "10.5%" }, { key: "symbol", label: "Symbol", width: "6.5%" }, { key: "side", label: "Side", width: "4.5%" }, { key: "type", label: "Type", width: "6.5%" },
-    { key: "qty", label: "Qty", align: "right", width: "5%" }, { key: "price", label: "Price", align: "right", width: "8.5%" }, { key: "tif", label: "Time in force", width: "7.5%" }, { key: "account", label: "Account", width: "8%" },
-    { key: "brackets", label: "Brackets", width: "20%" }, { key: "status", label: "Status" }, { key: "cancel", label: "", width: "112px" }];
-  let body;
-  if (!data && state.ordersError) body = '<tr><td colspan="11" class="status-err" style="padding:14px 6px">' + esc(state.ordersError) + "</td></tr>";
-  else if (!data) body = '<tr><td colspan="11" class="dim" style="padding:14px 6px"><span class="spin"></span>Loading…</td></tr>';
-  else {
-    const s = state.sort.orders, dir = s.dir === "asc" ? 1 : -1;
-    const keyOf = (o) => ({ placed: o.createdAt, symbol: o.symbol, side: o.side, type: o.type, qty: o.quantity, price: o.type === "STOP" ? o.stopPrice : o.limitPrice, tif: o.tif, account: o.account, brackets: orderBrackets(o), status: orderStatus(o) })[s.key];
-    const rows = data.orders.slice().sort((a, b) => {
-      const la = ORDER_LIVE[a.status] ? 0 : 1, lb = ORDER_LIVE[b.status] ? 0 : 1;
-      if (la !== lb) return la - lb;
-      const ka = keyOf(a), kb = keyOf(b);
-      if (ka == null && kb == null) return 0; if (ka == null) return 1; if (kb == null) return -1;
-      return (ka < kb ? -1 : ka > kb ? 1 : 0) * dir;
-    });
-    body = rows.length ? rows.map((o) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + orderWhen(o.createdAt) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(o.symbol) +
-      '</td><td style="font-variant-numeric:normal;color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + '</td><td style="font-variant-numeric:normal;color:var(--ink75)">' + esc(orderTypeWord(o.type)) +
-      '</td><td style="text-align:right">' + qty(o.quantity) + '</td><td style="text-align:right;color:var(--ink75);white-space:nowrap">' + orderPrice(o) + '</td><td style="font-variant-numeric:normal;color:var(--ink75)">' + (o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "—") +
-      '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(o.account || "—") + '</td><td style="color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(orderBrackets(o)) + '">' + orderBrackets(o) +
-      '</td><td style="font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' + (o.status === "rejected" || o.status === "failed" ? ";color:var(--neg)" : ORDER_LIVE[o.status] ? ";color:var(--accent-300)" : "") + '" title="' + esc(orderStatus(o)) + '">' + esc(orderStatus(o)) +
-      '</td><td style="text-align:right">' + (ORDER_LIVE[o.status] && o.status !== "cancelling" ? '<button class="pill" style="padding:2px 9px;width:auto;font-size:11px" data-act="cancelOrder" data-arg=\'' + attr({ id: o.id }) + "'>Cancel</button>"
-        : (() => { const b = bracketOf(o); return b && BRACKET_LIVE[b.status] && b.status !== "waiting" ? '<button class="pill" style="padding:2px 9px;width:auto;font-size:11px;white-space:nowrap" data-act="cancelBracket" data-arg=\'' + attr({ id: b.id }) + "'>Cancel bracket</button>" : ""; })()) + "</td></tr>").join("")
-      : '<tr><td colspan="11" class="dim" style="padding:14px 6px">No orders yet.</td></tr>';
-  }
-  return '<div class="card elev-sm" style="padding:16px 18px"><div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px"><h5>Orders</h5>' +
-    (data && !data.live ? '<span class="muted" style="font-size:11px">orders are off</span>' : "") + (data && data.refreshedAt ? '<span class="muted" style="font-size:11px;margin-left:auto">checked ' + esc(relTime(data.refreshedAt)) + "</span>" : "") + "</div>" +
-    '<div class="scroll-xy"><table class="table" style="min-width:1100px;width:100%;table-layout:fixed;font-size:12px"><thead><tr>' + th("orders", cols) + "</tr></thead><tbody>" + body + "</tbody></table></div></div>";
+// `Limit 165.40 · Day · Trading (Margin)`; a filled order names its fill instead of its type
+function orderDetailLine(o) {
+  const acct = o.account || "—";
+  if (o.status === "filled" && o.avgFill) return "Filled " + px(o.avgFill) + " · " + acct;
+  const tif = o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "";
+  return orderTypeWord(o.type) + (o.type === "MARKET" ? "" : " " + orderPrice(o)) + (tif ? " · " + tif : "") + " · " + acct;
 }
-function cancelBracketNow(id) {
-  const b = state.orders && state.orders.brackets.find((x) => x.id === id);
-  state.busy = "cancel"; render();
-  api("POST", "/api/bracket/cancel", { id }).then((r) => {
-    state.busy = ""; state.confirmOpen = "";
-    state.notice = r && r.ok ? "Bracket cancelled · " + (b ? b.symbol : "") : (r && r.error) || "Could not cancel the bracket.";
-    state.noticeKind = r && r.ok ? "ok" : "err";
-    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, r && r.ok ? 10000 : 6000);
-    render();
+function orderFillLine(o) {
+  const filled = o.filledQty || 0;
+  if (o.status === "rejected" || o.status === "failed") return o.error || "";
+  if (o.status === "filled") return qty(filled || o.quantity) + " filled" + (o.avgFill ? " · avg " + px(o.avgFill) : "");
+  if (filled && filled < o.quantity) return qty(filled) + " of " + qty(o.quantity) + " filled" + (o.avgFill ? " · avg " + px(o.avgFill) : "");
+  return "";
+}
+function orderPill(o) {
+  const filled = o.filledQty || 0;
+  switch (o.status) {
+    case "pending": return filled && filled < o.quantity ? ["Partially filled", "accent"] : ["Pending", "accent"];
+    case "sent": return ["Pending", "accent"];
+    case "cancelling": return ["Cancelling", "accent"];
+    case "filled": return ["Filled", "pos"];
+    case "cancelled": return ["Cancelled", ""];
+    case "expired": return ["Expired", ""];
+    case "rejected": return ["Rejected", "neg"];
+    case "failed": return ["Failed", "neg"];
+    case "dry": return ["Not sent", ""];
+    default: return [o.status || "—", ""];
+  }
+}
+function orderWhenWord(iso) {
+  const t = Date.parse(iso); if (!isFinite(t)) return "—";
+  const d = new Date(t), now = new Date();
+  const h = d.getHours() % 12 || 12, m = String(d.getMinutes()).padStart(2, "0"), ap = d.getHours() < 12 ? "AM" : "PM";
+  const time = h + ":" + m + " " + ap;
+  if (d.toDateString() === now.toDateString()) return "Today " + time;
+  return MON[d.getMonth()] + " " + d.getDate() + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "") + ", " + time;
+}
+// the two legs of a bracket as the card shows them: [label, value, state, on]
+function bracketLegs(b) {
+  const legs = [];
+  const stopOrder = b.slOrderId ? orderById(b.slOrderId) : null, tpOrder = b.tpOrderId ? orderById(b.tpOrderId) : null;
+  const done = b.status === "done", off = b.status === "cancelled" || b.status === "failed";
+  if (b.slKind) {
+    const value = b.slKind === "trail" ? "Trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") + " · " + px(b.slPrice) + " now" : "Market at " + px(b.slPrice);
+    let st = "Waiting for fill", on = false;
+    if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "Active" : "Arming"; }
+    else if (b.status === "target_placed") st = "Cancelled";
+    else if (done) { st = b.outcome === "stopped" ? "Filled" : "Cancelled"; on = b.outcome === "stopped"; }
+    else if (off) st = b.status === "failed" ? "Failed" : "Off";
+    legs.push({ key: "sl", label: "Stop loss", value, state: st, on });
+  } else if (b.error && /^stop /.test(b.error) && !done) {
+    legs.push({ key: "sl", label: "Stop loss", value: "—", state: "Cancelled", on: false });
+  }
+  if (b.tpPrice) {
+    let st = "Waiting for fill", on = false;
+    if (b.status === "armed" || b.status === "firing") { on = true; st = "Working"; }
+    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : "Placed"; }
+    else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
+    else if (off) st = b.status === "failed" ? "Failed" : "Off";
+    legs.push({ key: "tp", label: "Take profit", value: "Limit at " + px(b.tpPrice), state: st, on });
+  }
+  return legs;
+}
+function bracketEditorHtml(b, leg) {
+  const e = state.bracketEdit;
+  const isTrail = leg.key === "sl" && b.slKind === "trail";
+  const cur = leg.key === "sl" ? (isTrail ? (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail)) : px(b.slPrice)) : px(b.tpPrice);
+  const label = leg.key === "sl" ? (isTrail ? (b.slTrailUnit === "amt" ? "Trail" : "Trail %") : "Stop price") : "Limit price";
+  return '<div class="od-edit"><label class="tk-f"><span class="tk-l">' + label + '</span><input class="tk-in num" id="od-level" inputmode="decimal" autocomplete="off" value="' + esc(e && e.text != null ? e.text : cur) + '"></label>' +
+    '<div class="od-edit-btns"><button class="od-link muted" data-act="bracketEditCancel">Cancel</button><button class="od-link neg" data-act="bracketRemove" data-arg=\'' + attr({ id: b.id, leg: leg.key }) + "'>Remove</button><button class=\"tk-go od-save\" data-act=\"bracketEditSave\" data-arg='" + attr({ id: b.id, leg: leg.key }) + "'" + (state.busy === "orders" ? " disabled" : "") + ">" + (state.busy === "orders" ? "Saving…" : "Save") + "</button></div>" +
+    (e && e.error ? '<div class="status-err" style="font-size:12px">' + esc(e.error) + "</div>" : "") + "</div>";
+}
+function orderEditorHtml(o) {
+  const e = state.orderEdit;
+  const hasLimit = o.type === "LIMIT" || o.type === "STOP_LIMIT";
+  return '<div class="od-edit"><div class="tk-grid">' +
+    '<label class="tk-f"><span class="tk-l">' + (o.type === "MARKET" ? "Shares" : "Shares") + '</span><input class="tk-in num" id="od-qty" inputmode="decimal" autocomplete="off" value="' + esc(e.qty != null ? e.qty : qty(o.quantity)) + '"></label>' +
+    (hasLimit ? '<label class="tk-f"><span class="tk-l">Limit price</span><input class="tk-in num" id="od-limit" inputmode="decimal" autocomplete="off" value="' + esc(e.limit != null ? e.limit : px(o.limitPrice)) + '"></label>' : "") + "</div>" +
+    '<div class="od-edit-btns"><button class="od-link muted" data-act="orderEditCancel">Cancel</button><button class="tk-go od-save" data-act="orderEditSave" data-arg=\'' + attr({ id: o.id }) + "'" + (state.busy === "orders" ? " disabled" : "") + ">" + (state.busy === "orders" ? "Saving…" : "Save") + "</button></div>" +
+    (e.error ? '<div class="status-err" style="font-size:12px">' + esc(e.error) + "</div>" : "") + "</div>";
+}
+function orderCardHtml(o) {
+  const pill = orderPill(o), b = bracketOf(o);
+  // a filled entry under Open is there for its bracket: its fill is already the detail line
+  const fill = o.status === "filled" && state.ordersTab === "open" ? "" : orderFillLine(o);
+  const live = ORDER_LIVE[o.status] && o.status !== "cancelling";
+  const canEdit = live && o.type !== "STOP" && o.source !== "wealthsimple";
+  let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + esc(qty(o.quantity)) + " " + esc(o.symbol) + '</span><span class="od-pill ' + pill[1] + '">' + esc(pill[0]) + "</span></div>" +
+    '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + '</span><span class="od-when">' + esc(orderWhenWord(o.createdAt)) + "</span></div>" +
+    (fill ? '<div class="od-fill' + (o.status === "rejected" || o.status === "failed" ? "" : "") + '">' + esc(fill) + "</div>" : "");
+  if (b) {
+    const legs = bracketLegs(b);
+    html += legs.map((leg) => {
+      const editing = state.bracketEdit && state.bracketEdit.id === b.id && state.bracketEdit.leg === leg.key;
+      return '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-label">' + leg.label + '</span><span class="od-leg-value num">' + esc(leg.value) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span>" +
+        (BRACKET_LIVE[b.status] && !editing ? '<button class="od-link" data-act="bracketEdit" data-arg=\'' + attr({ id: b.id, leg: leg.key }) + "'>Adjust</button>" : "") + "</div>" + (editing ? bracketEditorHtml(b, leg) : "");
+    }).join("");
+  }
+  if (state.orderEdit && state.orderEdit.id === o.id) html += orderEditorHtml(o);
+  else if (live) html += '<div class="od-foot">' + (canEdit ? '<button class="od-link" data-act="orderEdit" data-arg=\'' + attr({ id: o.id }) + "'>Edit</button>" : "") + '<button class="od-link muted" data-act="cancelOrder" data-arg=\'' + attr({ id: o.id }) + "'>Cancel</button></div>";
+  return html + "</div>";
+}
+function ordersBodyHtml() {
+  const data = state.orders;
+  if (!data && state.ordersError) return '<div class="status-err" style="font-size:12px">' + esc(state.ordersError) + "</div>";
+  if (!data) return '<div class="dim" style="font-size:12px"><span class="spin"></span>Loading…</div>';
+  const entries = data.orders.filter((o) => o.role !== "stop" && o.role !== "target");
+  const newest = (a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0);
+  const group = (label, rows) => rows.length ? '<div class="od-group">' + label + "</div>" + rows.map(orderCardHtml).join("") : "";
+  const tab = state.ordersTab;
+  if (tab === "filled") {
+    const rows = entries.filter((o) => o.status === "filled").sort(newest);
+    const today = new Date().toDateString();
+    const isToday = (o) => new Date(Date.parse(o.createdAt)).toDateString() === today;
+    const out = group("Today", rows.filter(isToday)) + group("Earlier", rows.filter((o) => !isToday(o)));
+    return out || '<div class="dim" style="font-size:12px">Nothing filled yet.</div>';
+  }
+  if (tab === "cancelled") {
+    const rows = entries.filter((o) => ["cancelled", "expired", "rejected", "failed", "dry"].indexOf(o.status) >= 0).sort(newest);
+    return group("Cancelled and rejected", rows) || '<div class="dim" style="font-size:12px">Nothing cancelled or rejected.</div>';
+  }
+  // resting orders first, then filled entries whose bracket is still working, newest first within each
+  const rows = entries.filter((o) => ORDER_LIVE[o.status] || (() => { const b = bracketOf(o); return b && BRACKET_LIVE[b.status]; })())
+    .sort((a, b) => ((ORDER_LIVE[a.status] ? 0 : 1) - (ORDER_LIVE[b.status] ? 0 : 1)) || newest(a, b));
+  return group("Open", rows) || '<div class="dim" style="font-size:12px">No open orders.</div>';
+}
+function ordersPanelHtml() {
+  const seg = (id, label) => '<button class="od-seg' + (state.ordersTab === id ? " on" : "") + '" data-act="ordersTab" data-arg=\'' + attr({ tab: id }) + "'>" + label + "</button>";
+  return '<div id="odWrap"><div class="tk-scrim" data-act="ordersClose"></div><div class="tk" role="dialog" aria-label="Orders">' +
+    '<div class="tk-hd"><span class="tk-title">Orders</span><button class="tk-x" aria-label="Close" data-act="ordersClose"><svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.x + '"/></svg></button></div>' +
+    '<div class="tk-body" style="gap:16px"><div class="od-segs">' + seg("open", "Open") + seg("filled", "Filled") + seg("cancelled", "Cancelled") + "</div>" +
+    '<div id="odBody" class="od-list">' + ordersBodyHtml() + "</div></div></div></div>";
+}
+function renderOrders() {
+  const old = document.getElementById("odWrap");
+  if (!state.ordersOpen) { if (old) old.remove(); return; }
+  const tmp = document.createElement("div"); tmp.innerHTML = ordersPanelHtml();
+  if (old) old.replaceWith(tmp.firstElementChild); else document.getElementById("app").appendChild(tmp.firstElementChild);
+}
+function openOrdersCount() { return ((state.orders && state.orders.orders) || []).filter((o) => o.role !== "stop" && o.role !== "target" && ORDER_LIVE[o.status]).length; }
+function orderEditSave(id) {
+  const o = orderById(id), e = state.orderEdit; if (!o || !e) return;
+  const q = document.getElementById("od-qty"), l = document.getElementById("od-limit");
+  const quantity = q ? tkNum(q.value) : o.quantity, limitPrice = l ? tkNum(l.value) : null;
+  if (!(quantity > 0)) { e.error = "Shares must be more than zero."; renderOrders(); return; }
+  if (l && !(limitPrice > 0)) { e.error = "A limit price is required."; renderOrders(); return; }
+  state.busy = "orders"; e.error = ""; renderOrders();
+  api("POST", "/api/order/modify", { id, quantity, limitPrice }).then((r) => {
+    state.busy = "";
+    if (!r || !r.ok) { if (state.orderEdit) state.orderEdit.error = (r && r.error) || "Could not change the order."; renderOrders(); return; }
+    state.orderEdit = null;
+    state.notice = "Order changed · " + orderLine(Object.assign({}, o, { quantity, limitPrice: limitPrice != null ? limitPrice : o.limitPrice })); state.noticeKind = "ok";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
+    renderHeaderOnly();
+    loadOrders();
+  });
+}
+function bracketEditSave(id, leg, remove) {
+  const e = state.bracketEdit; const b = (state.orders && state.orders.brackets || []).find((x) => x.id === id); if (!b) return;
+  const body = { id, leg };
+  if (remove) body.remove = true;
+  else {
+    const el = document.getElementById("od-level"), v = el ? tkNum(el.value) : null;
+    if (!(v > 0)) { if (e) e.error = "A level is required."; renderOrders(); return; }
+    if (leg === "sl" && b.slKind === "trail") body.trail = v; else body.price = v;
+  }
+  state.busy = "orders"; if (e) e.error = ""; renderOrders();
+  api("POST", "/api/bracket/adjust", body).then((r) => {
+    state.busy = "";
+    if (!r || !r.ok) { if (state.bracketEdit) state.bracketEdit.error = (r && r.error) || "Could not change the bracket."; renderOrders(); return; }
+    state.bracketEdit = null;
+    state.notice = (remove ? (leg === "sl" ? "Stop loss removed · " : "Take profit removed · ") : (leg === "sl" ? "Stop loss moved · " : "Take profit moved · ")) + b.symbol; state.noticeKind = "ok";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
+    renderHeaderOnly();
     loadOrders();
   });
 }
 function cancelOrderNow(id) {
-  const o = state.orders && state.orders.orders.find((x) => x.id === id);
+  const o = orderById(id);
   state.busy = "cancel"; render();
   api("POST", "/api/order/cancel", { id }).then((r) => {
     state.busy = ""; state.confirmOpen = "";
@@ -1933,7 +2065,6 @@ function emptyHtml() {
 }
 function pageHtml() {
   const m = state.model;
-  if (state.page === "orders") return ordersHtml();
   if (state.loadError && !m) return '<div class="empty"><div class="status-err">' + esc(state.loadError) + '</div><button class="btn btn-secondary" data-act="reload">Retry</button></div>';
   if (!m) return '<div class="empty muted"><span class="spin"></span>Loading…</div>';
   if (!m.activityCount) return emptyHtml();
@@ -1952,9 +2083,9 @@ function render() {
   const boxes = [...root.querySelectorAll(".scroll, .scroll-xy")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
   const focusId = document.activeElement ? document.activeElement.id : "";
   const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
-  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "") + (state.ticket ? ticketHtml() : "");
+  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "") + (state.ordersOpen ? ordersPanelHtml() : "") + (state.ticket ? ticketHtml() : "");
   if (state.loginView) loginFrameLoop();   // a redraw makes a new image element: reattach the stream
-  if (state.page === "orders" && !_ordersTimer) ordersPoll(); else if (state.page !== "orders" && _ordersTimer) { clearTimeout(_ordersTimer); _ordersTimer = 0; }
+  if (state.ordersOpen && !_ordersTimer) ordersPoll(); else if (!state.ordersOpen && _ordersTimer) { clearTimeout(_ordersTimer); _ordersTimer = 0; }
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
   if (focusId === "valueQuery" || focusId === "searchInput") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
@@ -1973,7 +2104,7 @@ function renderHeaderOnly() {
   tmp.innerHTML = headerHtml();
   hdr.replaceWith(tmp.firstElementChild);
 }
-const PAGES = ["dashboard", "trades", "portfolio", "cashflow", "orders"];
+const PAGES = ["dashboard", "trades", "portfolio", "cashflow"];
 function hashState() {
   const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
   const parts = raw.split("/");
@@ -2176,8 +2307,16 @@ function act(name, arg, ev) {
     case "tkOpen": openTicket(arg.symbol, arg.side); break;
     case "cancelOrder": state.confirmOpen = "cancel:" + arg.id; render(); break;
     case "cancelOrderNow": cancelOrderNow(arg.id); break;
-    case "cancelBracket": state.confirmOpen = "bracket:" + arg.id; render(); break;
-    case "cancelBracketNow": cancelBracketNow(arg.id); break;
+    case "ordersOpen": openOrders(); break;
+    case "ordersClose": closeOrders(); break;
+    case "ordersTab": state.ordersTab = arg.tab; state.orderEdit = null; state.bracketEdit = null; renderOrders(); break;
+    case "orderEdit": state.orderEdit = { id: arg.id, error: "" }; state.bracketEdit = null; renderOrders(); { const q = document.getElementById("od-qty"); if (q) q.focus(); } break;
+    case "orderEditCancel": state.orderEdit = null; renderOrders(); break;
+    case "orderEditSave": orderEditSave(arg.id); break;
+    case "bracketEdit": state.bracketEdit = { id: arg.id, leg: arg.leg, error: "" }; state.orderEdit = null; renderOrders(); { const l = document.getElementById("od-level"); if (l) { l.focus(); l.select(); } } break;
+    case "bracketEditCancel": state.bracketEdit = null; renderOrders(); break;
+    case "bracketEditSave": bracketEditSave(arg.id, arg.leg, false); break;
+    case "bracketRemove": bracketEditSave(arg.id, arg.leg, true); break;
     case "tkClose": closeTicket(); break;
     case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.trail = null; t.tp.price = null; t.limit = null; t.stop = null; renderTicket(); } break;
     case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
@@ -2258,6 +2397,12 @@ function bind() {
       // the ticket has the keyboard: Esc closes it, Enter in a field commits the field
       if (e.key === "Escape") { e.preventDefault(); closeTicket(); return; }
       if (e.key === "Enter" && e.target && /^tk-/.test(e.target.id || "") && e.target.tagName === "INPUT") { e.preventDefault(); e.target.blur(); }
+      return;
+    }
+    if (state.ordersOpen && !state.confirmOpen) {
+      // the orders panel has the keyboard: Esc closes an editor, then the panel; Enter saves an editor
+      if (e.key === "Escape") { e.preventDefault(); if (state.orderEdit || state.bracketEdit) { state.orderEdit = null; state.bracketEdit = null; renderOrders(); } else closeOrders(); return; }
+      if (e.key === "Enter" && e.target && /^od-/.test(e.target.id || "")) { e.preventDefault(); if (state.orderEdit) orderEditSave(state.orderEdit.id); else if (state.bracketEdit) bracketEditSave(state.bracketEdit.id, state.bracketEdit.leg, false); }
       return;
     }
     // ⌘K (Ctrl+K elsewhere): the filter popover on Symbol, search box focused
