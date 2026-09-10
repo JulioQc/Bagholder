@@ -2306,7 +2306,7 @@ def insert_order(row):
 
 def update_order(order_id, patch):
     """Status, Wealthsimple's order id, or an error on an existing ticket."""
-    text = {"status": "status", "wsOrderId": "ws_order_id", "error": "error", "wsStatus": "ws_status", "submittedAt": "submitted_at", "expiresAt": "expires_at", "tif": "tif", "currency": "currency"}
+    text = {"status": "status", "wsOrderId": "ws_order_id", "error": "error", "wsStatus": "ws_status", "submittedAt": "submitted_at", "expiresAt": "expires_at", "tif": "tif", "currency": "currency", "symbol": "symbol"}
     nums = {"filledQty": "filled_qty", "avgFill": "avg_fill", "quantity": "quantity", "limitPrice": "limit_price", "stopPrice": "stop_price"}
     sets, vals = [], []
     for k, col in text.items():
@@ -2450,6 +2450,20 @@ def bracket_for_order(order_id):
             _init_schema(conn)
             r = conn.execute("SELECT * FROM brackets WHERE order_id = ? ORDER BY created_at DESC LIMIT 1", (_s(order_id),)).fetchone()
             return _bracket_from_row(r) if r else None
+        finally:
+            conn.close()
+
+
+def symbol_for_security(security_id):
+    """The symbol the book uses for a security, from its activity rows: for an option
+    contract that is the contract name (`QNC 20NOV26 3.00 CALL`), which the securities
+    table does not carry. Empty when the book has no row for it."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            r = conn.execute("SELECT symbol FROM activities WHERE security_id = ? AND symbol IS NOT NULL AND symbol != '' ORDER BY occurred_at DESC LIMIT 1", (_s(security_id),)).fetchone()
+            return _s(r["symbol"]) if r else ""
         finally:
             conn.close()
 

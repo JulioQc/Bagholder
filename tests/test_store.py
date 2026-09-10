@@ -2792,3 +2792,19 @@ class FeedMatchingTest(_OrdersBase):
             r = bagholder.refresh_orders()
         self.assertEqual(r["added"], 0, "the same order under Wealthsimple's id, or under its own external id, is not a new row")
         self.assertEqual(len(store.list_orders()), 1)
+
+    def test_an_option_order_from_the_feed_is_named_by_its_contract(self):
+        store.apply_wealthsimple_mapped([bagholder.map_activity(_ws_item(canonicalId="ws-opt-1", type="OPTIONS_BUY", subType="BUYTOOPEN", assetSymbol="QNC 20NOV26 3.00 CALL", assetQuantity=5, amount=-150, occurredAt="2026-08-05T16:12:17.268Z", securityId="sec-o-1"))])
+        node = {"id": "order-opt", "orderId": "ws-7", "canonicalAccountId": "acct-tfsa", "createdAtUtc": "2026-08-05T16:16:16Z", "status": "SUBMITTED", "side": "SELL", "executionType": "LIMIT",
+                "submittedQuantity": 40, "limitPrice": 0.25, "securityCurrency": "USD", "securityId": "sec-o-1", "symbol": "QNC", "security": {"id": "sec-o-1", "stock": {"symbol": "QNC", "name": "Quantum Emotion Corp"}}}
+        def fake_graphql(sess, operation, variables, query=None):
+            if operation == "OrderServiceExtendedOrderFeed":
+                return {"identity": {"id": "ident-1", "orderServiceExtendedOrderFeed": {"edges": [{"cursor": "c1", "node": node}], "pageInfo": {"hasNextPage": False}}}}
+            if operation == "FetchSoOrdersExtendedOrder":
+                return {"soOrdersExtendedOrder": {"status": "SUBMITTED", "timeInForce": "UNTIL_CANCEL"}}
+            raise AssertionError(operation)
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t", "identity_canonical_id": "ident-1"}):
+            bagholder.refresh_orders()
+        row = store.get_order("order-opt")
+        self.assertEqual(row["symbol"], "QNC 20NOV26 3.00 CALL", "the book's name for the contract, not the underlying the feed gives")
+        self.assertEqual((row["side"], row["quantity"], row["limitPrice"], row["account"]), ("SELL", 40.0, 0.25, "TFSA"))

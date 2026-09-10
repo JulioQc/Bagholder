@@ -4146,13 +4146,16 @@ def feed_order_row(node):
     stock = sec.get("stock") if isinstance(sec.get("stock"), dict) else {}
     acct = next((a for a in order_accounts() if a["id"] == _s(node.get("canonicalAccountId"))), None)
     side = _s(node.get("side")).upper()
+    sec_id = _s(node.get("securityId") or sec.get("id"))
+    # the feed names an option by its underlying; the book knows the contract
+    symbol = store.symbol_for_security(sec_id) or _s(node.get("symbol") or stock.get("symbol"))
     return {
         "id": _s(node.get("id")),
         "createdAt": _s(node.get("createdAtUtc")),
         "accountId": _s(node.get("canonicalAccountId")),
         "account": acct["name"] if acct else "",
-        "securityId": _s(node.get("securityId") or sec.get("id")),
-        "symbol": _s(node.get("symbol") or stock.get("symbol")),
+        "securityId": sec_id,
+        "symbol": symbol,
         "currency": _s(node.get("securityCurrency")).upper(),
         "side": "SELL" if side.startswith("SELL") else "BUY",
         "type": _s(node.get("executionType")).upper() or "LIMIT",
@@ -4226,6 +4229,10 @@ def refresh_orders(only_id=""):
                 for k in ("tif", "quantity", "limitPrice", "stopPrice", "currency"):
                     if upd.get(k) not in (None, ""):
                         patch[k] = upd[k]
+                # a row that arrived before the book knew the contract learns its name
+                name = store.symbol_for_security(o.get("securityId"))
+                if name and name != o.get("symbol"):
+                    patch["symbol"] = name
             store.update_order(o["id"], patch)
             read += 1
     added = 0
