@@ -18,7 +18,7 @@ Use at your own risk. The app has you sign in to the real Wealthsimple website i
 | **Order ticket** | **Orders** |
 | ![Order ticket](docs/screenshots/desktop-ticket.png) | ![Orders](docs/screenshots/desktop-orders.png) |
 
-On iOS and Android:
+On iOS and Android, as native apps: SwiftUI on the iPhone, Jetpack Compose on Android, each with its own copy of the model, held to the desktop's figures by test cases all three share. Each keeps its book on the phone and syncs from Wealthsimple itself; nothing passes through the desktop or anywhere else. Dashboard, Trades, Portfolio and Cashflow; orders are placed from the desktop.
 
 <table>
 <tr>
@@ -108,7 +108,7 @@ Trades can also be imported from Wealthsimple's CSV exports, or entered by hand.
 - **Trades**: every closed trade with its executions, a price path across the fills, and a journal with a thesis, a grade and tags. Shares, options and crypto are all matched FIFO per account; covered calls, rolls, expiries and assignments are handled.
 - **Portfolio**: market value, net asset value, cost basis, margin used, available margin and unrealized P&L across the accounts you choose; allocation; every open holding with the day's change, each opening on its own page with the chart, the fills and the journal that becomes the trade's when it closes.
 - **Cashflow**: distributions by month and by holding, with yield on cost and current yield from each fund's declared distributions.
-- **Orders**: an order ticket for shares and ETFs, opened from a symbol in the search list, with a stop loss and a take profit alongside. After a buy fills, the stop loss is placed at Wealthsimple as its own stop order and the take profit is watched and placed when the price reaches it. An Orders panel from the header lists every order placed here or pending at Wealthsimple with its status read back, its brackets and their state, and lets you adjust a bracket, edit or cancel an open order.
+- **Orders**: an order ticket for shares and ETFs, opened from any symbol in the search list, the book's own or one found by typing (the search asks the exchanges' directories, never Wealthsimple), with a stop loss and a take profit alongside. After a buy fills, the stop loss goes to Wealthsimple as its own stop order, good till cancelled and placed again before Wealthsimple's ninety days end; the take profit is watched and placed as a limit sell when the price reaches it, with the stop level still watched meanwhile. Wealthsimple holds one order on a position's shares at a time, and Bagholder manages that single order so nothing of a bracket's ever outlives the position. An Orders panel from the header lists every order placed here or pending at Wealthsimple with its status read back, its brackets and their state, and lets you adjust a bracket, edit or cancel an open order.
 
 A filter icon next to the menu narrows every page at once by date, account, symbol, grade, tag, side, kind, exchange, price, hold time, P&L or quantity.
 
