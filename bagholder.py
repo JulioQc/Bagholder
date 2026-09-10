@@ -682,9 +682,9 @@ IMAGE_PAGE = REPO_URL + "/pkgs/container/bagholder"   # where a container copy's
 # The sign-in window inside the page (a container, where the user sees no window): Chromium
 # runs on the container's virtual display, the page shows its frames and sends it clicks and keys.
 LOGIN_VIEW = bool((os.environ.get("BAGHOLDER_LOGIN_VIEW") or "").strip())
-# Orders reach Wealthsimple only with BAGHOLDER_LIVE_ORDERS=1. Without it a submitted
-# ticket is recorded and printed with the exact request that would have been sent.
-ORDERS_LIVE = (os.environ.get("BAGHOLDER_LIVE_ORDERS") or "").strip() == "1"
+# Orders reach Wealthsimple. BAGHOLDER_DRY_ORDERS=1 is for development: a submitted
+# ticket is then recorded and printed with the exact request that would have been sent.
+ORDERS_LIVE = (os.environ.get("BAGHOLDER_DRY_ORDERS") or "").strip() != "1"
 LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
