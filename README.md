@@ -15,6 +15,8 @@ Use at your own risk. The app has you sign in to the real Wealthsimple website i
 | ![Trades](docs/screenshots/desktop-trades.png) | ![A trade](docs/screenshots/desktop-trade.png) |
 | **Portfolio** | **Cashflow** |
 | ![Portfolio](docs/screenshots/desktop-portfolio.png) | ![Cashflow](docs/screenshots/desktop-cashflow.png) |
+| **Order ticket** | **Orders** |
+| ![Order ticket](docs/screenshots/desktop-ticket.png) | ![Orders](docs/screenshots/desktop-orders.png) |
 
 On iOS and Android:
 
