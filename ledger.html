@@ -1249,8 +1249,11 @@ function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.qu
 function orderDetailLine(o) {
   if (o.status === "filled") return "Filled " + qty(o.filledQty || o.quantity) + (o.avgFill ? " at " + px(o.avgFill) : "");
   const tif = o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "";
-  return orderTypeWord(o.type) + (o.type === "MARKET" ? "" : " " + orderPrice(o)) + (tif ? " · " + tif : "");
+  const how = o.type === "MARKET" ? "at market" : o.type === "STOP_LIMIT" ? "stop " + px(o.stopPrice) + " · limit " + px(o.limitPrice) : "at " + orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase();
+  return qty(o.quantity) + " " + how + (tif ? " · " + tif : "");
 }
+// the card's title: the side, then the listing as exchange and symbol, the quantity being the second line's
+function orderTitle(o) { return (o.exchange ? esc(o.exchange) + ": " : "") + esc(o.symbol); }
 function orderFillLine(o) {
   const filled = o.filledQty || 0;
   // a third line only for what the second cannot say: a partial fill on a pending order, or why it was refused
@@ -1374,7 +1377,7 @@ function orderCardHtml(o) {
   const editing = state.orderEdit && state.orderEdit.id === o.id;
   // the tab already says pending or filled; only the ended tab has states worth a word
   const ended = state.ordersTab === "cancelled" ? orderPill(o) : null;
-  let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + esc(qty(o.quantity)) + " " + esc(o.symbol) + '</span><span class="od-value num">' + esc(orderValue(o)) + "</span></div>" +
+  let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + orderTitle(o) + '</span><span class="od-value num">' + esc(orderValue(o)) + "</span></div>" +
     '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + "</span>" + (ended ? '<span class="od-state' + (ended[1] === "neg" ? " neg" : "") + '">' + esc(ended[0]) + "</span>" : "") + "</div>" +
     (fill ? '<div class="od-fill">' + esc(fill) + "</div>" : "");
   // a bracket still waiting for this order's fill shows on the order; once armed it is a card of its own
