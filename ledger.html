@@ -209,9 +209,13 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .od-leg{display:flex;align-items:center;gap:7px;padding:9px 0 0;margin-top:6px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:12px}
 .od-dot{flex:none;width:6px;height:6px;border-radius:50%;background:rgba(var(--ink-rgb),.28)}
 .od-dot.on{background:var(--accent)}
-.od-leg-label{color:var(--ink55);flex:none}
+.od-leg-label{flex:none;font-weight:500}
+.od-leg-label.neg{color:var(--neg)}
+.od-leg-label.pos{color:var(--pos)}
+.od-leg-amt{margin-left:auto;flex:none;color:var(--ink);white-space:nowrap}
 .od-leg-value{color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .od-leg-state{margin-left:auto;color:var(--ink55);white-space:nowrap}
+.od-leg-state + .od-leg-amt{margin-left:10px}
 .od-link{border:0;background:transparent;cursor:pointer;font:500 12.5px var(--font);color:var(--accent);padding:0;white-space:nowrap}
 .od-link:hover{color:var(--accent-300)}
 .od-link.muted{color:var(--ink55)}
@@ -1389,31 +1393,35 @@ function orderWhenWord(iso) {
 }
 // the two legs of a bracket as the card shows them: [label, value, state, on]
 function bracketLegs(b) {
+  // [{key, label, tone, line, amount, note, text}]: the label in the leg's colour, the quantity
+  // and level, the amount at the right; a note only for a state other than resting or watching
   const legs = [];
+  const entry = orderById(b.orderId);
+  const mult = entry ? orderMultiplier(entry) : 1;
   const stopOrder = b.slOrderId ? orderById(b.slOrderId) : null, tpOrder = b.tpOrderId ? orderById(b.tpOrderId) : null;
   const done = b.status === "done", off = b.status === "cancelled" || b.status === "failed";
+  const cancelling = (role) => (state.orders && state.orders.orders || []).some((o) => o.parentId === b.orderId && o.role === role && o.status === "cancelling");
+  const amount = (price) => price && b.quantity ? money(b.quantity * price * mult, "", 2) : "";
   if (b.slKind) {
-    const text = "Stop loss at " + px(b.slPrice) + (b.slKind === "trail" ? " · trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") : "");
-    let st = "Waiting for fill", on = false;
-    if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
-    else if (b.status === "target_placed") { on = true; st = "Watching"; }
-    else if (b.status === "stopping") { on = true; st = b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
-    else if (b.status === "closing") { st = b.outcome === "stopped" ? "Filled" : stopOrder || (orders.find((o) => o.parentId === b.orderId && o.role === "stop" && o.status === "cancelling")) ? "Cancelling" : "Cancelled"; on = b.outcome === "stopped"; }
-    else if (done) { st = b.outcome === "stopped" ? "Filled" : "Cancelled"; on = b.outcome === "stopped"; }
-    else if (off) st = b.status === "failed" ? "Failed" : "Off";
-    legs.push({ key: "sl", text, state: st, on });
-  } else if (b.error && /^stop /.test(b.error) && !done) {
-    legs.push({ key: "sl", text: "Stop loss", state: "Cancelled", on: false });
+    const line = qty(b.quantity) + " at " + px(b.slPrice) + (b.slKind === "trail" ? " · trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") : "");
+    let note = "";
+    if (b.status === "armed" || b.status === "firing") note = b.slMode === "watched" ? "" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "" : b.attempts ? "Retrying · " + (b.error || "") : "Placing";
+    else if (b.status === "stopping") note = b.attempts ? "Retrying · " + (b.error || "") : "Placing";
+    else if (b.status === "closing") note = b.outcome === "stopped" ? "Filled" : stopOrder || cancelling("stop") ? "Cancelling" : "Cancelled";
+    else if (done) note = b.outcome === "stopped" ? "Filled" : "Cancelled";
+    else if (off) note = b.status === "failed" ? "Failed" : "Off";
+    legs.push({ key: "sl", label: "Stop loss", tone: "neg", line, amount: amount(b.slPrice), note, text: "Stop loss " + line });
   }
   if (b.tpPrice) {
-    let st = "Waiting for fill", on = false;
-    if (b.status === "armed" || b.status === "firing") { on = true; st = b.status === "firing" && b.attempts ? "Retrying · " + (b.error || "") : "Watching"; }
-    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : b.tpOrderId ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
-    else if (b.status === "stopping") st = "Cancelling";
-    else if (b.status === "closing") { st = b.outcome === "target" ? "Filled" : (orders.find((o) => o.parentId === b.orderId && o.role === "target" && o.status === "cancelling")) ? "Cancelling" : "Cancelled"; on = b.outcome === "target"; }
-    else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
-    else if (off) st = b.status === "failed" ? "Failed" : "Off";
-    legs.push({ key: "tp", text: "Take profit at " + px(b.tpPrice), state: st, on });
+    const line = qty(b.quantity) + " at " + px(b.tpPrice);
+    let note = "";
+    if (b.status === "armed" || b.status === "firing") note = b.status === "firing" && b.attempts ? "Retrying · " + (b.error || "") : "";
+    else if (b.status === "target_placed") note = tpOrder && tpOrder.status === "filled" ? "Filled" : b.tpOrderId ? "" : b.attempts ? "Retrying · " + (b.error || "") : "Placing";
+    else if (b.status === "stopping") note = "Cancelling";
+    else if (b.status === "closing") note = b.outcome === "target" ? "Filled" : cancelling("target") ? "Cancelling" : "Cancelled";
+    else if (done) note = b.outcome === "target" ? "Filled" : "Cancelled";
+    else if (off) note = b.status === "failed" ? "Failed" : "Off";
+    legs.push({ key: "tp", label: "Take profit", tone: "pos", line, amount: amount(b.tpPrice), note, text: "Take profit " + line });
   }
   return legs;
 }
@@ -1442,7 +1450,8 @@ function orderEditorHtml(o) {
 }
 // the two legs of a bracket: label, level, state; no actions in a row
 function bracketLegsHtml(b) {
-  return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-text num">' + esc(leg.text) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span></div>").join("");
+  return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-leg-label ' + leg.tone + '">' + esc(leg.label) + '</span><span class="od-leg-value num">' + esc(leg.line) + "</span>" +
+    (leg.note ? '<span class="od-leg-state">' + esc(leg.note) + "</span>" : "") + '<span class="od-leg-amt num">' + esc(leg.amount) + "</span></div>").join("");
 }
 // every card's foot: when, at the left; Edit and Cancel at the right while it is live, Edit dimmed where a change is not possible
 function cardFootHtml(when, live, editAct, editArg, canEdit, cancelAct, cancelArg, ended) {
@@ -1459,18 +1468,10 @@ function ordersScopeLabel() { const s = ordersScope(); return s.length ? s.join(
 function bracketCardHtml(b) {
   const entry = orderById(b.orderId);
   const title = "Bracket " + ((entry && entry.exchange) ? esc(entry.exchange) + ": " : "") + esc(b.symbol);
-  // row two is the shares under the bracket; the legs say what rests and what is watched,
-  // and the fill has its card on the Filled tab. The value is the resting order's.
-  const resting = [b.slOrderId, b.tpOrderId].map(orderById).find((o) => o && ORDER_LIVE[o.status]) || null;
-  const detail = esc(qty(b.quantity)) + " held";
-  let value = "";
-  if (resting && resting.type !== "MARKET") {
-    const at = resting.type === "STOP" ? resting.stopPrice : resting.limitPrice;
-    if (at) value = money(resting.quantity * at * orderMultiplier(resting), "", 2);
-  }
+  // no second row: the legs say it all, each with its amount under the position's cost at the right
+  const value = entry && entry.avgFill ? money(b.quantity * entry.avgFill * orderMultiplier(entry), "", 2) : "";
   const editing = state.bracketEdit && state.bracketEdit.id === b.id;
   return '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:var(--accent-300)">Bracket</span> ' + title.slice(8) + '</span><span class="od-value num">' + value + "</span></div>" +
-    '<div class="od-row2"><span class="od-line">' + detail + "</span></div>" +
     bracketLegsHtml(b) + (editing ? bracketEditorHtml(b) : "") +
     cardFootHtml(orderWhenWord(b.armedAt || b.createdAt), BRACKET_LIVE[b.status] && !editing, "bracketEdit", { id: b.id }, true, "cancelBracket", { id: b.id }) + "</div>";
 }
