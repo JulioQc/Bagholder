@@ -2166,7 +2166,7 @@ class OrderTicketTest(_OrdersBase):
         self.assertEqual(r["marginAvailable"], 12680.45, "the margin account's available margin, from the stored buying power")
         self.assertEqual((r["buyingPower"], r["cash"]), (9000.0, 100.0))
         self.assertEqual([a["id"] for a in r["accounts"]], ["acct-margin", "acct-tfsa"])
-        self.assertFalse(r["live"])
+        self.assertTrue(r["live"], "orders are live by default")
         with mock.patch.object(bagholder, "_ticket_session", return_value=None):
             self.assertEqual(bagholder.ticket_quote("QNC", "", "acct-margin")["error"], "Not connected.")
         self.assertIn("No listing stored", bagholder.ticket_quote("NOPE", "", "acct-margin")["error"])
@@ -2203,9 +2203,13 @@ class OrderTicketTest(_OrdersBase):
         self.assertIn("stop loss price", bad(stopLoss={"kind": "stop", "price": 0}))
         self.assertIn("take profit", bad(takeProfit={"price": None}))
 
-    def test_without_the_switch_a_submit_is_recorded_and_nothing_is_sent(self):
+    def test_orders_are_live_unless_the_dry_setting_is_on(self):
+        self.assertTrue(bagholder.ORDERS_LIVE, "imported without BAGHOLDER_DRY_ORDERS: live")
+
+    def test_under_the_dry_setting_a_submit_is_recorded_and_nothing_is_sent(self):
         with mock.patch.object(bagholder, "graphql", side_effect=AssertionError("must not be called")), mock.patch.object(bagholder, "ORDERS_LIVE", False):
             r = bagholder.place_order(self._ticket())
+            self.assertFalse(bagholder.status_payload()["ordersLive"])
         self.assertTrue(r["ok"]); self.assertEqual(r["status"], "dry")
         rows = store.list_orders()
         self.assertEqual(len(rows), 1)
@@ -2213,9 +2217,8 @@ class OrderTicketTest(_OrdersBase):
         self.assertEqual(rows[0]["request"]["executionType"], "LIMIT")
         self.assertEqual(rows[0]["stopLoss"]["price"], 157.13)
         self.assertEqual(store.get_order(r["id"])["takeProfit"], {"price": 181.94})
-        self.assertFalse(bagholder.status_payload()["ordersLive"])
 
-    def test_with_the_switch_the_order_goes_to_wealthsimple_and_the_answer_is_kept(self):
+    def test_by_default_the_order_goes_to_wealthsimple_and_the_answer_is_kept(self):
         sent = []
         def fake_graphql(sess, operation, variables, query=None):
             sent.append((operation, variables))
