@@ -136,6 +136,51 @@ textarea.input{resize:none;line-height:1.5}
 .rule-t{background:linear-gradient(to right,transparent,rgba(var(--ink-rgb),.14) 20px,rgba(var(--ink-rgb),.14) calc(100% - 20px),transparent) no-repeat top/100% 1px}
 tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .status-err{color:var(--neg)}
+/* order ticket */
+.tk-scrim{position:fixed;inset:24px;border-radius:20px;background:rgba(16,18,32,.42);z-index:20}
+.tk{position:fixed;top:24px;right:24px;bottom:24px;width:400px;background:var(--surface);z-index:21;display:flex;flex-direction:column;border-radius:0 20px 20px 0;box-shadow:-1px 0 0 rgba(var(--ink-rgb),.12),-18px 0 40px rgba(0,0,0,.45);overflow:hidden}
+.tk .num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.tk-hd{display:flex;align-items:center;padding:18px 24px 0;flex:none}
+.tk-title{font-size:15px;font-weight:500}
+.tk-x{margin-left:auto;margin-right:-6px;width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:rgba(var(--ink-rgb),.62);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tk-x:hover{background:rgba(var(--ink-rgb),.08)}
+.tk-body{flex:1;overflow-y:auto;padding:22px 24px 20px;display:flex;flex-direction:column;gap:22px}
+.tk-quote{padding:14px 16px;border-radius:8px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.08);display:flex;flex-direction:column;gap:12px}
+.tk-seg{display:flex;padding:2px;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.10)}
+.tk-segopt{flex:1;padding:8px;border-radius:6px;border:0;background:transparent;color:var(--ink60);font:500 13px var(--font);cursor:pointer}
+.tk-segopt.on.buy{background:rgba(var(--pos-rgb),.16);color:var(--pos)}
+.tk-segopt.on.sell{background:rgba(var(--neg-rgb),.16);color:var(--neg)}
+.tk-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.tk-f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.tk-l{font-size:12px;color:var(--ink55)}
+.tk-in{height:36px;border-radius:6px;border:0;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);color:var(--ink);font:400 13px var(--font);padding:0 10px;outline:none;width:100%;min-width:0}
+.tk-in:focus{box-shadow:inset 0 0 0 1px var(--accent)}
+.tk-sel{position:relative;display:block}
+.tk-sel select{appearance:none;-webkit-appearance:none;padding-right:28px;cursor:pointer}
+.tk-sel select option{background:var(--surface);color:var(--ink)}
+.tk-sel svg{position:absolute;right:10px;top:12px;pointer-events:none;color:rgba(var(--ink-rgb),.5)}
+.tk-rule{height:1px;flex:none;background:linear-gradient(90deg,transparent,rgba(var(--ink-rgb),.14) 48px,rgba(var(--ink-rgb),.14) calc(100% - 48px),transparent)}
+.tk-sec{display:flex;flex-direction:column;gap:12px}
+.tk-sech{display:flex;align-items:center;min-height:20px;font-size:13px;font-weight:500}
+.tk-add{margin-left:auto;border:0;background:transparent;cursor:pointer;font:500 12.5px var(--font);color:var(--accent);padding:0}
+.tk-add:hover{color:var(--accent-300)}
+.tk-rm{margin-left:auto;border:0;background:transparent;cursor:pointer;font:400 12px var(--font);color:rgba(var(--ink-rgb),.45);padding:0}
+.tk-rm:hover{color:var(--accent-300)}
+.tk-read{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+.tk-read .l{color:var(--ink55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-read .r{white-space:nowrap}
+.tk-row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.tk-row .l{color:var(--ink55)}
+.tk-ft{display:flex;align-items:center;padding:14px 24px 20px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10);flex:none}
+.tk-cancel{border:0;background:transparent;cursor:pointer;font:500 13px var(--font);color:var(--ink55);padding:0}
+.tk-cancel:hover{color:var(--accent-300)}
+.tk-go{margin-left:auto;border:0;background:transparent;cursor:pointer;font:500 13px var(--font);color:var(--accent-300);box-shadow:inset 0 0 0 1px var(--accent);padding:9px 18px;border-radius:8px}
+.tk-go:hover{background:rgba(var(--accent-rgb),.12)}
+.tk-go[disabled]{opacity:.5;cursor:default}
+.tk-rowbtns{display:inline-flex;gap:2px;flex:none}
+.tk-rowbtn{width:22px;height:22px;border-radius:5px;border:0;background:transparent;color:rgba(var(--ink-rgb),.5);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.tk-rowbtn.buy:hover{background:rgba(var(--pos-rgb),.16);color:var(--pos)}
+.tk-rowbtn.sell:hover{background:rgba(var(--neg-rgb),.16);color:var(--neg)}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:60px 20px}
 .spin{display:inline-block;width:10px;height:10px;border:2px solid rgba(var(--ink-rgb),.25);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -186,6 +231,7 @@ const state = {
   fieldQuery: null,
   status: { connected: false, syncing: false, capturing: false, lastSync: "", error: "", syncStep: "", email: "", activityCount: 0 },
   loginView: false,
+  ticket: null,
   busy: "",
   notice: "",
   confirmOpen: "",
@@ -197,7 +243,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-09.3"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.1"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -477,6 +523,10 @@ function headerHtml() {
     "</div></div></div>";
 }
 const ICONS = {
+  plus: "M224 128a8 8 0 0 1-8 8h-80v80a8 8 0 0 1-16 0v-80H40a8 8 0 0 1 0-16h80V40a8 8 0 0 1 16 0v80h80a8 8 0 0 1 8 8Z",
+  minus: "M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8Z",
+  x: "M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z",
+  caretDown: "M213.66 101.66l-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32Z",
   palette: "M186.8 213.8A104.0 104.0 0 1 1 231.8 133.9A46.0 46.0 0 0 0 186.8 213.8ZM214.3 110.6A88.0 88.0 0 1 0 157.7 210.8A62.0 62.0 0 0 1 214.3 110.6ZM84 132m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM104 84m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM152 68m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0ZM176 92m-16 0a16 16 0 1 0 32 0a16 16 0 1 0 -32 0Z",
   caret: "M181.66 133.66l-80 80a8 8 0 0 1-11.32-11.32L164.69 128 90.34 53.66a8 8 0 0 1 11.32-11.32l80 80a8 8 0 0 1 0 11.32Z",
   check: "M229.66 77.66l-128 128a8 8 0 0 1-11.32 0l-56-56a8 8 0 0 1 11.32-11.32L96 188.69 218.34 66.34a8 8 0 0 1 11.32 11.32Z",
@@ -727,7 +777,15 @@ function popValuesHtml(active) {
   if (!opts.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">Nothing to choose from yet.</div>';
   if (!shown.length) return '<div class="muted" style="padding:6px 7px;font-size:12px">No match.</div>';
   const hi = Math.min(state.valueHi || 0, shown.length - 1);
-  return shown.map((v, i) => '<button class="pop-row' + (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" tabindex="-1" data-act="toggleList" data-arg=\'' + attr({ key: active.key, value: v }) + "'>" + esc(v) + "</button>").join("");
+  return shown.map((v, i) => popRowHtml(active.key, v, (f.lists[active.key].indexOf(v) >= 0 ? " on" : "") + (i === hi ? " hi" : ""), "")).join("");
+}
+// A value row toggles its filter, named by its field at the right when the list mixes fields.
+// A tradable symbol's row carries the ticket's Buy and Sell there instead: they say what it is.
+function popRowHtml(key, value, cls, label) {
+  const btns = key === "symbol" ? tkRowButtons(value) : "";
+  const tag = btns ? "div" : "button";
+  const right = btns ? '<span style="margin-left:auto"></span>' + btns : (label ? '<span style="margin-left:auto;font-size:11px;color:var(--ink55)">' + esc(label) + "</span>" : "");
+  return "<" + tag + ' class="pop-row' + cls + '"' + (btns ? ' role="button"' : "") + ' tabindex="-1" data-act="toggleList" data-arg=\'' + attr({ key, value }) + "'>" + esc(value) + right + "</" + tag + ">";
 }
 // Values from every list field that contain the typed text, symbols first:
 // [{key, value, label}], at most 40.
@@ -751,8 +809,7 @@ function popFieldsBodyHtml() {
   if (q && matches.length) {
     const hi = Math.min(state.valueHi || 0, matches.length - 1);
     return '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' + matches.map((m, i) =>
-      '<button class="pop-row' + (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : "") + '" tabindex="-1" data-act="toggleList" data-arg=\'' + attr({ key: m.key, value: m.value }) + "'>" + esc(m.value) +
-      '<span style="margin-left:auto;font-size:11px;color:var(--ink55)">' + esc(m.label) + "</span></button>").join("") + "</div>";
+      popRowHtml(m.key, m.value, (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : ""), m.label)).join("") + "</div>";
   }
   return (q ? '<div class="muted" style="padding:2px 7px 8px;font-size:12px">No match.</div>' : "") +
     '<div class="lbl" style="padding:2px 7px 7px">Filter by</div><div class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' +
@@ -791,6 +848,280 @@ function filterPopHtml() {
   }
   return '<div class="pop elev-md">' + body +
     '<div class="rule-t" style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px"><button class="btn btn-secondary" data-act="clearAll" style="font-size:12px;padding:4px 10px">Clear all</button><button class="btn btn-primary" data-act="closeFilter" style="font-size:12px;padding:4px 10px;margin-left:auto">Done</button></div></div>';
+}
+
+// ---------------------------------------------------------------------------
+// order ticket: a side panel opened from a symbol's Buy or Sell icon in the ⌘K list
+// ---------------------------------------------------------------------------
+const TK_TYPES = [["MARKET", "Market"], ["LIMIT", "Limit"], ["STOP", "Stop"], ["STOP_LIMIT", "Stop limit"]];
+const TK_TIFS = [["DAY", "Day"], ["UNTIL_CANCEL", "Good till cancelled"]];
+const TK_POLL_MS = 5000;
+let _tkTimer = 0, _tkSeq = 0;
+function tkLookup(symbol) {
+  // what the book knows about the symbol: its listing id, kind, and the open position
+  const m = state.model || {};
+  const pos = (m.positions || []).find((p) => p.symbol === symbol) || null;
+  const t = pos || (m.trades || []).find((x) => x.symbol === symbol) || null;
+  return { securityId: t ? t.securityId || "" : "", kind: t ? t.kind : "", position: pos };
+}
+function tkTradable(symbol) { return tkLookup(symbol).kind === "Shares"; }
+function tkRowButtons(symbol) {
+  if (!tkTradable(symbol)) return "";
+  const b = (side, label, path) => '<button class="tk-rowbtn ' + side.toLowerCase() + '" aria-label="' + label + " " + esc(symbol) + '" data-act="tkOpen" data-arg=\'' + attr({ symbol, side }) + '\'><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + path + '"/></svg></button>';
+  return '<span class="tk-rowbtns">' + b("BUY", "Buy", ICONS.plus) + b("SELL", "Sell", ICONS.minus) + "</span>";
+}
+function tkAccounts() {
+  const t = state.ticket;
+  if (t && t.data && t.data.accounts) return t.data.accounts;
+  return ((state.model && state.model.accounts) || []).filter((a) => a.status !== "closed" && /^SELF_DIRECTED/.test(a.type) && !/CRYPTO|PREDICTIONS|MANAGED/.test(a.type)).map((a) => ({ id: a.id, name: a.name, type: a.type, margin: /MARGIN/.test(a.type) }));
+}
+function openTicket(symbol, side) {
+  const info = tkLookup(symbol);
+  const accounts = tkAccounts();
+  const held = info.position;
+  let accountId = held ? held.accountId : "";
+  if (!accountId) accountId = (accounts.find((a) => a.margin) || accounts[0] || {}).id || "";
+  state.picker = null; state.menuOpen = false;
+  state.ticket = {
+    step: "form", symbol, securityId: info.securityId, side: side === "SELL" ? "SELL" : "BUY", accountId,
+    type: "LIMIT", tif: "DAY", qty: held && side === "SELL" ? held.qty : 1, limit: null, stop: null,
+    sl: { on: true, kind: "stop", price: null, trail: null, unit: "pct" }, tp: { on: true, price: null },
+    text: {}, data: null, error: "", busy: false, submitError: "",
+  };
+  render();
+  tkFetch();
+}
+function closeTicket() {
+  state.ticket = null; _tkSeq++;
+  clearTimeout(_tkTimer);
+  render();
+}
+function tkFetch() {
+  const t = state.ticket; if (!t) return;
+  const seq = ++_tkSeq;
+  clearTimeout(_tkTimer);
+  api("GET", "/api/order/quote?symbol=" + encodeURIComponent(t.symbol) + "&security=" + encodeURIComponent(t.securityId || "") + "&account=" + encodeURIComponent(t.accountId || "")).then((r) => {
+    const cur = state.ticket;
+    if (!cur || seq !== _tkSeq) return;
+    if (r && r.ok) {
+      cur.data = r; cur.error = "";
+      if (!cur.accountId && r.accounts && r.accounts.length) cur.accountId = (r.accounts.find((a) => a.margin) || r.accounts[0]).id;
+      if (r.orderTypes && r.orderTypes.length && r.orderTypes.indexOf(cur.type) < 0) cur.type = r.orderTypes.indexOf("LIMIT") >= 0 ? "LIMIT" : r.orderTypes[0];
+    } else {
+      cur.error = (r && r.error) || "Quote failed.";
+    }
+    tkPatch();
+    _tkTimer = setTimeout(tkFetch, TK_POLL_MS);
+  });
+}
+// the ticket's numbers, all from the typed values and the quote (the reference's renderVals)
+function tkVals() {
+  const t = state.ticket, d = t.data || {}, q = d.quote || {};
+  const buy = t.side === "BUY", dir = buy ? 1 : -1;
+  const last = q.last != null ? q.last : null;
+  const mult = q.multiplier || 1;
+  const qtyN = t.qty != null ? t.qty : 0;
+  const limit = t.limit != null ? t.limit : last;
+  const stop = t.stop != null ? t.stop : (last != null ? +(last * (buy ? 1.02 : 0.98)).toFixed(2) : null);
+  const entry = t.type === "MARKET" ? (buy ? (q.ask != null ? q.ask : last) : (q.bid != null ? q.bid : last)) : t.type === "STOP" ? stop : limit;
+  const notional = entry != null ? qtyN * entry * mult : null;
+  const brackets = buy;   // a sell leaves nothing to protect
+  const slOn = brackets && t.sl.on, tpOn = brackets && t.tp.on;
+  const isTrail = t.sl.kind === "trail";
+  const trail = t.sl.trail != null ? t.sl.trail : (t.sl.unit === "pct" ? 5 : (entry != null ? +(entry * 0.05).toFixed(2) : null));
+  const trailDist = entry == null || trail == null ? null : (t.sl.unit === "pct" ? entry * trail / 100 : trail);
+  const slPrice = isTrail ? (entry != null && trailDist != null ? +(entry - dir * trailDist).toFixed(2) : null) : (t.sl.price != null ? t.sl.price : (entry != null ? +(entry * (1 - dir * 0.05)).toFixed(2) : null));
+  const tpPrice = t.tp.price != null ? t.tp.price : (entry != null ? +(entry * (1 + dir * 0.10)).toFixed(2) : null);
+  const risk = entry != null && slPrice != null ? dir * (entry - slPrice) * qtyN * mult : null;
+  const gain = entry != null && tpPrice != null ? dir * (tpPrice - entry) * qtyN * mult : null;
+  const slPct = entry ? dir * (slPrice - entry) / entry : null, tpPct = entry ? dir * (tpPrice - entry) / entry : null;
+  const rr = slOn && tpOn && risk > 0 && gain != null ? gain / risk : null;
+  const fx = (q.currency === "USD" && d.fxUsdCad) ? d.fxUsdCad : 1;
+  const cad = notional != null ? notional * fx : null;
+  const nav = ((state.model && state.model.accounts) || []).filter((a) => a.status !== "closed" && a.nav != null).reduce((s, a) => s + a.nav, 0);
+  const acct = tkAccounts().find((a) => a.id === t.accountId) || null;
+  const isMargin = !!(acct && acct.margin);
+  const rate = d.marginRate != null ? d.marginRate : 1;
+  const after = isMargin ? (d.marginAvailable != null && cad != null ? d.marginAvailable - dir * cad * rate : null)
+    : (d.cash != null && notional != null ? d.cash - dir * notional : null);
+  const typeWord = { MARKET: "Market", LIMIT: "Limit", STOP: "Stop", STOP_LIMIT: "Stop limit" }[t.type];
+  const tifWord = t.tif === "DAY" ? "Day" : "GTC";
+  const trailWord = t.sl.unit === "pct" ? tkPlain(trail) + "%" : px(trail);
+  return { buy, dir, last, mult, qtyN, limit, stop, entry, notional, slOn, tpOn, isTrail, trail, slPrice, tpPrice, risk, gain, slPct, tpPct, rr, cad, nav, acct, isMargin, after, typeWord, tifWord, trailWord, q, d };
+}
+function tkPlain(n) { return n == null ? "—" : Number.isInteger(n) ? String(n) : String(+n.toFixed(2)); }
+function tkAmt(n) { return n == null || !isFinite(n) ? "—" : money(n, "", Number.isInteger(+n.toFixed(2)) ? 0 : 2); }
+function tkSAmt(n) { return n == null || !isFinite(n) ? "—" : signedMoney(n, "", Number.isInteger(+n.toFixed(2)) ? 0 : 2); }
+function tkNum(v) { const n = parseFloat(String(v).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? null : n; }
+function tkQuoteHtml(v) {
+  const q = v.q, t = state.ticket;
+  const chg = q.change == null ? "—" : (q.change < 0 ? "−" : "+") + px(Math.abs(q.change)) + " (" + pct(q.changePct, 2) + ")";
+  const size = (n) => n == null ? "" : " × " + n2(n, 0);
+  return '<div style="display:flex;justify-content:space-between;gap:12px"><div style="min-width:0"><div style="font-size:20px;line-height:1.2;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(q.symbol || t.symbol) + '</div><div style="font-size:12px;color:var(--ink55);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(q.name || "") + (q.exchange ? " · " + esc(q.exchange) : "") + "</div></div>" +
+    '<div style="text-align:right;flex:none"><div class="num" style="font-size:20px;line-height:1.2;font-weight:500">' + (q.last == null ? "—" : px(q.last)) + '</div><div class="num" style="font-size:12px;margin-top:2px;color:' + (q.change < 0 ? "var(--neg)" : "var(--pos)") + '">' + chg + "</div></div></div>" +
+    '<div class="num" style="display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;font-size:12px;padding-top:10px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10)">' +
+    '<div><span style="color:var(--ink55)">Bid</span> ' + (q.bid == null ? "—" : px(q.bid) + size(q.bidSize)) + "</div>" +
+    '<div><span style="color:var(--ink55)">Mid</span> ' + (q.mid == null ? "—" : px(q.mid)) + "</div>" +
+    '<div><span style="color:var(--ink55)">Ask</span> ' + (q.ask == null ? "—" : px(q.ask) + size(q.askSize)) + "</div></div>";
+}
+function tkField(label, inner) { return '<label class="tk-f"><span class="tk-l">' + label + "</span>" + inner + "</label>"; }
+function tkInput(id, value) { return '<input class="tk-in num" id="' + id + '" inputmode="decimal" autocomplete="off" value="' + esc(value) + '">'; }
+function tkSelect(id, opts, cur) {
+  return '<span class="tk-sel"><select class="tk-in" id="' + id + '">' + opts.map((o) => '<option value="' + esc(o[0]) + '"' + (o[0] === cur ? " selected" : "") + ">" + esc(o[1]) + "</option>").join("") + '</select><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.caretDown + '"/></svg></span>';
+}
+function tkSlRead(v) {
+  const verb = v.buy ? "Sells at " : "Buys at ";
+  return [v.isTrail ? "Starts at " + px(v.slPrice) : verb + px(v.slPrice), v.risk == null ? "—" : tkSAmt(-v.risk) + " (" + pct(v.slPct) + ")"];
+}
+function tkTpRead(v) { return [(v.buy ? "Sells at " : "Buys at ") + px(v.tpPrice), v.gain == null ? "—" : tkSAmt(v.gain) + " (" + pct(v.tpPct) + ")"]; }
+function tkFormHtml(v) {
+  const t = state.ticket, tx = t.text;
+  const types = ((t.data && t.data.orderTypes) || TK_TYPES.map((x) => x[0]));
+  const showLimit = t.type === "LIMIT" || t.type === "STOP_LIMIT", showStop = t.type === "STOP" || t.type === "STOP_LIMIT";
+  const showTif = t.type !== "MARKET" || v.slOn || v.tpOn;
+  const val = (key, fmt) => tx[key] != null ? tx[key] : fmt;
+  let grid = tkField("Account", tkSelect("tk-account", tkAccounts().map((a) => [a.id, a.name]), t.accountId)) +
+    tkField("Shares", tkInput("tk-qty", val("qty", qty(v.qtyN)))) +
+    tkField("Order type", tkSelect("tk-type", TK_TYPES.filter((x) => types.indexOf(x[0]) >= 0), t.type)) +
+    (showLimit ? tkField("Limit price", tkInput("tk-limit", val("limit", px(v.limit)))) : "") +
+    (showStop ? tkField("Stop price", tkInput("tk-stop", val("stop", px(v.stop)))) : "") +
+    (showTif ? tkField("Time in force", tkSelect("tk-tif", TK_TIFS, t.tif)) : "") +
+    tkField("Amount", tkInput("tk-amt", val("amt", tkAmt(v.notional))));
+  const sec = (title, on, act, body) => '<div class="tk-sec"><div class="tk-sech">' + title + (on ? '<button class="tk-rm" data-act="' + act + '">Remove</button>' : '<button class="tk-add" data-act="' + act + '">Add</button>') + "</div>" + (on ? body : "") + "</div>";
+  const slRead = tkSlRead(v), tpRead = tkTpRead(v);
+  const slBody = '<div class="tk-grid">' + tkField("Type", tkSelect("tk-slkind", [["stop", "Stop"], ["trail", "Trailing stop"]], t.sl.kind)) +
+    (v.isTrail ? tkField("Trail", tkInput("tk-sltrail", val("sltrail", t.sl.unit === "pct" ? tkPlain(v.trail) : px(v.trail)))) + tkField("Trail by", tkSelect("tk-slunit", [["pct", "Percent of price"], ["amt", "Amount per share"]], t.sl.unit))
+      : tkField("Stop price", tkInput("tk-slprice", val("slprice", px(v.slPrice))))) + "</div>" +
+    '<div class="tk-read"><span class="l" id="tk-sl-l">' + esc(slRead[0]) + '</span><span class="r num" id="tk-sl-r" style="color:var(--neg)">' + esc(slRead[1]) + "</span></div>";
+  const tpBody = '<div class="tk-grid">' + tkField("Limit price", tkInput("tk-tp", val("tp", px(v.tpPrice)))) + "<div></div></div>" +
+    '<div class="tk-read"><span class="l" id="tk-tp-l">' + esc(tpRead[0]) + '</span><span class="r num" id="tk-tp-r" style="color:var(--pos)">' + esc(tpRead[1]) + "</span></div>";
+  return '<div class="tk-body">' +
+    '<div class="tk-quote" id="tkQuote">' + tkQuoteHtml(v) + "</div>" +
+    (t.error ? '<div class="status-err" style="font-size:12px;margin-top:-12px">' + esc(t.error) + "</div>" : "") +
+    '<div class="tk-seg"><button class="tk-segopt buy' + (v.buy ? " on" : "") + '" data-act="tkSide" data-arg=\'{"side":"BUY"}\'>Buy</button><button class="tk-segopt sell' + (v.buy ? "" : " on") + '" data-act="tkSide" data-arg=\'{"side":"SELL"}\'>Sell</button></div>' +
+    '<div class="tk-grid">' + grid + "</div>" +
+    (v.buy ? '<div class="tk-rule"></div>' + sec("Stop loss", t.sl.on, t.sl.on ? "tkSlOff" : "tkSlOn", slBody) + '<div class="tk-rule"></div>' + sec("Take profit", t.tp.on, t.tp.on ? "tkTpOff" : "tkTpOn", tpBody) : "") +
+    "</div>" +
+    '<div class="tk-ft"><button class="tk-cancel" data-act="tkClose">Cancel</button><button class="tk-go" data-act="tkReview">Review</button></div>';
+}
+function tkReviewHtml(v) {
+  const t = state.ticket, q = v.q;
+  const row = (l, r, color, weight) => '<div class="tk-row"><span class="l">' + l + '</span><span class="num" style="text-align:right' + (color ? ";color:" + color : "") + (weight ? ";font-weight:" + weight : "") + '">' + r + "</span></div>";
+  const line = v.typeWord + (t.type === "MARKET" ? "" : " " + px(v.entry) + " · " + v.tifWord) + " · " + esc(v.acct ? v.acct.name : "");
+  const slLine = !v.slOn ? "None" : v.isTrail ? "Trails " + v.trailWord + (v.buy ? " under the high" : " over the low") + " · starts at " + px(v.slPrice) : "Market at " + px(v.slPrice);
+  const rrStr = v.rr == null ? "—" : "1:" + tkPlain(+v.rr.toFixed(1));
+  return '<div class="tk-body">' +
+    '<div style="padding-bottom:14px;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.10)"><div style="font-size:20px;line-height:1.2;font-weight:500"><span style="color:' + (v.buy ? "var(--pos)" : "var(--neg)") + '">' + (v.buy ? "Buy" : "Sell") + "</span> " + esc(qty(v.qtyN)) + " " + esc(q.symbol || t.symbol) + '</div><div style="font-size:12px;color:var(--ink55);margin-top:2px">' + line + "</div></div>" +
+    (v.buy ? '<div style="display:flex;flex-direction:column;gap:10px">' + row("Stop loss", slLine) + row("Take profit", v.tpOn ? "Limit at " + px(v.tpPrice) : "None") + "</div>" : "") +
+    '<div style="display:flex;flex-direction:column;gap:10px;padding-top:16px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10)">' +
+    (v.buy ? row("At risk", v.slOn && v.risk != null ? tkSAmt(-v.risk) + " (" + pct(v.slPct) + ")" : "—", "var(--neg)", 500) + row("Target", v.tpOn && v.gain != null ? tkSAmt(v.gain) + " (" + pct(v.tpPct) + ")" : "—", "var(--pos)", 500) + row("Risk / reward", rrStr) : "") +
+    row("Position size", v.cad != null && v.nav > 0 ? (v.cad / v.nav * 100).toFixed(1) + "% of net asset value" : "—") +
+    row(v.isMargin ? "Available margin after" : "Cash after", v.after == null ? "—" : money(v.after, "", 0), v.after != null && v.after < 0 ? "var(--neg)" : "") + "</div>" +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:16px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10)"><span style="font-size:13px;font-weight:500">' + (v.buy ? "Estimated cost" : "Estimated proceeds") + '</span><span class="num" style="font-size:20px;line-height:1.2;font-weight:500">' + (t.type === "MARKET" ? "≈ " : "") + tkAmt(v.notional) + "</span></div>" +
+    (t.submitError ? '<div class="status-err" style="font-size:12px">' + esc(t.submitError) + "</div>" : "") +
+    "</div>" +
+    '<div class="tk-ft"><button class="tk-cancel" data-act="tkBack">Back</button><button class="tk-go" data-act="tkSubmit"' + (t.busy ? " disabled" : "") + ">" + (t.busy ? "Submitting…" : "Submit") + "</button></div>";
+}
+function ticketHtml() {
+  const t = state.ticket; if (!t) return "";
+  const v = tkVals();
+  return '<div id="tkWrap"><div class="tk-scrim" data-act="tkClose"></div><div class="tk" role="dialog" aria-label="' + (t.step === "review" ? "Review order" : "New order") + '">' +
+    '<div class="tk-hd"><span class="tk-title">' + (t.step === "review" ? "Review order" : "New order") + '</span><button class="tk-x" aria-label="Close" data-act="tkClose"><svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.x + '"/></svg></button></div>' +
+    (t.step === "review" ? tkReviewHtml(v) : tkFormHtml(v)) + "</div></div>";
+}
+function renderTicket() {
+  const old = document.getElementById("tkWrap");
+  if (!state.ticket) { if (old) old.remove(); return; }
+  const tmp = document.createElement("div"); tmp.innerHTML = ticketHtml();
+  if (old) old.replaceWith(tmp.firstElementChild); else document.getElementById("app").appendChild(tmp.firstElementChild);
+}
+// A new quote or a typed value: the figures move, the typed field does not.
+function tkPatch() {
+  const t = state.ticket; if (!t) return;
+  if (t.step === "review") { renderTicket(); return; }
+  const v = tkVals();
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  const setVal = (id, text) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = text; };
+  const qc = document.getElementById("tkQuote"); if (qc) qc.innerHTML = tkQuoteHtml(v);
+  if (t.text.qty == null) setVal("tk-qty", qty(v.qtyN));
+  if (t.text.amt == null) setVal("tk-amt", tkAmt(v.notional));
+  if (t.text.limit == null) setVal("tk-limit", px(v.limit));
+  if (t.text.stop == null) setVal("tk-stop", px(v.stop));
+  if (t.text.slprice == null) setVal("tk-slprice", px(v.slPrice));
+  if (t.text.sltrail == null) setVal("tk-sltrail", t.sl.unit === "pct" ? tkPlain(v.trail) : px(v.trail));
+  if (t.text.tp == null) setVal("tk-tp", px(v.tpPrice));
+  const sl = tkSlRead(v), tp = tkTpRead(v);
+  set("tk-sl-l", sl[0]); set("tk-sl-r", sl[1]); set("tk-tp-l", tp[0]); set("tk-tp-r", tp[1]);
+  const err = document.querySelector("#tkWrap .status-err");
+  if (!!err !== !!t.error) renderTicket();
+}
+function tkInputEvent(el) {
+  const t = state.ticket; if (!t) return;
+  const n = tkNum(el.value);
+  switch (el.id) {
+    case "tk-qty": t.text.qty = el.value; t.qty = n == null ? 0 : n; t.text.amt = null; break;
+    case "tk-amt": { t.text.amt = el.value; const v = tkVals(); const raw = n != null && v.entry > 0 ? n / (v.entry * v.mult) : 0; t.qty = Math.floor(raw); t.text.qty = null; break; }
+    case "tk-limit": t.text.limit = el.value; t.limit = n; break;
+    case "tk-stop": t.text.stop = el.value; t.stop = n; break;
+    case "tk-slprice": t.text.slprice = el.value; t.sl.price = n; break;
+    case "tk-sltrail": t.text.sltrail = el.value; t.sl.trail = n; break;
+    case "tk-tp": t.text.tp = el.value; t.tp.price = n; break;
+    default: return;
+  }
+  tkPatch();
+}
+function tkBlur(el) {
+  const t = state.ticket; if (!t) return;
+  const key = { "tk-qty": "qty", "tk-amt": "amt", "tk-limit": "limit", "tk-stop": "stop", "tk-slprice": "slprice", "tk-sltrail": "sltrail", "tk-tp": "tp" }[el.id];
+  if (!key) return;
+  t.text[key] = null;
+  if (key === "qty" && !(t.qty > 0)) t.qty = 1;
+  if (key === "limit" && !(t.limit > 0)) t.limit = null;
+  if (key === "stop" && !(t.stop > 0)) t.stop = null;
+  if (key === "slprice" && !(t.sl.price > 0)) t.sl.price = null;
+  if (key === "sltrail" && !(t.sl.trail > 0)) t.sl.trail = null;
+  if (key === "tp" && !(t.tp.price > 0)) t.tp.price = null;
+  const v = tkVals();
+  el.value = { qty: qty(v.qtyN), amt: tkAmt(v.notional), limit: px(v.limit), stop: px(v.stop), slprice: px(v.slPrice), sltrail: t.sl.unit === "pct" ? tkPlain(v.trail) : px(v.trail), tp: px(v.tpPrice) }[key];
+  tkPatch();
+}
+function tkChange(el) {
+  const t = state.ticket; if (!t) return;
+  switch (el.id) {
+    case "tk-account": t.accountId = el.value; renderTicket(); tkFetch(); return;
+    case "tk-type": t.type = el.value; break;
+    case "tk-tif": t.tif = el.value; break;
+    case "tk-slkind": t.sl.kind = el.value; break;
+    case "tk-slunit": t.sl.unit = el.value; t.sl.trail = null; break;
+    default: return;
+  }
+  renderTicket();
+}
+function tkNotice(v, sent) {
+  const t = state.ticket;
+  const head = sent ? "Order placed · " : "Not sent (orders are off) · ";
+  return head + (v.buy ? "Buy " : "Sell ") + qty(v.qtyN) + " " + (v.q.symbol || t.symbol) + " at " + (t.type === "MARKET" ? "market" : px(v.entry) + " " + v.typeWord.toLowerCase()) +
+    (v.slOn ? ", stop " + px(v.slPrice) : "") + (v.tpOn ? ", target " + px(v.tpPrice) : "");
+}
+function tkSubmit() {
+  const t = state.ticket; if (!t || t.busy) return;
+  const v = tkVals();
+  const body = {
+    symbol: t.symbol, securityId: (v.q.securityId || t.securityId || ""), accountId: t.accountId, side: t.side, type: t.type, tif: t.tif,
+    quantity: v.qtyN, limitPrice: t.type === "LIMIT" || t.type === "STOP_LIMIT" ? v.limit : null, stopPrice: t.type === "STOP" || t.type === "STOP_LIMIT" ? v.stop : null,
+    currency: v.q.currency || "",
+    stopLoss: v.slOn ? { kind: t.sl.kind, price: v.slPrice, trail: v.trail, trailUnit: t.sl.unit } : null,
+    takeProfit: v.tpOn ? { price: v.tpPrice } : null,
+  };
+  t.busy = true; t.submitError = ""; renderTicket();
+  api("POST", "/api/order", body).then((r) => {
+    const cur = state.ticket; if (!cur) return;
+    cur.busy = false;
+    if (!r || !r.ok) { cur.submitError = (r && r.error) || "Could not submit the order."; renderTicket(); return; }
+    state.notice = tkNotice(v, r.status === "sent"); state.noticeKind = "ok";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);   // longer than the other notices: it names the whole order
+    closeTicket();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1461,7 +1792,7 @@ function render() {
   const boxes = [...root.querySelectorAll(".scroll, .scroll-xy")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
   const focusId = document.activeElement ? document.activeElement.id : "";
   const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
-  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "");
+  root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "") + (state.ticket ? ticketHtml() : "");
   if (state.loginView) loginFrameLoop();   // a redraw makes a new image element: reattach the stream
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
@@ -1681,6 +2012,14 @@ function act(name, arg, ev) {
     case "openData": openData(); break;
     case "openTrade": openTradeModal(); break;
     case "closeModal": state.modal = null; render(); break;
+    case "tkOpen": openTicket(arg.symbol, arg.side); break;
+    case "tkClose": closeTicket(); break;
+    case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.trail = null; t.tp.price = null; t.limit = null; t.stop = null; renderTicket(); } break;
+    case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
+    case "tkTpOn": case "tkTpOff": if (state.ticket) { state.ticket.tp.on = name === "tkTpOn"; renderTicket(); } break;
+    case "tkReview": if (state.ticket) { if (!(tkVals().qtyN > 0)) { state.ticket.qty = 1; } state.ticket.step = "review"; state.ticket.submitError = ""; renderTicket(); } break;
+    case "tkBack": if (state.ticket) { state.ticket.step = "form"; state.ticket.submitError = ""; renderTicket(); } break;
+    case "tkSubmit": tkSubmit(); break;
     case "tradeSeg": readTradeForm(); state.tradeForm[arg.name] = arg.value; render(); break;
     case "saveTrade": saveTrade(); break;
     case "importCsv": importCsv(); break;
@@ -1750,6 +2089,12 @@ function bind() {
   }, { passive: false });
   document.addEventListener("keydown", (e) => {
     if (state.loginView) { loginKey(e); return; }
+    if (state.ticket) {
+      // the ticket has the keyboard: Esc closes it, Enter in a field commits the field
+      if (e.key === "Escape") { e.preventDefault(); closeTicket(); return; }
+      if (e.key === "Enter" && e.target && /^tk-/.test(e.target.id || "") && e.target.tagName === "INPUT") { e.preventDefault(); e.target.blur(); }
+      return;
+    }
     // ⌘K (Ctrl+K elsewhere): the filter popover on Symbol, search box focused
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
       e.preventDefault();
@@ -1833,6 +2178,7 @@ function bind() {
   });
   document.addEventListener("input", (e) => {
     const t = e.target;
+    if (/^tk-/.test(t.id || "")) { tkInputEvent(t); return; }
     if (t.id === "tagInput") { state.tagDraft = t.value; state.tagHi = 0; document.getElementById("tagMenu").innerHTML = tagMenuHtml(); return; }
     if (t.id === "thesis" || t.id === "posThesis") { clearTimeout(_thesisTimer); const id = t.dataset.id, v = t.value; _thesisTimer = setTimeout(() => { const o = tradeById(id) || positionById(id); if (o && o.thesis !== v) saveJournal(id, { thesis: v }, true); }, 600); return; }
     if (t.id === "rangeInput") { clearTimeout(_rangeTimer); const key = t.dataset.key, v = t.value.trim(); _rangeTimer = setTimeout(() => { state.filters.ranges[key].v = v === "" ? null : Number(v.replace(/[$,]/g, "")); if (v !== "" && isNaN(state.filters.ranges[key].v)) state.filters.ranges[key].v = null; loadModel(); }, 500); return; }
@@ -1849,10 +2195,12 @@ function bind() {
   });
   document.addEventListener("change", (e) => {
     const t = e.target;
+    if (/^tk-/.test(t.id || "")) { tkChange(t); return; }
     if (t.id === "dateFrom" || t.id === "dateTo") { state.filters[t.id === "dateFrom" ? "from" : "to"] = t.value; setFilters({ years: [], preset: "all" }); }
   });
   document.addEventListener("focusout", (e) => {
     const t = e.target;
+    if (/^tk-/.test(t.id || "") && t.tagName === "INPUT") { tkBlur(t); return; }
     if (t.id === "tagInput") {
       // a blur caused by picking a suggestion (or by the input being rebuilt) is not a commit
       if (_tagPick || !t.isConnected) return;

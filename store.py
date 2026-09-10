@@ -248,6 +248,29 @@ def _init_schema(conn):
             fetched_at TEXT NOT NULL,
             PRIMARY KEY (symbol, tf)
         );
+
+        CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            account TEXT,
+            security_id TEXT NOT NULL,
+            symbol TEXT,
+            currency TEXT,
+            side TEXT NOT NULL,
+            type TEXT NOT NULL,
+            quantity REAL NOT NULL,
+            limit_price REAL,
+            stop_price REAL,
+            tif TEXT NOT NULL,
+            stop_loss TEXT,
+            take_profit TEXT,
+            status TEXT NOT NULL,
+            ws_order_id TEXT,
+            error TEXT,
+            request TEXT,
+            updated_at TEXT
+        );
         """
     )
     _migrate_nav_history(conn)
@@ -2165,5 +2188,115 @@ def snapshot():
                 "notes": notes,
                 "securities": securities,
             }
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# orders: every ticket the app submitted, with what was sent and what came back
+# ---------------------------------------------------------------------------
+ORDER_FIELDS = ("id", "createdAt", "accountId", "account", "securityId", "symbol", "currency", "side", "type", "quantity",
+                "limitPrice", "stopPrice", "tif", "stopLoss", "takeProfit", "status", "wsOrderId", "error", "request", "updatedAt")
+
+
+def _order_from_row(r):
+    def js(v):
+        if not v:
+            return None
+        try:
+            return json.loads(v)
+        except (TypeError, ValueError):
+            return None
+    return {
+        "id": r["id"],
+        "createdAt": r["created_at"],
+        "accountId": r["account_id"],
+        "account": r["account"] or "",
+        "securityId": r["security_id"],
+        "symbol": r["symbol"] or "",
+        "currency": r["currency"] or "",
+        "side": r["side"],
+        "type": r["type"],
+        "quantity": r["quantity"],
+        "limitPrice": r["limit_price"],
+        "stopPrice": r["stop_price"],
+        "tif": r["tif"],
+        "stopLoss": js(r["stop_loss"]),
+        "takeProfit": js(r["take_profit"]),
+        "status": r["status"],
+        "wsOrderId": r["ws_order_id"] or "",
+        "error": r["error"] or "",
+        "request": js(r["request"]),
+        "updatedAt": r["updated_at"] or "",
+    }
+
+
+def insert_order(row):
+    """A new ticket, written before anything is sent."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            now = _now_iso()
+            conn.execute(
+                "INSERT INTO orders (id, created_at, account_id, account, security_id, symbol, currency, side, type, quantity, "
+                "limit_price, stop_price, tif, stop_loss, take_profit, status, ws_order_id, error, request, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    _s(row.get("id")), _s(row.get("createdAt")) or now, _s(row.get("accountId")), _s(row.get("account")),
+                    _s(row.get("securityId")), _s(row.get("symbol")), _s(row.get("currency")), _s(row.get("side")), _s(row.get("type")),
+                    _num(row.get("quantity")), _num(row.get("limitPrice"), None), _num(row.get("stopPrice"), None), _s(row.get("tif")),
+                    json.dumps(row["stopLoss"]) if row.get("stopLoss") else None, json.dumps(row["takeProfit"]) if row.get("takeProfit") else None,
+                    _s(row.get("status")), _s(row.get("wsOrderId")), _s(row.get("error")),
+                    json.dumps(row["request"], sort_keys=True) if row.get("request") else None, now,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def update_order(order_id, patch):
+    """Status, Wealthsimple's order id, or an error on an existing ticket."""
+    cols = {"status": "status", "wsOrderId": "ws_order_id", "error": "error"}
+    sets, vals = [], []
+    for k, col in cols.items():
+        if k in (patch or {}):
+            sets.append(col + " = ?")
+            vals.append(_s(patch[k]))
+    if not sets:
+        return
+    sets.append("updated_at = ?")
+    vals.append(_now_iso())
+    vals.append(_s(order_id))
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute("UPDATE orders SET " + ", ".join(sets) + " WHERE id = ?", vals)
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def list_orders(limit=200):
+    """Newest first."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            rows = conn.execute("SELECT * FROM orders ORDER BY created_at DESC, id DESC LIMIT ?", (int(limit),)).fetchall()
+            return [_order_from_row(r) for r in rows]
+        finally:
+            conn.close()
+
+
+def get_order(order_id):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            r = conn.execute("SELECT * FROM orders WHERE id = ?", (_s(order_id),)).fetchone()
+            return _order_from_row(r) if r else None
         finally:
             conn.close()
