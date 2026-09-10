@@ -206,13 +206,15 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .od-line{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .od-when{flex:none;white-space:nowrap}
 .od-fill{font-size:12.5px;color:var(--ink55)}
-.od-leg{display:flex;align-items:center;gap:7px;padding:9px 0 0;margin-top:6px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:12px}
+.od-leg{display:flex;align-items:center;gap:7px;padding:0;margin:0;font-size:12.5px}
 .od-dot{flex:none;width:6px;height:6px;border-radius:50%;background:rgba(var(--ink-rgb),.28)}
 .od-dot.on{background:var(--accent)}
 .od-leg-label{flex:none;font-weight:500}
 .od-leg-label.neg{color:var(--neg)}
 .od-leg-label.pos{color:var(--pos)}
-.od-leg-amt{margin-left:auto;flex:none;color:var(--ink);white-space:nowrap}
+.od-leg-amt{margin-left:auto;flex:none;white-space:nowrap}
+.od-leg-amt.neg{color:var(--neg)}
+.od-leg-amt.pos{color:var(--pos)}
 .od-leg-value{color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .od-leg-state{margin-left:auto;color:var(--ink55);white-space:nowrap}
 .od-leg-state + .od-leg-amt{margin-left:10px}
@@ -226,7 +228,13 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .od-remove{align-self:flex-start;font-size:11.5px;margin-top:2px}
 .od-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:9px;margin-top:4px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:13px}
 .od-foot .od-when{font-size:12.5px;color:var(--ink55)}
-.od-foot-acts{display:flex;gap:14px;margin-left:auto}
+.od-foot-acts{display:flex;gap:8px;margin-left:auto}
+.od-foot-acts .od-link{border-radius:6px;padding:4px 11px;font-size:12px;color:var(--ink);background:transparent;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.18)}
+.od-foot-acts .od-link:hover{color:var(--ink);background:rgba(var(--ink-rgb),var(--hover))}
+.od-foot-acts .od-link.neg{color:var(--neg);box-shadow:inset 0 0 0 1px rgba(var(--neg-rgb),.45)}
+.od-foot-acts .od-link.neg:hover{color:var(--neg);background:rgba(var(--neg-rgb),.14);box-shadow:inset 0 0 0 1px rgba(var(--neg-rgb),.7)}
+.od-foot-acts .od-link[disabled]{opacity:.4}
+.od-foot-acts .od-link[disabled]:hover{color:var(--ink);background:transparent}
 .od-edit{display:flex;flex-direction:column;gap:10px;padding:10px 0 2px}
 .od-edit-btns{display:flex;align-items:center;justify-content:flex-end;gap:14px}
 .od-save{padding:7px 14px}
@@ -1451,7 +1459,7 @@ function orderEditorHtml(o) {
 // the two legs of a bracket: label, level, state; no actions in a row
 function bracketLegsHtml(b) {
   return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-leg-label ' + leg.tone + '">' + esc(leg.label) + '</span><span class="od-leg-value num">' + esc(leg.line) + "</span>" +
-    (leg.note ? '<span class="od-leg-state">' + esc(leg.note) + "</span>" : "") + '<span class="od-leg-amt num">' + esc(leg.amount) + "</span></div>").join("");
+    (leg.note ? '<span class="od-leg-state">' + esc(leg.note) + "</span>" : "") + '<span class="od-leg-amt num ' + leg.tone + '">' + esc(leg.amount) + "</span></div>").join("");
 }
 // every card's foot: when, at the left; Edit and Cancel at the right while it is live, Edit dimmed where a change is not possible
 function cardFootHtml(when, live, editAct, editArg, canEdit, cancelAct, cancelArg, ended) {
