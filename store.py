@@ -249,6 +249,35 @@ def _init_schema(conn):
             PRIMARY KEY (symbol, tf)
         );
 
+        CREATE TABLE IF NOT EXISTS brackets (
+            id TEXT PRIMARY KEY,
+            order_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            security_id TEXT NOT NULL,
+            symbol TEXT,
+            currency TEXT,
+            quantity REAL,
+            tif TEXT,
+            sl_kind TEXT,
+            sl_price REAL,
+            sl_trail REAL,
+            sl_trail_unit TEXT,
+            sl_order_id TEXT,
+            sl_native INTEGER,
+            sl_mode TEXT,
+            high_water REAL,
+            tp_price REAL,
+            tp_order_id TEXT,
+            status TEXT NOT NULL,
+            outcome TEXT,
+            error TEXT,
+            attempts INTEGER,
+            moved_at TEXT,
+            armed_at TEXT,
+            updated_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS orders (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
@@ -1333,7 +1362,7 @@ def _ensure_quote_columns(conn):
 
 def _ensure_order_columns(conn):
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(orders)").fetchall()}
-    for col, typ in (("source", "TEXT"), ("ws_status", "TEXT"), ("filled_qty", "REAL"), ("avg_fill", "REAL"), ("submitted_at", "TEXT"), ("expires_at", "TEXT")):
+    for col, typ in (("source", "TEXT"), ("ws_status", "TEXT"), ("filled_qty", "REAL"), ("avg_fill", "REAL"), ("submitted_at", "TEXT"), ("expires_at", "TEXT"), ("parent_id", "TEXT"), ("role", "TEXT")):
         if col not in cols:
             conn.execute("ALTER TABLE orders ADD COLUMN %s %s" % (col, typ))
 
@@ -2242,6 +2271,8 @@ def _order_from_row(r):
         "avgFill": r["avg_fill"],
         "submittedAt": r["submitted_at"] or "",
         "expiresAt": r["expires_at"] or "",
+        "parentId": r["parent_id"] or "",
+        "role": r["role"] or "entry",
     }
 
 
@@ -2255,8 +2286,8 @@ def insert_order(row):
             conn.execute(
                 "INSERT INTO orders (id, created_at, account_id, account, security_id, symbol, currency, side, type, quantity, "
                 "limit_price, stop_price, tif, stop_loss, take_profit, status, ws_order_id, error, request, updated_at, "
-                "source, ws_status, filled_qty, avg_fill, submitted_at, expires_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "source, ws_status, filled_qty, avg_fill, submitted_at, expires_at, parent_id, role) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     _s(row.get("id")), _s(row.get("createdAt")) or now, _s(row.get("accountId")), _s(row.get("account")),
                     _s(row.get("securityId")), _s(row.get("symbol")), _s(row.get("currency")), _s(row.get("side")), _s(row.get("type")),
@@ -2265,7 +2296,7 @@ def insert_order(row):
                     _s(row.get("status")), _s(row.get("wsOrderId")), _s(row.get("error")),
                     json.dumps(row["request"], sort_keys=True) if row.get("request") else None, now,
                     _s(row.get("source")) or "bagholder", _s(row.get("wsStatus")), _num(row.get("filledQty"), None), _num(row.get("avgFill"), None),
-                    _s(row.get("submittedAt")), _s(row.get("expiresAt")),
+                    _s(row.get("submittedAt")), _s(row.get("expiresAt")), _s(row.get("parentId")), _s(row.get("role")) or "entry",
                 ),
             )
             conn.commit()
@@ -2320,5 +2351,126 @@ def get_order(order_id):
             _init_schema(conn)
             r = conn.execute("SELECT * FROM orders WHERE id = ?", (_s(order_id),)).fetchone()
             return _order_from_row(r) if r else None
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# brackets: the stop loss and take profit Bagholder watches for an order
+# ---------------------------------------------------------------------------
+def _bracket_from_row(r):
+    return {
+        "id": r["id"], "orderId": r["order_id"], "createdAt": r["created_at"], "accountId": r["account_id"], "securityId": r["security_id"],
+        "symbol": r["symbol"] or "", "currency": r["currency"] or "", "quantity": r["quantity"], "tif": r["tif"] or "DAY",
+        "slKind": r["sl_kind"] or "", "slPrice": r["sl_price"], "slTrail": r["sl_trail"], "slTrailUnit": r["sl_trail_unit"] or "pct",
+        "slOrderId": r["sl_order_id"] or "", "slNative": bool(r["sl_native"]), "slMode": r["sl_mode"] or "", "highWater": r["high_water"],
+        "tpPrice": r["tp_price"], "tpOrderId": r["tp_order_id"] or "",
+        "status": r["status"], "outcome": r["outcome"] or "", "error": r["error"] or "", "attempts": r["attempts"] or 0,
+        "movedAt": r["moved_at"] or "", "armedAt": r["armed_at"] or "", "updatedAt": r["updated_at"] or "",
+    }
+
+
+BRACKET_TEXT = {"symbol": "symbol", "currency": "currency", "tif": "tif", "slKind": "sl_kind", "slTrailUnit": "sl_trail_unit", "slOrderId": "sl_order_id",
+                "tpOrderId": "tp_order_id", "status": "status", "outcome": "outcome", "error": "error", "movedAt": "moved_at", "armedAt": "armed_at", "slMode": "sl_mode"}
+BRACKET_NUM = {"quantity": "quantity", "slPrice": "sl_price", "slTrail": "sl_trail", "highWater": "high_water", "tpPrice": "tp_price", "attempts": "attempts", "slNative": "sl_native"}
+
+
+def insert_bracket(b):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            now = _now_iso()
+            conn.execute(
+                "INSERT INTO brackets (id, order_id, created_at, account_id, security_id, symbol, currency, quantity, tif, sl_kind, sl_price, sl_trail, "
+                "sl_trail_unit, sl_order_id, sl_native, sl_mode, high_water, tp_price, tp_order_id, status, outcome, error, attempts, moved_at, armed_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (_s(b.get("id")), _s(b.get("orderId")), _s(b.get("createdAt")) or now, _s(b.get("accountId")), _s(b.get("securityId")), _s(b.get("symbol")),
+                 _s(b.get("currency")), _num(b.get("quantity"), None), _s(b.get("tif")) or "DAY", _s(b.get("slKind")), _num(b.get("slPrice"), None), _num(b.get("slTrail"), None),
+                 _s(b.get("slTrailUnit")) or "pct", _s(b.get("slOrderId")), 1 if b.get("slNative") else 0, _s(b.get("slMode")), _num(b.get("highWater"), None), _num(b.get("tpPrice"), None),
+                 _s(b.get("tpOrderId")), _s(b.get("status")) or "waiting", _s(b.get("outcome")), _s(b.get("error")), int(b.get("attempts") or 0), _s(b.get("movedAt")), _s(b.get("armedAt")), now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def update_bracket(bracket_id, patch):
+    sets, vals = [], []
+    for k, col in BRACKET_TEXT.items():
+        if k in (patch or {}):
+            sets.append(col + " = ?"); vals.append(_s(patch[k]))
+    for k, col in BRACKET_NUM.items():
+        if k in (patch or {}):
+            v = patch[k]
+            sets.append(col + " = ?"); vals.append(None if v is None else (int(bool(v)) if k == "slNative" else (int(v) if k == "attempts" else _num(v, None))))
+    if not sets:
+        return
+    sets.append("updated_at = ?"); vals.append(_now_iso()); vals.append(_s(bracket_id))
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute("UPDATE brackets SET " + ", ".join(sets) + " WHERE id = ?", vals)
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def list_brackets(statuses=None):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            if statuses:
+                marks = ",".join("?" for _ in statuses)
+                rows = conn.execute("SELECT * FROM brackets WHERE status IN (%s) ORDER BY created_at" % marks, list(statuses)).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM brackets ORDER BY created_at").fetchall()
+            return [_bracket_from_row(r) for r in rows]
+        finally:
+            conn.close()
+
+
+def get_bracket(bracket_id):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            r = conn.execute("SELECT * FROM brackets WHERE id = ?", (_s(bracket_id),)).fetchone()
+            return _bracket_from_row(r) if r else None
+        finally:
+            conn.close()
+
+
+def bracket_for_order(order_id):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            r = conn.execute("SELECT * FROM brackets WHERE order_id = ? ORDER BY created_at DESC LIMIT 1", (_s(order_id),)).fetchone()
+            return _bracket_from_row(r) if r else None
+        finally:
+            conn.close()
+
+
+def position_quantity(account_id, security_id):
+    """Wealthsimple's balance for one security in one account, as last read; None when unknown."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            r = conn.execute("SELECT SUM(quantity) AS q FROM balances WHERE account_id = ? AND security_id = ?", (_s(account_id), _s(security_id))).fetchone()
+            return None if r is None or r["q"] is None else float(r["q"])
+        finally:
+            conn.close()
+
+
+def balances_count():
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            return int(conn.execute("SELECT COUNT(*) FROM balances").fetchone()[0])
         finally:
             conn.close()

@@ -246,7 +246,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.2"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.3"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -566,6 +566,12 @@ function menuHtml() {
     "</div>";
 }
 function confirmDialogHtml() {
+  if (/^bracket:/.test(state.confirmOpen)) {
+    const id = state.confirmOpen.slice(8), b = state.orders && state.orders.brackets.find((x) => x.id === id), busy = state.busy === "cancel";
+    return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel bracket</h5>' +
+      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (b ? esc(b.symbol) + " · " + esc(orderBrackets({ id: b.orderId })) : "") + "</div>" +
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Keep bracket</button><button class="btn" data-act="cancelBracketNow" data-arg=\'' + attr({ id }) + '\' style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (busy ? "Cancelling…" : "Cancel bracket") + "</button></div></div></div>";
+  }
   if (/^cancel:/.test(state.confirmOpen)) {
     const id = state.confirmOpen.slice(7), o = state.orders && state.orders.orders.find((x) => x.id === id), busy = state.busy === "cancel";
     return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel order</h5>' +
@@ -1162,8 +1168,30 @@ function orderPrice(o) {
   return px(o.limitPrice);
 }
 function orderTypeWord(t) { return { MARKET: "Market", LIMIT: "Limit", STOP: "Stop", STOP_LIMIT: "Stop limit" }[t] || (t ? t.charAt(0) + t.slice(1).toLowerCase().replace(/_/g, " ") : "—"); }
+const BRACKET_LIVE = { waiting: 1, armed: 1, firing: 1, target_placed: 1 };
+function bracketOf(o) { return (state.orders && state.orders.brackets || []).find((b) => b.orderId === o.id) || null; }
+function bracketState(b) {
+  switch (b.status) {
+    case "waiting": return "waiting for the fill";
+    case "armed": return b.slKind ? (b.slMode === "watched" ? "armed · stop watched here" : b.slOrderId ? "armed" : "arming") : "armed";
+    case "firing": return "firing";
+    case "target_placed": return "target order placed";
+    case "done": return b.outcome === "target" ? "target hit" : "stopped";
+    case "failed": return "failed" + (b.error ? " · " + b.error : "");
+    default: return "off" + (b.outcome ? " · " + b.outcome : "");
+  }
+}
 function orderBrackets(o) {
-  const parts = [];
+  if (o.role === "stop" || o.role === "target") {
+    const entry = state.orders && state.orders.orders.find((x) => x.id === o.parentId);
+    return (o.role === "stop" ? "Stop loss for " : "Take profit for ") + (entry ? entry.symbol : o.symbol);
+  }
+  const b = bracketOf(o), parts = [];
+  if (b) {
+    if (b.slKind) parts.push((b.slKind === "trail" ? "Trail " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") + " at " : "Stop ") + px(b.slPrice));
+    if (b.tpPrice) parts.push("Target " + px(b.tpPrice));
+    return parts.join(" · ") + " · " + bracketState(b);
+  }
   if (o.stopLoss) parts.push(o.stopLoss.kind === "trail" ? "Trail " + (o.stopLoss.trailUnit === "amt" ? px(o.stopLoss.trail) : tkPlain(o.stopLoss.trail) + "%") : "Stop " + px(o.stopLoss.price));
   if (o.takeProfit) parts.push("Target " + px(o.takeProfit.price));
   return parts.length ? parts.join(" · ") : "—";
@@ -1191,9 +1219,9 @@ function orderWhen(iso) {
 function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.quantity) + " " + o.symbol + " at " + (o.type === "MARKET" ? "market" : orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase()); }
 function ordersHtml() {
   const data = state.orders;
-  const cols = [{ key: "placed", label: "Placed", width: "10.5%" }, { key: "symbol", label: "Symbol", width: "8%" }, { key: "side", label: "Side", width: "5%" }, { key: "type", label: "Type", width: "7.5%" },
-    { key: "qty", label: "Qty", align: "right", width: "6%" }, { key: "price", label: "Price", align: "right", width: "10%" }, { key: "tif", label: "Time in force", width: "8.5%" }, { key: "account", label: "Account", width: "10%" },
-    { key: "brackets", label: "Brackets", width: "15.5%" }, { key: "status", label: "Status" }, { key: "cancel", label: "", width: "64px" }];
+  const cols = [{ key: "placed", label: "Placed", width: "10.5%" }, { key: "symbol", label: "Symbol", width: "6.5%" }, { key: "side", label: "Side", width: "4.5%" }, { key: "type", label: "Type", width: "6.5%" },
+    { key: "qty", label: "Qty", align: "right", width: "5%" }, { key: "price", label: "Price", align: "right", width: "8.5%" }, { key: "tif", label: "Time in force", width: "7.5%" }, { key: "account", label: "Account", width: "8%" },
+    { key: "brackets", label: "Brackets", width: "20%" }, { key: "status", label: "Status" }, { key: "cancel", label: "", width: "112px" }];
   let body;
   if (!data && state.ordersError) body = '<tr><td colspan="11" class="status-err" style="padding:14px 6px">' + esc(state.ordersError) + "</td></tr>";
   else if (!data) body = '<tr><td colspan="11" class="dim" style="padding:14px 6px"><span class="spin"></span>Loading…</td></tr>';
@@ -1212,12 +1240,25 @@ function ordersHtml() {
       '</td><td style="text-align:right">' + qty(o.quantity) + '</td><td style="text-align:right;color:var(--ink75);white-space:nowrap">' + orderPrice(o) + '</td><td style="font-variant-numeric:normal;color:var(--ink75)">' + (o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "—") +
       '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(o.account || "—") + '</td><td style="color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(orderBrackets(o)) + '">' + orderBrackets(o) +
       '</td><td style="font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' + (o.status === "rejected" || o.status === "failed" ? ";color:var(--neg)" : ORDER_LIVE[o.status] ? ";color:var(--accent-300)" : "") + '" title="' + esc(orderStatus(o)) + '">' + esc(orderStatus(o)) +
-      '</td><td style="text-align:right">' + (ORDER_LIVE[o.status] && o.status !== "cancelling" ? '<button class="pill" style="padding:2px 9px;width:auto;font-size:11px" data-act="cancelOrder" data-arg=\'' + attr({ id: o.id }) + "'>Cancel</button>" : "") + "</td></tr>").join("")
+      '</td><td style="text-align:right">' + (ORDER_LIVE[o.status] && o.status !== "cancelling" ? '<button class="pill" style="padding:2px 9px;width:auto;font-size:11px" data-act="cancelOrder" data-arg=\'' + attr({ id: o.id }) + "'>Cancel</button>"
+        : (() => { const b = bracketOf(o); return b && BRACKET_LIVE[b.status] && b.status !== "waiting" ? '<button class="pill" style="padding:2px 9px;width:auto;font-size:11px;white-space:nowrap" data-act="cancelBracket" data-arg=\'' + attr({ id: b.id }) + "'>Cancel bracket</button>" : ""; })()) + "</td></tr>").join("")
       : '<tr><td colspan="11" class="dim" style="padding:14px 6px">No orders yet.</td></tr>';
   }
   return '<div class="card elev-sm" style="padding:16px 18px"><div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px"><h5>Orders</h5>' +
     (data && !data.live ? '<span class="muted" style="font-size:11px">orders are off</span>' : "") + (data && data.refreshedAt ? '<span class="muted" style="font-size:11px;margin-left:auto">checked ' + esc(relTime(data.refreshedAt)) + "</span>" : "") + "</div>" +
     '<div class="scroll-xy"><table class="table" style="min-width:1100px;width:100%;table-layout:fixed;font-size:12px"><thead><tr>' + th("orders", cols) + "</tr></thead><tbody>" + body + "</tbody></table></div></div>";
+}
+function cancelBracketNow(id) {
+  const b = state.orders && state.orders.brackets.find((x) => x.id === id);
+  state.busy = "cancel"; render();
+  api("POST", "/api/bracket/cancel", { id }).then((r) => {
+    state.busy = ""; state.confirmOpen = "";
+    state.notice = r && r.ok ? "Bracket cancelled · " + (b ? b.symbol : "") : (r && r.error) || "Could not cancel the bracket.";
+    state.noticeKind = r && r.ok ? "ok" : "err";
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, r && r.ok ? 10000 : 6000);
+    render();
+    loadOrders();
+  });
 }
 function cancelOrderNow(id) {
   const o = state.orders && state.orders.orders.find((x) => x.id === id);
@@ -2125,6 +2166,8 @@ function act(name, arg, ev) {
     case "tkOpen": openTicket(arg.symbol, arg.side); break;
     case "cancelOrder": state.confirmOpen = "cancel:" + arg.id; render(); break;
     case "cancelOrderNow": cancelOrderNow(arg.id); break;
+    case "cancelBracket": state.confirmOpen = "bracket:" + arg.id; render(); break;
+    case "cancelBracketNow": cancelBracketNow(arg.id); break;
     case "tkClose": closeTicket(); break;
     case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.trail = null; t.tp.price = null; t.limit = null; t.stop = null; renderTicket(); } break;
     case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
