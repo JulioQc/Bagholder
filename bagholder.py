@@ -4329,6 +4329,7 @@ def orders_payload(kick=False):
 BRACKET_POLL_SEC = 5
 BRACKET_MAX_ATTEMPTS = 5        # a rejected exit is tried this many times, spaced out, then the bracket fails loudly
 BRACKET_RETRY_SEC = (60, 300, 900, 3600)   # the wait before the second, third, fourth and fifth attempt
+POSITION_GONE_MIN_SEC = 600     # a position is never read as sold elsewhere within ten minutes of arming
 TRAIL_MIN_MOVE = 0.005          # a trailing stop moves only when it would rise by half a percent of its level: each move is a cancel and a new order
 BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed")
 _bracket_lock = threading.Lock()
@@ -4535,10 +4536,20 @@ def _reconcile_step(b, entry):
         sys.stderr.write("bagholder bracket: %s for %s: target order %s; arming again\n" % (b["id"], b["symbol"], tp_row["status"]))
         return "rearm"
     if b["status"] in ("armed", "firing", "target_placed") and b.get("armedAt"):
+        # Wealthsimple's balances lag a fill by minutes: a position counts as gone only
+        # once a read has shown it held, and never within ten minutes of arming
         read_at = store.get_meta("balances_read_at", "")
         if read_at and read_at > b["armedAt"]:
             held = store.position_quantity(b["accountId"], b["securityId"])
-            if (held is None and store.balances_count()) or (held is not None and held <= 0):
+            if held is not None and held > 0 and not b.get("seenHeld"):
+                store.update_bracket(b["id"], {"seenHeld": True})
+                b = dict(b, seenHeld=True)
+            try:
+                armed_for = (datetime.now(timezone.utc) - datetime.strptime(b["armedAt"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds()
+            except ValueError:
+                armed_for = 0
+            gone = (held is None and store.balances_count()) or (held is not None and held <= 0)
+            if gone and b.get("seenHeld") and armed_for >= POSITION_GONE_MIN_SEC:
                 _cancel_exit(b.get("slOrderId")); _cancel_exit(b.get("tpOrderId"))
                 store.update_bracket(b["id"], {"status": "cancelled", "outcome": "position closed elsewhere"})
                 sys.stderr.write("bagholder bracket: %s for %s off: the position is gone\n" % (b["id"], b["symbol"]))

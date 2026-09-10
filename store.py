@@ -275,6 +275,7 @@ def _init_schema(conn):
             attempts INTEGER,
             moved_at TEXT,
             armed_at TEXT,
+            seen_held INTEGER,
             updated_at TEXT
         );
 
@@ -1365,6 +1366,10 @@ def _ensure_order_columns(conn):
     for col, typ in (("source", "TEXT"), ("ws_status", "TEXT"), ("filled_qty", "REAL"), ("avg_fill", "REAL"), ("submitted_at", "TEXT"), ("expires_at", "TEXT"), ("parent_id", "TEXT"), ("role", "TEXT")):
         if col not in cols:
             conn.execute("ALTER TABLE orders ADD COLUMN %s %s" % (col, typ))
+    bcols = {r["name"] for r in conn.execute("PRAGMA table_info(brackets)").fetchall()}
+    for col, typ in (("seen_held", "INTEGER"),):
+        if col not in bcols:
+            conn.execute("ALTER TABLE brackets ADD COLUMN %s %s" % (col, typ))
 
 
 def _migrate_spy_meta(conn):
@@ -2366,13 +2371,13 @@ def _bracket_from_row(r):
         "slOrderId": r["sl_order_id"] or "", "slNative": bool(r["sl_native"]), "slMode": r["sl_mode"] or "", "highWater": r["high_water"],
         "tpPrice": r["tp_price"], "tpOrderId": r["tp_order_id"] or "",
         "status": r["status"], "outcome": r["outcome"] or "", "error": r["error"] or "", "attempts": r["attempts"] or 0,
-        "movedAt": r["moved_at"] or "", "armedAt": r["armed_at"] or "", "updatedAt": r["updated_at"] or "",
+        "movedAt": r["moved_at"] or "", "armedAt": r["armed_at"] or "", "seenHeld": bool(r["seen_held"]), "updatedAt": r["updated_at"] or "",
     }
 
 
 BRACKET_TEXT = {"symbol": "symbol", "currency": "currency", "tif": "tif", "slKind": "sl_kind", "slTrailUnit": "sl_trail_unit", "slOrderId": "sl_order_id",
                 "tpOrderId": "tp_order_id", "status": "status", "outcome": "outcome", "error": "error", "movedAt": "moved_at", "armedAt": "armed_at", "slMode": "sl_mode"}
-BRACKET_NUM = {"quantity": "quantity", "slPrice": "sl_price", "slTrail": "sl_trail", "highWater": "high_water", "tpPrice": "tp_price", "attempts": "attempts", "slNative": "sl_native"}
+BRACKET_NUM = {"quantity": "quantity", "slPrice": "sl_price", "slTrail": "sl_trail", "highWater": "high_water", "tpPrice": "tp_price", "attempts": "attempts", "slNative": "sl_native", "seenHeld": "seen_held"}
 
 
 def insert_bracket(b):
@@ -2403,7 +2408,7 @@ def update_bracket(bracket_id, patch):
     for k, col in BRACKET_NUM.items():
         if k in (patch or {}):
             v = patch[k]
-            sets.append(col + " = ?"); vals.append(None if v is None else (int(bool(v)) if k == "slNative" else (int(v) if k == "attempts" else _num(v, None))))
+            sets.append(col + " = ?"); vals.append(None if v is None else (int(bool(v)) if k in ("slNative", "seenHeld") else (int(v) if k == "attempts" else _num(v, None))))
     if not sets:
         return
     sets.append("updated_at = ?"); vals.append(_now_iso()); vals.append(_s(bracket_id))
