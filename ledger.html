@@ -88,7 +88,7 @@ textarea.input{resize:none;line-height:1.5}
 .chip .cv:hover{background:var(--accent-900)}
 .chip .cx{cursor:pointer;border:0;font:400 12px Inter,system-ui,sans-serif;padding:3px 7px;background:transparent;color:var(--ink60);line-height:1.4}
 .chip .cx:hover{background:rgba(var(--neg-rgb),.3)}
-.pop{position:absolute;top:42px;right:0;z-index:7;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
+.pop{position:absolute;top:42px;right:0;z-index:30;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
 .pop-row{cursor:pointer;border:0;display:flex;align-items:center;gap:8px;text-align:left;font:400 12.5px Inter,system-ui,sans-serif;padding:6px 7px 6px 10px;border-radius:5px;background:transparent;color:rgba(var(--ink-rgb),.85);width:100%}
 .pop-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
 .pop-row.on{background:var(--accent-900);color:var(--accent-300);box-shadow:inset 3px 0 0 var(--chip-fg)}
@@ -188,6 +188,12 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .od-seg.on{background:rgba(var(--accent-rgb),.16);color:var(--ink)}
 .od-list{display:flex;flex-direction:column;gap:12px}
 .od-group{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55);margin-top:2px}
+.od-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.od-scope{font-size:11px;color:var(--ink55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.od-value{flex:none;font-size:13px;color:var(--ink)}
+.od-state{flex:none;color:var(--ink55)}
+.od-state.neg{color:var(--neg)}
+.od-leg-text{color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .od-card{padding:14px 16px 12px;border-radius:10px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.08);display:flex;flex-direction:column;gap:6px}
 .od-row1{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .od-title{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -263,7 +269,7 @@ const state = {
   orders: null,
   ordersError: "",
   ordersOpen: false,
-  ordersTab: "open",
+  ordersTab: "pending",
   orderEdit: null,
   bracketEdit: null,
   menuOpen: false,
@@ -613,7 +619,7 @@ function confirmDialogHtml() {
   if (/^bracket:/.test(state.confirmOpen)) {
     const id = state.confirmOpen.slice(8), b = (state.orders && state.orders.brackets || []).find((x) => x.id === id), busy = state.busy === "cancel";
     return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel bracket</h5>' +
-      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (b ? esc(qty(b.quantity) + " " + b.symbol) + " · " + bracketLegs(b).map((l) => esc(l.label + " " + l.value)).join(" · ") : "") + "</div>" +
+      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (b ? esc(b.symbol) + " · " + bracketLegs(b).map((l) => esc(l.text)).join(" · ") : "") + "</div>" +
       '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Keep bracket</button><button class="btn" data-act="cancelBracketNow" data-arg=\'' + attr({ id }) + '\' style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (busy ? "Cancelling…" : "Cancel bracket") + "</button></div></div></div>";
   }
   if (/^cancel:/.test(state.confirmOpen)) {
@@ -1239,11 +1245,11 @@ function bracketOf(o) { return (state.orders && state.orders.brackets || []).fin
 function orderById(id) { return (state.orders && state.orders.orders || []).find((x) => x.id === id) || null; }
 function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.quantity) + " " + o.symbol + " at " + (o.type === "MARKET" ? "market" : orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase()); }
 // `Limit 165.40 · Day · Trading (Margin)`; a filled order names its fill instead of its type
+// `Limit 165.40 · Day`; a filled order names its fill instead. The account is the panel's heading, not the card's.
 function orderDetailLine(o) {
-  const acct = o.account || "—";
-  if (o.status === "filled" && o.avgFill) return "Filled " + px(o.avgFill) + " · " + acct;
+  if (o.status === "filled" && o.avgFill) return "Filled at " + px(o.avgFill);
   const tif = o.tif === "DAY" ? "Day" : o.tif === "UNTIL_CANCEL" ? "GTC" : "";
-  return orderTypeWord(o.type) + (o.type === "MARKET" ? "" : " " + orderPrice(o)) + (tif ? " · " + tif : "") + " · " + acct;
+  return orderTypeWord(o.type) + (o.type === "MARKET" ? "" : " " + orderPrice(o)) + (tif ? " · " + tif : "");
 }
 function orderFillLine(o) {
   const filled = o.filledQty || 0;
@@ -1281,15 +1287,15 @@ function bracketLegs(b) {
   const stopOrder = b.slOrderId ? orderById(b.slOrderId) : null, tpOrder = b.tpOrderId ? orderById(b.tpOrderId) : null;
   const done = b.status === "done", off = b.status === "cancelled" || b.status === "failed";
   if (b.slKind) {
-    const value = b.slKind === "trail" ? "Trail " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") + " · " + px(b.slPrice) : "Market at " + px(b.slPrice);
+    const text = "Stop loss at " + px(b.slPrice) + (b.slKind === "trail" ? " · trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") : "");
     let st = "Waiting for fill", on = false;
     if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
     else if (b.status === "target_placed") st = "Cancelled";
     else if (done) { st = b.outcome === "stopped" ? "Filled" : "Cancelled"; on = b.outcome === "stopped"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
-    legs.push({ key: "sl", label: "Stop loss", value, state: st, on });
+    legs.push({ key: "sl", text, state: st, on });
   } else if (b.error && /^stop /.test(b.error) && !done) {
-    legs.push({ key: "sl", label: "Stop loss", value: "—", state: "Cancelled", on: false });
+    legs.push({ key: "sl", text: "Stop loss", state: "Cancelled", on: false });
   }
   if (b.tpPrice) {
     let st = "Waiting for fill", on = false;
@@ -1297,7 +1303,7 @@ function bracketLegs(b) {
     else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : "At Wealthsimple"; }
     else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
-    legs.push({ key: "tp", label: "Take profit", value: "Limit at " + px(b.tpPrice), state: st, on });
+    legs.push({ key: "tp", text: "Take profit at " + px(b.tpPrice), state: st, on });
   }
   return legs;
 }
@@ -1326,30 +1332,26 @@ function orderEditorHtml(o) {
 }
 // the two legs of a bracket: label, level, state; no actions in a row
 function bracketLegsHtml(b) {
-  return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-label">' + leg.label + '</span><span class="od-leg-value num">' + esc(leg.value) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span></div>").join("");
+  return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-text num">' + esc(leg.text) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span></div>").join("");
 }
 // every card's foot: when, at the left; Edit and Cancel at the right while it is live, Edit dimmed where a change is not possible
 function cardFootHtml(when, live, editAct, editArg, canEdit, cancelAct, cancelArg) {
   return '<div class="od-foot"><span class="od-when">' + esc(when) + "</span>" +
     (live ? '<span class="od-foot-acts"><button class="od-link" data-act="' + editAct + '" data-arg=\'' + attr(editArg) + "'" + (canEdit ? "" : " disabled") + '>Edit</button><button class="od-link muted" data-act="' + cancelAct + '" data-arg=\'' + attr(cancelArg) + "'>Cancel</button></span>" : "") + "</div>";
 }
-function bracketPill(b) {
-  switch (b.status) {
-    case "armed": return ["Armed", "accent"];
-    case "firing": return ["Firing", "accent"];
-    case "target_placed": return ["Target placed", "accent"];
-    case "waiting": return ["Waiting for fill", "accent"];
-    default: return [b.status, ""];
-  }
-}
-// an armed bracket is a card of its own under Open: the position it protects, its legs, the same foot as every card
+// the accounts in scope, from the page's filter
+function ordersScope() { return (state.filters && state.filters.lists && state.filters.lists.account) || []; }
+function inOrdersScope(account) { const s = ordersScope(); return !s.length || s.indexOf(account) >= 0; }
+function ordersScopeLabel() { const s = ordersScope(); return s.length ? s.join(", ") : "All Accounts"; }
+// an armed bracket is a card of its own under Pending: the position it protects, its legs, the same foot as every card
 function bracketCardHtml(b) {
-  const entry = orderById(b.orderId), pill = bracketPill(b);
-  const detail = (entry && entry.avgFill ? "Bought " + px(entry.avgFill) : "Bought") + " · " + esc((entry && entry.account) || "—");
+  const entry = orderById(b.orderId);
+  const title = "Bracket " + ((entry && entry.exchange) ? esc(entry.exchange) + ": " : "") + esc(b.symbol);
+  const detail = entry && entry.avgFill ? "Bought " + esc(qty(b.quantity)) + " at " + px(entry.avgFill) : "Bought " + esc(qty(b.quantity));
   const value = entry && entry.avgFill ? money(b.quantity * entry.avgFill * orderMultiplier(entry), "", 2) : "";
   const editing = state.bracketEdit && state.bracketEdit.id === b.id;
-  return '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:var(--accent-300)">Bracket</span> ' + esc(qty(b.quantity)) + " " + esc(b.symbol) + '</span><span class="od-pill ' + pill[1] + '">' + esc(pill[0]) + "</span></div>" +
-    '<div class="od-row2"><span class="od-line">' + detail + '</span><span class="od-when num">' + value + "</span></div>" +
+  return '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:var(--accent-300)">Bracket</span> ' + title.slice(8) + '</span><span class="od-value num">' + value + "</span></div>" +
+    '<div class="od-row2"><span class="od-line">' + detail + "</span></div>" +
     bracketLegsHtml(b) + (editing ? bracketEditorHtml(b) : "") +
     cardFootHtml(orderWhenWord(b.armedAt || b.createdAt), BRACKET_LIVE[b.status] && !editing, "bracketEdit", { id: b.id }, true, "cancelBracket", { id: b.id }) + "</div>";
 }
@@ -1358,7 +1360,7 @@ function cancelBracketNow(id) {
   state.busy = "cancel"; render();
   api("POST", "/api/bracket/cancel", { id }).then((r) => {
     state.busy = ""; state.confirmOpen = "";
-    state.notice = r && r.ok ? "Bracket cancelled · " + (b ? qty(b.quantity) + " " + b.symbol : "") : (r && r.error) || "Could not cancel the bracket.";
+    state.notice = r && r.ok ? "Bracket cancelled · " + (b ? b.symbol : "") : (r && r.error) || "Could not cancel the bracket.";
     state.noticeKind = r && r.ok ? "ok" : "err";
     setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, r && r.ok ? 10000 : 6000);
     render();
@@ -1366,13 +1368,14 @@ function cancelBracketNow(id) {
   });
 }
 function orderCardHtml(o) {
-  const pill = orderPill(o);
   const fill = orderFillLine(o);
   const live = ORDER_LIVE[o.status] && o.status !== "cancelling";
   const canEdit = live && o.type !== "STOP";   // Wealthsimple's modify has no stop price
   const editing = state.orderEdit && state.orderEdit.id === o.id;
-  let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + esc(qty(o.quantity)) + " " + esc(o.symbol) + '</span><span class="od-pill ' + pill[1] + '">' + esc(pill[0]) + "</span></div>" +
-    '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + '</span><span class="od-when num">' + esc(orderValue(o)) + "</span></div>" +
+  // the tab already says pending or filled; only the ended tab has states worth a word
+  const ended = state.ordersTab === "cancelled" ? orderPill(o) : null;
+  let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + esc(qty(o.quantity)) + " " + esc(o.symbol) + '</span><span class="od-value num">' + esc(orderValue(o)) + "</span></div>" +
+    '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + "</span>" + (ended ? '<span class="od-state' + (ended[1] === "neg" ? " neg" : "") + '">' + esc(ended[0]) + "</span>" : "") + "</div>" +
     (fill ? '<div class="od-fill">' + esc(fill) + "</div>" : "");
   // a bracket still waiting for this order's fill shows on the order; once armed it is a card of its own
   const waiting = live ? bracketOf(o) : null;
@@ -1394,8 +1397,9 @@ function ordersBodyHtml() {
   const data = state.orders;
   if (!data && state.ordersError) return '<div class="status-err" style="font-size:12px">' + esc(state.ordersError) + "</div>";
   if (!data) return '<div class="dim" style="font-size:12px"><span class="spin"></span>Loading…</div>';
-  const entries = data.orders.filter((o) => o.role !== "stop" && o.role !== "target");
+  const entries = data.orders.filter((o) => o.role !== "stop" && o.role !== "target" && inOrdersScope(o.account));
   const newest = (a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0);
+  const head = (label) => '<div class="od-head"><span class="od-group">' + label + '</span><span class="od-scope">' + esc(ordersScopeLabel()) + "</span></div>";
   const group = (label, rows) => rows.length ? '<div class="od-group">' + label + "</div>" + rows.map(orderCardHtml).join("") : "";
   const tab = state.ordersTab;
   if (tab === "filled") {
@@ -1403,23 +1407,24 @@ function ordersBodyHtml() {
     const today = new Date().toDateString();
     const isToday = (o) => new Date(Date.parse(o.createdAt)).toDateString() === today;
     const out = group("Today", rows.filter(isToday)) + group("Earlier", rows.filter((o) => !isToday(o)));
-    return out || '<div class="dim" style="font-size:12px">Nothing filled yet.</div>';
+    return head("Filled orders") + (out || '<div class="dim" style="font-size:12px">Nothing filled yet.</div>');
   }
   if (tab === "cancelled") {
     const rows = entries.filter((o) => ["cancelled", "expired", "rejected", "failed", "dry"].indexOf(o.status) >= 0).sort(newest);
-    return group("Cancelled and rejected", rows) || '<div class="dim" style="font-size:12px">Nothing cancelled or rejected.</div>';
+    return head("Cancelled and rejected") + (rows.length ? rows.map(orderCardHtml).join("") : '<div class="dim" style="font-size:12px">Nothing cancelled or rejected.</div>');
   }
-  // Open: the orders resting at Wealthsimple, and each live bracket as a card of its own, newest first together
+  // Pending: the orders resting at Wealthsimple, and each armed bracket as a card of its own, newest first together
   const cards = entries.filter((o) => ORDER_LIVE[o.status]).map((o) => ({ at: o.createdAt, html: orderCardHtml(o) }))
-    .concat((data.brackets || []).filter((b) => BRACKET_LIVE[b.status] && b.status !== "waiting").map((b) => ({ at: b.armedAt || b.createdAt, html: bracketCardHtml(b) })))
+    .concat((data.brackets || []).filter((b) => BRACKET_LIVE[b.status] && b.status !== "waiting" && (() => { const e = orderById(b.orderId); return !e || inOrdersScope(e.account); })()).map((b) => ({ at: b.armedAt || b.createdAt, html: bracketCardHtml(b) })))
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-  return cards.length ? '<div class="od-group">Open</div>' + cards.map((c) => c.html).join("") : '<div class="dim" style="font-size:12px">No open orders.</div>';
+  return head("Pending orders") + (cards.length ? cards.map((c) => c.html).join("") : '<div class="dim" style="font-size:12px">No pending orders.</div>');
 }
+const ORDERS_TABS = ["pending", "filled", "cancelled"];
 function ordersPanelHtml() {
   const seg = (id, label) => '<button class="od-seg' + (state.ordersTab === id ? " on" : "") + '" data-act="ordersTab" data-arg=\'' + attr({ tab: id }) + "'>" + label + "</button>";
   return '<div id="odWrap"><div class="tk-scrim" data-act="ordersClose"></div><div class="tk" role="dialog" aria-label="Orders">' +
     '<div class="tk-hd"><span class="tk-title">Orders</span><button class="tk-x" aria-label="Close" data-act="ordersClose"><svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.x + '"/></svg></button></div>' +
-    '<div class="tk-body" style="gap:16px"><div class="od-segs">' + seg("open", "Open") + seg("filled", "Filled") + seg("cancelled", "Cancelled") + "</div>" +
+    '<div class="tk-body" style="gap:16px"><div class="od-segs">' + seg("pending", "Pending") + seg("filled", "Filled") + seg("cancelled", "Cancelled") + "</div>" +
     '<div id="odBody" class="od-list">' + ordersBodyHtml() + "</div></div></div></div>";
 }
 function renderOrders() {
@@ -1466,7 +1471,7 @@ function bracketEditSave(id) {
   const run = (i) => {
     if (i >= calls.length) {
       state.busy = ""; state.bracketEdit = null;
-      state.notice = "Bracket changed · " + qty(b.quantity) + " " + b.symbol; state.noticeKind = "ok";
+      state.notice = "Bracket changed · " + b.symbol; state.noticeKind = "ok";
       setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
       renderHeaderOnly(); loadOrders(); return;
     }
@@ -1484,7 +1489,7 @@ function bracketRemove(id, leg) {
     state.busy = "";
     if (!r || !r.ok) { if (state.bracketEdit) state.bracketEdit.error = (r && r.error) || "Could not remove the leg."; renderOrders(); return; }
     state.bracketEdit = null;
-    state.notice = (leg === "sl" ? "Stop loss removed · " : "Take profit removed · ") + qty(b.quantity) + " " + b.symbol; state.noticeKind = "ok";
+    state.notice = (leg === "sl" ? "Stop loss removed · " : "Take profit removed · ") + b.symbol; state.noticeKind = "ok";
     setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);
     renderHeaderOnly();
     loadOrders();
@@ -2495,9 +2500,15 @@ function bind() {
       if (state.ordersOpen) closeOrders(); else openOrders();
       return;
     }
-    if (state.ordersOpen && !state.confirmOpen) {
-      // the orders panel has the keyboard: Esc closes an editor, then the panel; Enter saves an editor
+    if (state.ordersOpen && !state.confirmOpen && !state.picker && !((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k")) {
+      // the orders panel has the keyboard (⌘K and an open filter popover pass through): Esc closes an
+      // editor, then the panel; Enter saves an editor; Left and Right move between its tabs
       if (e.key === "Escape") { e.preventDefault(); if (state.orderEdit || state.bracketEdit) { state.orderEdit = null; state.bracketEdit = null; renderOrders(); } else closeOrders(); return; }
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.metaKey && !e.ctrlKey && !e.altKey && !(e.target && ["INPUT", "TEXTAREA", "SELECT"].indexOf(e.target.tagName) >= 0)) {
+        const j = ORDERS_TABS.indexOf(state.ordersTab) + (e.key === "ArrowRight" ? 1 : -1);
+        if (j >= 0 && j < ORDERS_TABS.length) { e.preventDefault(); state.ordersTab = ORDERS_TABS[j]; state.orderEdit = null; state.bracketEdit = null; renderOrders(); }
+        return;
+      }
       if (e.key === "Enter" && e.target && /^od-/.test(e.target.id || "")) { e.preventDefault(); if (state.orderEdit) orderEditSave(state.orderEdit.id); else if (state.bracketEdit) bracketEditSave(state.bracketEdit.id); }
       return;
     }

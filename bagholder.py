@@ -4320,7 +4320,11 @@ def cancel_order(order_id):
 def orders_payload(kick=False):
     if kick:
         kick_orders_refresh()
-    return {"ok": True, "orders": store.list_orders(), "brackets": store.list_brackets(), "live": ORDERS_LIVE, "refreshedAt": _orders_refreshed_at}
+    exchanges = {s["id"]: s.get("primaryExchange") or "" for s in store.list_securities()}
+    orders = store.list_orders()
+    for o in orders:
+        o["exchange"] = exchanges.get(o.get("securityId") or "", "")
+    return {"ok": True, "orders": orders, "brackets": store.list_brackets(), "live": ORDERS_LIVE, "refreshedAt": _orders_refreshed_at}
 
 
 # ---------------------------------------------------------------------------
