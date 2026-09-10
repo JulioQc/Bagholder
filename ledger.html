@@ -2602,12 +2602,11 @@ function bind() {
     if (t.id === "rangeInput") { clearTimeout(_rangeTimer); const key = t.dataset.key, v = t.value.trim(); _rangeTimer = setTimeout(() => { state.filters.ranges[key].v = v === "" ? null : Number(v.replace(/[$,]/g, "")); if (v !== "" && isNaN(state.filters.ranges[key].v)) state.filters.ranges[key].v = null; loadModel(); }, 500); return; }
     if (t.id === "valueQuery") { state.valueQuery = t.value; state.valueHi = 0; const active = FIELDS.find((x) => x.key === state.picker); const box = document.getElementById("popValues"); if (active && box) box.innerHTML = popValuesHtml(active); return; }
     if (t.id === "searchInput") {
-      // typed text lists matching values first; only when nothing matches does it become the free-text search
+      // typed text only lists matching values; nothing filters until a value is chosen or Enter
+      // makes the text the free-text search
       clearTimeout(_rangeTimer);
       const v = t.value; state.fieldQuery = v; state.valueHi = 0;
       const body = document.getElementById("popFieldsBody"); if (body) body.innerHTML = popFieldsBodyHtml();
-      if (!fieldMatches(v).length) _rangeTimer = setTimeout(() => { if (state.filters.search !== v.trim()) { state.filters.search = v.trim(); state.sel = null; loadModel(); } }, 400);
-      else if (state.filters.search) { state.filters.search = ""; state.sel = null; loadModel(); }
       return;
     }
   });
