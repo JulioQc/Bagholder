@@ -4286,6 +4286,23 @@ def place_order(body):
     row, req, error = order_request(body)
     if error:
         return {"ok": False, "error": error}
+    if row.get("side") == "SELL":
+        # A position's shares are all held by the one order resting on them. A bracket's
+        # exit on these shares is cancelled, and confirmed gone, before the sell goes out.
+        # Selling part of them: the bracket keeps the rest and places its stop on them again.
+        left = _num(row.get("quantity"), 0.0) or 0.0
+        for b in store.list_brackets(BRACKET_LIVE):
+            if b["accountId"] != row.get("accountId") or b["securityId"] != row.get("securityId") or b["status"] in ("waiting", "closing"):
+                continue
+            held = _num(b.get("quantity"), 0.0) or 0.0
+            if left >= held:
+                _end_bracket(b, "sold from the ticket")
+                _await_cancels(b)
+                left -= held
+            elif left > 0:
+                _release_shares(b, left)
+                _await_cancels(b)
+                left = 0.0
     r = submit_order(row, req)
     if r.get("ok") and (row.get("stopLoss") or row.get("takeProfit")):
         b = create_bracket(row)
@@ -4443,7 +4460,8 @@ def refresh_orders(only_id=""):
             patch = {k: upd[k] for k in ("wsStatus", "status", "filledQty", "avgFill", "submittedAt", "expiresAt") if upd.get(k) is not None}
             if upd.get("error"):
                 patch["error"] = upd["error"]
-            if o.get("source") == "wealthsimple":
+            if o.get("source") == "wealthsimple" or o.get("role") in ("stop", "target"):
+                # a feed row learns its terms; a bracket's own exit learns a change made by hand
                 for k in ("tif", "quantity", "limitPrice", "stopPrice", "currency"):
                     if upd.get(k) not in (None, ""):
                         patch[k] = upd[k]
@@ -4543,7 +4561,9 @@ def orders_payload(kick=False):
 BRACKET_POLL_SEC = 5
 BRACKET_RETRY_SEC = (60, 300, 900, 3600)   # the wait after a refused placement: a minute, five, fifteen, then every hour
 TRAIL_MIN_MOVE = 0.005          # a trailing stop moves only when it would rise by half a percent of its level: each move is a cancel and a new order
-BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed")
+BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed", "closing")
+BRACKET_RESTING = ("sent", "pending")            # an exit order Wealthsimple holds
+BRACKET_INFLIGHT = ("sent", "pending", "cancelling")   # ... or is still deciding about
 # Wealthsimple ends a good-till-cancelled order ninety days after it is placed and reports
 # the moment with the order. A resting exit this close to it is placed again before it:
 # outside the regular session when there is time, in any session in the last two days.
@@ -4558,6 +4578,34 @@ _bracket_said = set()   # dry-run lines already printed, so the terminal is not 
 # stop that lapsed at the close would leave the position unprotected overnight.
 # Wealthsimple keeps such an order ninety days; the engine places it again at that boundary.
 BRACKET_TIF = "UNTIL_CANCEL"
+
+
+def _release_shares(b, sold):
+    """Part of a bracket's shares are being sold from the ticket: its resting exit is
+    cancelled (it held them all), the bracket keeps the rest, armed, and the arm step
+    places a stop on the remainder once the cancel is confirmed."""
+    remaining = round((_num(b.get("quantity"), 0.0) or 0.0) - sold, 6)
+    for oid in (b.get("slOrderId"), b.get("tpOrderId")):
+        err = _cancel_exit(oid)
+        if err:
+            sys.stderr.write("bagholder bracket: %s for %s: cancel of %s refused: %s\n" % (b["id"], b["symbol"], oid, err))
+    store.update_bracket(b["id"], {"quantity": remaining, "slOrderId": "", "tpOrderId": "", "status": "armed", "error": "", "attempts": 0})
+    sys.stderr.write("bagholder bracket: %s for %s: %s of its shares sold from the ticket; the stop is placed again on the %s left\n" % (b["id"], b["symbol"], qty_text(sold), qty_text(remaining)))
+
+
+def _await_cancels(b, seconds=8):
+    """Wait, up to a few seconds, for Wealthsimple to confirm the cancel of the bracket's
+    resting exits, reading them back each second; the ticket's sell follows either way
+    (Wealthsimple refuses it itself while an order still holds the shares)."""
+    if not ORDERS_LIVE:
+        return
+    for _ in range(seconds):
+        open_rows = [o for o in _own_exit_rows(b) if o["status"] in BRACKET_INFLIGHT]
+        if not open_rows:
+            return
+        for o in open_rows:
+            refresh_orders(only_id=o["id"])
+        time.sleep(1)
 
 
 def create_bracket(order_row):
@@ -4732,6 +4780,91 @@ def _stop_allowed(security_id):
     return ok
 
 
+def _own_exit_rows(b):
+    """Every exit order the bracket ever placed, newest first."""
+    return [o for o in store.list_orders() if o.get("parentId") == b["orderId"] and o.get("role") in ("stop", "target")]
+
+
+def _end_bracket(b, outcome, note=""):
+    """The bracket is over: every exit of its own still resting at Wealthsimple is
+    cancelled, and the bracket reads closing until Wealthsimple confirms each cancel,
+    then done. Nothing of the bracket's may outlive the position."""
+    pending = False
+    for o in _own_exit_rows(b):
+        if o["status"] in BRACKET_RESTING:
+            err = _cancel_exit(o["id"])
+            if err:
+                sys.stderr.write("bagholder bracket: %s for %s: cancel of %s refused: %s; tried again on the next check\n" % (b["id"], b["symbol"], o["id"], err))
+            pending = True
+        elif o["status"] == "cancelling":
+            pending = True
+    status = "closing" if pending else "done"
+    store.update_bracket(b["id"], {"status": status, "outcome": outcome, "error": note, "slOrderId": "", "tpOrderId": ""})
+    sys.stderr.write("bagholder bracket: %s for %s: %s%s\n" % (b["id"], b["symbol"], outcome, "; its resting exit is being cancelled" if pending else ""))
+    return status
+
+
+def _closing_step(b):
+    """Closing: a cancel that was refused is sent again; once nothing of the bracket's
+    rests at Wealthsimple, done."""
+    open_rows = [o for o in _own_exit_rows(b) if o["status"] in BRACKET_INFLIGHT]
+    for o in open_rows:
+        if o["status"] in BRACKET_RESTING:
+            err = _cancel_exit(o["id"])
+            if err:
+                sys.stderr.write("bagholder bracket: %s for %s: cancel of %s refused again: %s\n" % (b["id"], b["symbol"], o["id"], err))
+    if not open_rows:
+        store.update_bracket(b["id"], {"status": "done"})
+        sys.stderr.write("bagholder bracket: %s for %s: nothing rests at Wealthsimple; done\n" % (b["id"], b["symbol"]))
+
+
+def _sweep_exits():
+    """Every check: an exit order of Bagholder's own that rests at Wealthsimple with no
+    live bracket holding it is cancelled. The last line of defence, never the first."""
+    for o in store.list_orders():
+        if o.get("role") not in ("stop", "target") or o["status"] not in BRACKET_RESTING:
+            continue
+        b = store.bracket_for_order(o.get("parentId") or "")
+        held_by = b and b["status"] in BRACKET_LIVE and (b["status"] == "closing" or o["id"] in (b.get("slOrderId"), b.get("tpOrderId")))
+        if held_by:
+            continue
+        err = _cancel_exit(o["id"])
+        _say_once((o["id"], "orphan"), "bagholder bracket: %s for %s rests at Wealthsimple with no bracket holding it; cancelled%s\n" % (o["id"], o.get("symbol"), (" (refused: " + err + ")") if err else ""))
+
+
+def _nothing_resting(b):
+    return not any(o["status"] in BRACKET_INFLIGHT for o in _own_exit_rows(b))
+
+
+def _closed_elsewhere(b):
+    """Only a bracket with nothing resting at Wealthsimple can see its shares sold
+    elsewhere (a resting order of ours holds them). Then the sale shows in the
+    activity feed, or the balances omit the position on two successive reads."""
+    if b["status"] not in ("armed", "firing", "target_placed") or not b.get("armedAt") or not _nothing_resting(b):
+        return ""
+    sold = store.sold_since(b["accountId"], b["securityId"], b["armedAt"], b.get("symbol"))
+    if sold and sold >= (b.get("quantity") or 0):
+        return "sold: %s shares in the activity feed" % qty_text(sold)
+    read_at = store.get_meta("balances_read_at", "")
+    if not read_at or read_at <= b["armedAt"]:
+        return ""
+    held = store.position_quantity(b["accountId"], b["securityId"])
+    if held is not None and held > 0:
+        if not b.get("seenHeld") or b.get("missedAt"):
+            store.update_bracket(b["id"], {"seenHeld": True, "missedAt": ""})
+        return ""
+    if not b.get("seenHeld"):
+        return ""
+    missed = b.get("missedAt") or ""
+    if not missed:
+        store.update_bracket(b["id"], {"missedAt": read_at})
+        sys.stderr.write("bagholder bracket: %s for %s: the balances read at %s does not list the position; a second read decides\n" % (b["id"], b["symbol"], read_at))
+        return ""
+    if read_at > missed:
+        return "position gone: two balance reads without it (%s, %s)" % (missed, read_at)
+    return ""
+
+
 def _parse_utc(text):
     text = _s(text).strip()
     if not text:
@@ -4794,50 +4927,59 @@ def _roll_step(b, quote):
         else:
             # the rolled target: placed again the moment Wealthsimple confirms the cancel
             tp_row = _exit_row(b, "target")
-            if tp_row and tp_row["status"] == "cancelled":
+            if tp_row and tp_row["status"] in ("cancelled", "expired"):
                 _fire_target(b)
 
 
 def _reconcile_step(b, entry):
     """What Wealthsimple and the book say: an exit of ours filled ends the bracket; a
     stop cancelled by hand leaves the target watched; a position gone ends it."""
+    if b["status"] == "closing":
+        _closing_step(b)
+        return "done"
     stop_row, tp_row = _exit_row(b, "stop"), _exit_row(b, "target")
     if stop_row and stop_row["status"] == "filled":
-        _cancel_exit(b.get("tpOrderId"))
-        store.update_bracket(b["id"], {"status": "done", "outcome": "stopped"})
-        sys.stderr.write("bagholder bracket: %s for %s: stop filled\n" % (b["id"], b["symbol"]))
+        _end_bracket(b, "stopped")
         return "done"
     if tp_row and tp_row["status"] == "filled":
-        _cancel_exit(b.get("slOrderId"))
-        store.update_bracket(b["id"], {"status": "done", "outcome": "target"})
-        sys.stderr.write("bagholder bracket: %s for %s: target filled\n" % (b["id"], b["symbol"]))
+        _end_bracket(b, "target")
         return "done"
+    # a change made by hand at Wealthsimple to the bracket's own resting order is adopted
+    if b.get("slOrderId") and stop_row and stop_row["status"] in BRACKET_RESTING and stop_row.get("stopPrice") and b.get("slPrice") and abs(stop_row["stopPrice"] - b["slPrice"]) > 0.005:
+        store.update_bracket(b["id"], {"slPrice": stop_row["stopPrice"]})
+        sys.stderr.write("bagholder bracket: %s for %s: stop moved by hand to %s; the bracket follows\n" % (b["id"], b["symbol"], stop_row["stopPrice"]))
+        b = dict(b, slPrice=stop_row["stopPrice"])
+    if b.get("tpOrderId") and tp_row and tp_row["status"] in BRACKET_RESTING and tp_row.get("limitPrice") and b.get("tpPrice") and abs(tp_row["limitPrice"] - b["tpPrice"]) > 0.005:
+        store.update_bracket(b["id"], {"tpPrice": tp_row["limitPrice"]})
+        sys.stderr.write("bagholder bracket: %s for %s: target moved by hand to %s; the bracket follows\n" % (b["id"], b["symbol"], tp_row["limitPrice"]))
     if b["status"] == "armed" and b.get("slMode") == "native" and b.get("slOrderId") and stop_row and stop_row["status"] == "expired":
         # a stop Wealthsimple ended (a Day stop from before every exit went good till cancelled,
         # or ninety days reached while the app was off): placed again on the next check
         store.update_bracket(b["id"], {"slOrderId": "", "error": ""})
         sys.stderr.write("bagholder bracket: %s for %s: stop expired at Wealthsimple; placed again\n" % (b["id"], b["symbol"]))
     elif b["status"] == "armed" and b.get("slMode") == "native" and b.get("slOrderId") and stop_row and stop_row["status"] in ("cancelled", "rejected", "failed"):
-        # not our doing (a move clears slOrderId first): the stop leg is gone, the target stays watched
-        store.update_bracket(b["id"], {"slOrderId": "", "slKind": "", "error": "stop " + stop_row["status"] + " at Wealthsimple"})
-        sys.stderr.write("bagholder bracket: %s for %s: stop %s at Wealthsimple; only the target is watched now\n" % (b["id"], b["symbol"], stop_row["status"]))
-    if b["status"] == "target_placed" and b.get("tpOrderId") and tp_row and tp_row["status"] in ("cancelled", "expired", "rejected", "failed"):
-        # not our doing (a roll clears tpOrderId first)
-        store.update_bracket(b["id"], {"status": "armed", "tpOrderId": "", "slOrderId": "", "error": "target " + tp_row["status"] + "; stop placed again"})
-        sys.stderr.write("bagholder bracket: %s for %s: target order %s; arming again\n" % (b["id"], b["symbol"], tp_row["status"]))
-        return "rearm"
-    # A position sold elsewhere is NOT inferred from Wealthsimple's balances: that feed
-    # omitted a held position on one read and listed it on the next (2026-09-10), and a
-    # live stop was cancelled on its word. Wealthsimple itself refuses a sell of shares
-    # that are not there, and that refusal shows on the leg. The balances are only noted.
-    if b["status"] in ("armed", "firing", "target_placed") and b.get("armedAt"):
-        read_at = store.get_meta("balances_read_at", "")
-        if read_at and read_at > b["armedAt"]:
-            held = store.position_quantity(b["accountId"], b["securityId"])
-            if held is not None and held > 0 and not b.get("seenHeld"):
-                store.update_bracket(b["id"], {"seenHeld": True})
-            elif (held is None or held <= 0) and b.get("seenHeld"):
-                _say_once((b["id"], "balances", read_at), "bagholder bracket: %s for %s: the balances read at %s does not list the position; the bracket stays\n" % (b["id"], b["symbol"], read_at))
+        # not our doing (a move or a roll clears slOrderId first): a cancel by hand is the
+        # person taking the position over; a refusal means the shares are not there. Either
+        # way the bracket is over, and no watched leg fires later against those shares.
+        why = "stop cancelled at Wealthsimple by hand" if stop_row["status"] == "cancelled" else "stop " + stop_row["status"] + " at Wealthsimple" + ((": " + stop_row["error"]) if stop_row.get("error") else "")
+        _end_bracket(b, why)
+        return "done"
+    if b["status"] == "target_placed" and b.get("tpOrderId") and tp_row and tp_row["status"] == "expired":
+        # Wealthsimple ended it (the app was off at its ninety days): placed again on the next check
+        store.update_bracket(b["id"], {"tpOrderId": "", "error": ""})
+        sys.stderr.write("bagholder bracket: %s for %s: target expired at Wealthsimple; placed again\n" % (b["id"], b["symbol"]))
+    elif b["status"] == "target_placed" and b.get("tpOrderId") and tp_row and tp_row["status"] in ("cancelled", "rejected", "failed"):
+        why = "target cancelled at Wealthsimple by hand" if tp_row["status"] == "cancelled" else "target " + tp_row["status"] + " at Wealthsimple" + ((": " + tp_row["error"]) if tp_row.get("error") else "")
+        _end_bracket(b, why)
+        return "done"
+    # A position can only be sold elsewhere while nothing of the bracket's rests at
+    # Wealthsimple (a resting order of ours holds the shares). Then the activity feed,
+    # or two successive balance reads without the position, end the bracket; one read
+    # never does: that feed omitted a held position on one read and listed it on the next.
+    why = _closed_elsewhere(b)
+    if why:
+        _end_bracket(b, why)
+        return "done"
     return ""
 
 
@@ -4918,6 +5060,10 @@ def bracket_tick(quotes=None):
     try:
         live = store.list_brackets(BRACKET_LIVE)
         if not live:
+            try:
+                _sweep_exits()
+            except Exception as e:
+                sys.stderr.write("bagholder bracket: sweep failed: %s\n" % (str(e) or e.__class__.__name__))
             return {"ok": True, "brackets": 0}
         # what the engine is waiting on is read now, not on the orders loop's next pass:
         # a waiting bracket's entry, and the stop whose cancel must confirm before the target
@@ -4935,6 +5081,10 @@ def bracket_tick(quotes=None):
                     prev = _exit_row(b, "target")
                     if prev and prev["status"] in ("sent", "pending", "cancelling"):
                         refresh_orders(only_id=prev["id"])
+                elif b["status"] == "closing":
+                    for o in _own_exit_rows(b):
+                        if o["status"] == "cancelling":
+                            refresh_orders(only_id=o["id"])
         orders = {o["id"]: o for o in store.list_orders()}
         if quotes is None:
             ids = sorted({b["securityId"] for b in live if b["status"] in ("armed", "firing", "target_placed")})
@@ -4961,6 +5111,10 @@ def bracket_tick(quotes=None):
                     _watch_step(b, quotes.get(b["securityId"]))
             except Exception as e:
                 sys.stderr.write("bagholder bracket: %s tick failed: %s\n" % (b["id"], str(e) or e.__class__.__name__))
+        try:
+            _sweep_exits()
+        except Exception as e:
+            sys.stderr.write("bagholder bracket: sweep failed: %s\n" % (str(e) or e.__class__.__name__))
         return {"ok": True, "brackets": len(live)}
     finally:
         _bracket_lock.release()
@@ -4987,12 +5141,7 @@ def cancel_bracket(bracket_id):
         return {"ok": False, "error": "No such bracket."}
     if b["status"] not in BRACKET_LIVE:
         return {"ok": False, "error": "That bracket is not live."}
-    for oid in (b.get("slOrderId"), b.get("tpOrderId")):
-        err = _cancel_exit(oid)
-        if err:
-            return {"ok": False, "error": err}
-    store.update_bracket(b["id"], {"status": "cancelled", "outcome": "cancelled by the user"})
-    sys.stderr.write("bagholder bracket: %s for %s cancelled by the user\n" % (b["id"], b["symbol"]))
+    _end_bracket(b, "cancelled by the user")
     return {"ok": True, "id": b["id"]}
 
 

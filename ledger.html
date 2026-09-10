@@ -1325,7 +1325,7 @@ function closeOrders() {
   render();
 }
 const ORDER_LIVE = { sent: 1, pending: 1, cancelling: 1 };
-const BRACKET_LIVE = { waiting: 1, armed: 1, firing: 1, target_placed: 1 };
+const BRACKET_LIVE = { waiting: 1, armed: 1, firing: 1, target_placed: 1, closing: 1 };
 function orderPrice(o) {
   if (o.type === "MARKET") return "—";
   if (o.type === "STOP") return px(o.stopPrice);
@@ -1386,6 +1386,7 @@ function bracketLegs(b) {
     let st = "Waiting for fill", on = false;
     if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
     else if (b.status === "target_placed") st = "Cancelled";
+    else if (b.status === "closing") { st = b.outcome === "stopped" ? "Filled" : stopOrder || (orders.find((o) => o.parentId === b.orderId && o.role === "stop" && o.status === "cancelling")) ? "Cancelling" : "Cancelled"; on = b.outcome === "stopped"; }
     else if (done) { st = b.outcome === "stopped" ? "Filled" : "Cancelled"; on = b.outcome === "stopped"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
     legs.push({ key: "sl", text, state: st, on });
@@ -1396,6 +1397,7 @@ function bracketLegs(b) {
     let st = "Waiting for fill", on = false;
     if (b.status === "armed" || b.status === "firing") { on = true; st = b.status === "firing" && b.attempts ? "Retrying · " + (b.error || "") : "Watching"; }
     else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : b.tpOrderId ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
+    else if (b.status === "closing") { st = b.outcome === "target" ? "Filled" : (orders.find((o) => o.parentId === b.orderId && o.role === "target" && o.status === "cancelling")) ? "Cancelling" : "Cancelled"; on = b.outcome === "target"; }
     else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
     legs.push({ key: "tp", text: "Take profit at " + px(b.tpPrice), state: st, on });

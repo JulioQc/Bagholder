@@ -276,6 +276,7 @@ def _init_schema(conn):
             moved_at TEXT,
             armed_at TEXT,
             seen_held INTEGER,
+            missed_at TEXT,
             updated_at TEXT
         );
 
@@ -1369,7 +1370,7 @@ def _ensure_order_columns(conn):
         if col not in cols:
             conn.execute("ALTER TABLE orders ADD COLUMN %s %s" % (col, typ))
     bcols = {r["name"] for r in conn.execute("PRAGMA table_info(brackets)").fetchall()}
-    for col, typ in (("seen_held", "INTEGER"),):
+    for col, typ in (("seen_held", "INTEGER"), ("missed_at", "TEXT")):
         if col not in bcols:
             conn.execute("ALTER TABLE brackets ADD COLUMN %s %s" % (col, typ))
 
@@ -2380,12 +2381,12 @@ def _bracket_from_row(r):
         "slOrderId": r["sl_order_id"] or "", "slNative": bool(r["sl_native"]), "slMode": r["sl_mode"] or "", "highWater": r["high_water"],
         "tpPrice": r["tp_price"], "tpOrderId": r["tp_order_id"] or "",
         "status": r["status"], "outcome": r["outcome"] or "", "error": r["error"] or "", "attempts": r["attempts"] or 0,
-        "movedAt": r["moved_at"] or "", "armedAt": r["armed_at"] or "", "seenHeld": bool(r["seen_held"]), "updatedAt": r["updated_at"] or "",
+        "movedAt": r["moved_at"] or "", "armedAt": r["armed_at"] or "", "seenHeld": bool(r["seen_held"]), "missedAt": r["missed_at"] or "", "updatedAt": r["updated_at"] or "",
     }
 
 
 BRACKET_TEXT = {"symbol": "symbol", "currency": "currency", "tif": "tif", "slKind": "sl_kind", "slTrailUnit": "sl_trail_unit", "slOrderId": "sl_order_id",
-                "tpOrderId": "tp_order_id", "status": "status", "outcome": "outcome", "error": "error", "movedAt": "moved_at", "armedAt": "armed_at", "slMode": "sl_mode"}
+                "tpOrderId": "tp_order_id", "status": "status", "outcome": "outcome", "error": "error", "movedAt": "moved_at", "armedAt": "armed_at", "slMode": "sl_mode", "missedAt": "missed_at"}
 BRACKET_NUM = {"quantity": "quantity", "slPrice": "sl_price", "slTrail": "sl_trail", "highWater": "high_water", "tpPrice": "tp_price", "attempts": "attempts", "slNative": "sl_native", "seenHeld": "seen_held"}
 
 
@@ -2478,6 +2479,24 @@ def symbol_for_security(security_id):
             _init_schema(conn)
             r = conn.execute("SELECT symbol FROM activities WHERE security_id = ? AND symbol IS NOT NULL AND symbol != '' ORDER BY occurred_at DESC LIMIT 1", (_s(security_id),)).fetchone()
             return _s(r["symbol"]) if r else ""
+        finally:
+            conn.close()
+
+
+def sold_since(account_id, security_id, since_iso, symbol=""):
+    """Shares sold in that account since a moment, from the activity feed: the sum of
+    the Trade/SELL rows for the security (by id, else by symbol)."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            if _s(security_id):
+                r = conn.execute("SELECT SUM(quantity) AS q FROM activities WHERE account_id = ? AND security_id = ? AND activity_type = 'Trade' AND activity_sub_type = 'SELL' AND occurred_at > ?",
+                                 (_s(account_id), _s(security_id), _s(since_iso))).fetchone()
+            else:
+                r = conn.execute("SELECT SUM(quantity) AS q FROM activities WHERE account_id = ? AND symbol = ? AND activity_type = 'Trade' AND activity_sub_type = 'SELL' AND occurred_at > ?",
+                                 (_s(account_id), _s(symbol), _s(since_iso))).fetchone()
+            return float(r["q"]) if r is not None and r["q"] is not None else 0.0
         finally:
             conn.close()
 
