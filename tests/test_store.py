@@ -2406,6 +2406,10 @@ class BracketEngineTest(_OrdersBase):
             return {"orderServiceCancelOrder": {"externalId": variables["cancelOrderRequest"]["externalId"], "errors": []}}
         if operation == "FetchSecurityMarketData":
             return {"security": {"id": variables["id"], "allowedOrderSubtypes": ["MARKET", "LIMIT", "STOP", "STOP_LIMIT"], "marginRates": {"clientMarginRate": 0.3}}}
+        if operation == "FetchSoOrdersExtendedOrder":
+            row = store.get_order(variables["externalId"]) or {}
+            ws = {"sent": "SUBMITTED", "pending": "SUBMITTED", "cancelling": "CANCEL_PENDING", "filled": "FILLED", "cancelled": "CANCELLED", "expired": "EXPIRED", "rejected": "REJECTED"}.get(row.get("status"), "SUBMITTED")
+            return {"soOrdersExtendedOrder": {"status": ws, "filledQuantity": row.get("filledQty"), "averageFilledPrice": row.get("avgFill"), "submittedQuantity": row.get("quantity")}}
         raise AssertionError(operation)
 
     def _live(self):
@@ -2419,8 +2423,6 @@ class BracketEngineTest(_OrdersBase):
         return r["id"], store.get_bracket(r["bracketId"])
 
     def _tick(self, quote=None):
-        if not getattr(self, "paced", False):
-            bagholder._last_order_write = -1e9   # the spacing rule has its own test; the others look at one step at a time
         with self._live()[0], self._live()[1], self._live()[2], self._live()[3]:
             return bagholder.bracket_tick({"sec-s-us": quote} if quote else {})
 
@@ -2482,7 +2484,7 @@ class BracketEngineTest(_OrdersBase):
         self.assertEqual(store.get_order(b["slOrderId"])["status"], "cancelling")
         self.sent.clear()
         self._tick(self._q(182.0, bid=181.95))
-        self.assertEqual(self.sent, [], "nothing more until Wealthsimple confirms the cancel")
+        self.assertEqual([op for op, _ in self.sent], ["FetchSoOrdersExtendedOrder"], "the stop is read back every check; nothing is written until Wealthsimple confirms the cancel")
         store.update_order(b["slOrderId"], {"status": "cancelled", "wsStatus": "CANCELLED"})
         self._tick(self._q(182.0, bid=181.95))
         b = store.get_bracket(b["id"])
@@ -2567,7 +2569,6 @@ class BracketEngineTest(_OrdersBase):
         first_stop = b["slOrderId"]
         self.assertEqual(b["slKind"], "trail")
         self.sent.clear()
-        store.update_bracket(b["id"], {"movedAt": "2026-01-01T00:00:00Z"})   # long enough ago
         self._tick(self._q(180.0))
         b = store.get_bracket(b["id"])
         self.assertEqual(b["highWater"], 180.0)
@@ -2581,14 +2582,16 @@ class BracketEngineTest(_OrdersBase):
         create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
         self.assertEqual((create[0]["executionType"], create[0]["stopPrice"]), ("STOP", 171.0))
         self.assertNotEqual(b["slOrderId"], first_stop)
-        # a rise within the minute, or below half a percent, does not move it again
+        # a rise below half a percent does not move it again; a lower high never lowers it
         self.sent.clear()
-        self._tick(self._q(181.0))
+        self._tick(self._q(180.5))
         self.assertEqual(self.sent, [])
         self.assertEqual(store.get_bracket(b["id"])["slPrice"], 171.0)
-        store.update_bracket(b["id"], {"movedAt": "2026-01-01T00:00:00Z"})
         self._tick(self._q(171.5))
         self.assertEqual(store.get_bracket(b["id"])["slPrice"], 171.0, "a lower high never lowers the stop")
+        # a rise past the step moves it at once
+        self._tick(self._q(182.0))
+        self.assertEqual(store.get_bracket(b["id"])["slPrice"], 172.9)
 
     def test_a_position_sold_elsewhere_ends_the_bracket_and_cancels_its_orders(self):
         oid, b = self._entry()
@@ -2651,38 +2654,3 @@ class BracketEngineTest(_OrdersBase):
         self.assertIn("not live", bagholder.cancel_bracket(b["id"])["error"])
         self.assertEqual(bagholder.cancel_bracket("nope")["error"], "No such bracket.")
         self.assertEqual([x["id"] for x in bagholder.orders_payload()["brackets"]], [b["id"]])
-
-    def test_the_engine_never_sends_two_writes_within_ten_seconds(self):
-        self.paced = True
-        oid, b = self._entry()
-        store.update_order(oid, {"status": "filled", "filledQty": 25})
-        clock = [1000.0]
-        with mock.patch.object(bagholder.time, "monotonic", side_effect=lambda: clock[0]):
-            bagholder._last_order_write = 989.0   # the entry went out eleven seconds ago
-            self._tick()   # the stop is placed: a write at t=1000
-            b = store.get_bracket(b["id"])
-            self.assertTrue(b["slOrderId"])
-            self.sent.clear()
-            clock[0] = 1003.0
-            self._tick(self._q(182.0, bid=181.95))   # the target is reached three seconds later
-            self.assertEqual(self.sent, [], "the stop's cancel waits: too soon after the stop was placed")
-            self.assertEqual(store.get_bracket(b["id"])["status"], "armed")
-            clock[0] = 1010.5
-            self._tick(self._q(182.0, bid=181.95))
-            self.assertEqual([op for op, _ in self.sent], ["SoOrdersOrderCancel"])
-            self.assertEqual(store.get_bracket(b["id"])["status"], "firing")
-            store.update_order(b["slOrderId"], {"status": "cancelled"})
-            self.sent.clear()
-            clock[0] = 1012.0
-            self._tick(self._q(182.0, bid=181.95))
-            self.assertEqual(self.sent, [], "the limit sell waits its ten seconds after the cancel")
-            clock[0] = 1021.0
-            self._tick(self._q(182.0, bid=181.95))
-            self.assertEqual([op for op, _ in self.sent], ["SoOrdersOrderCreate"])
-            self.assertEqual(store.get_bracket(b["id"])["status"], "target_placed")
-            # a person's Cancel bracket is not held
-            self.sent.clear()
-            clock[0] = 1022.0
-            with self._live()[0], self._live()[1], self._live()[2], self._live()[3]:
-                self.assertTrue(bagholder.cancel_bracket(b["id"])["ok"])
-            self.assertEqual([op for op, _ in self.sent], ["SoOrdersOrderCancel"])

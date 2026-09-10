@@ -4028,7 +4028,6 @@ def submit_order(row, req):
         return {"ok": False, "error": "Not connected."}
     row["status"] = "sending"
     store.insert_order(row)
-    _mark_order_write()
     try:
         data = graphql(sess, "SoOrdersOrderCreate", {"input": req})
     except PermissionError:
@@ -4270,7 +4269,6 @@ def cancel_order(order_id):
     sess = _ticket_session()
     if not sess:
         return {"ok": False, "error": "Not connected."}
-    _mark_order_write()
     try:
         data = graphql(sess, "SoOrdersOrderCancel", {"cancelOrderRequest": {"externalId": row["id"]}})
     except PermissionError:
@@ -4303,24 +4301,10 @@ def orders_payload(kick=False):
 # ---------------------------------------------------------------------------
 BRACKET_POLL_SEC = 5
 BRACKET_MAX_ATTEMPTS = 3        # a rejected exit is tried this many times, a tick apart, then the bracket fails loudly
-TRAIL_MIN_MOVE = 0.005          # a trailing stop moves only when it would rise by half a percent of its level
-TRAIL_MIN_INTERVAL_SEC = 60     # and no more than once a minute: each move is a cancel and a new order at Wealthsimple
+TRAIL_MIN_MOVE = 0.005          # a trailing stop moves only when it would rise by half a percent of its level: each move is a cancel and a new order
 BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed")
-ORDER_WRITE_SPACING_SEC = 10    # the engine never sends two order writes (a create or a cancel) closer than this
 _bracket_lock = threading.Lock()
 _bracket_said = set()   # dry-run lines already printed, so the terminal is not flooded every tick
-_last_order_write = 0.0   # monotonic time of the last create or cancel sent to Wealthsimple, by anyone
-
-
-def _mark_order_write():
-    global _last_order_write
-    _last_order_write = time.monotonic()
-
-
-def _paced():
-    """True when the engine may send an order write now; otherwise the action
-    waits for a later check. A person's own ticket or cancel is never held."""
-    return time.monotonic() - _last_order_write >= ORDER_WRITE_SPACING_SEC
 
 
 def create_bracket(order_row):
@@ -4371,25 +4355,20 @@ def _place_exit(b, exec_type, price, role):
     if not ORDERS_LIVE:
         _say_once((b["id"], role, round(price, 4)), "bagholder bracket (orders are off, not placed): %s %s for %s: %s" % (role, exec_type, b["symbol"], json.dumps(req, sort_keys=True)))
         return "", ""
-    if not _paced():
-        return None, ""   # too soon after the last write: the next check sends it
     r = submit_order(row, req)
     if not r.get("ok"):
         return "", r.get("error") or "not sent"
     return r["id"], ""
 
 
-def _cancel_exit(order_id, paced=True):
+def _cancel_exit(order_id):
     """Cancel one of the bracket's own resting orders. Returns "" when it is cancelled
-    or already on its way, the error text, or None when the engine must wait a check
-    (too soon after the last write; a person's Cancel bracket is not held)."""
+    or already on its way, else the error text."""
     if not order_id:
         return ""
     row = store.get_order(order_id)
     if not row or row["status"] not in ("sent", "pending"):
         return ""   # nothing resting: filled, cancelled, cancelling or never sent
-    if paced and ORDERS_LIVE and not _paced():
-        return None
     r = cancel_order(order_id)
     if r.get("ok") or "not open" in (r.get("error") or ""):
         return ""
@@ -4485,14 +4464,12 @@ def _reconcile_step(b, entry):
     stop cancelled by hand leaves the target watched; a position gone ends it."""
     stop_row, tp_row = _exit_row(b, "stop"), _exit_row(b, "target")
     if stop_row and stop_row["status"] == "filled":
-        if _cancel_exit(b.get("tpOrderId")) is None:
-            return ""   # the other leg's cancel waits a check; the bracket ends then
+        _cancel_exit(b.get("tpOrderId"))
         store.update_bracket(b["id"], {"status": "done", "outcome": "stopped"})
         sys.stderr.write("bagholder bracket: %s for %s: stop filled\n" % (b["id"], b["symbol"]))
         return "done"
     if tp_row and tp_row["status"] == "filled":
-        if _cancel_exit(b.get("slOrderId")) is None:
-            return ""
+        _cancel_exit(b.get("slOrderId"))
         store.update_bracket(b["id"], {"status": "done", "outcome": "target"})
         sys.stderr.write("bagholder bracket: %s for %s: target filled\n" % (b["id"], b["symbol"]))
         return "done"
@@ -4509,8 +4486,7 @@ def _reconcile_step(b, entry):
         if read_at and read_at > b["armedAt"]:
             held = store.position_quantity(b["accountId"], b["securityId"])
             if (held is None and store.balances_count()) or (held is not None and held <= 0):
-                if _cancel_exit(b.get("slOrderId")) is None or _cancel_exit(b.get("tpOrderId")) is None:
-                    return ""   # a cancel waits a check; tried again then
+                _cancel_exit(b.get("slOrderId")); _cancel_exit(b.get("tpOrderId"))
                 store.update_bracket(b["id"], {"status": "cancelled", "outcome": "position closed elsewhere"})
                 sys.stderr.write("bagholder bracket: %s for %s off: the position is gone\n" % (b["id"], b["symbol"]))
                 return "done"
@@ -4535,19 +4511,14 @@ def _watch_step(b, quote):
         new_stop = round(high - (_trail_distance(b, high) or 0.0), 2)
         cur = b.get("slPrice") or 0.0
         if new_stop > cur + max(0.01, cur * TRAIL_MIN_MOVE):
-            moved = b.get("movedAt") or ""
-            recent = moved and (now - datetime.strptime(moved, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds() < TRAIL_MIN_INTERVAL_SEC
-            if not recent:
-                if b.get("slOrderId"):
-                    err = _cancel_exit(b["slOrderId"])
-                    if err is None:
-                        return   # too soon after the last write: the move waits a check
-                    if err:
-                        _fail(b, "stop not moved: " + err)
-                        return
-                store.update_bracket(b["id"], {"slPrice": new_stop, "slOrderId": "", "movedAt": now_s})
-                sys.stderr.write("bagholder bracket: %s for %s: stop moves to %s (high %s)\n" % (b["id"], b["symbol"], new_stop, high))
-                b = dict(b, slPrice=new_stop, slOrderId="")
+            if b.get("slOrderId"):
+                err = _cancel_exit(b["slOrderId"])
+                if err:
+                    _fail(b, "stop not moved: " + err)
+                    return
+            store.update_bracket(b["id"], {"slPrice": new_stop, "slOrderId": "", "movedAt": now_s})
+            sys.stderr.write("bagholder bracket: %s for %s: stop moves to %s (high %s)\n" % (b["id"], b["symbol"], new_stop, high))
+            b = dict(b, slPrice=new_stop, slOrderId="")
     # a stop watched here (no native stop order): fires at market
     if b["status"] == "armed" and b["slKind"] and b.get("slMode") == "watched" and not b.get("slOrderId") and b.get("slPrice"):
         trigger = bid if bid is not None else last
@@ -4565,8 +4536,6 @@ def _watch_step(b, quote):
         if trigger >= b["tpPrice"]:
             if b.get("slOrderId"):
                 err = _cancel_exit(b["slOrderId"])
-                if err is None:
-                    return   # too soon after the last write: the next check sends the cancel
                 if err:
                     _fail(b, "stop not cancelled for the target: " + err)
                     return
@@ -4598,6 +4567,14 @@ def bracket_tick(quotes=None):
         live = store.list_brackets(BRACKET_LIVE)
         if not live:
             return {"ok": True, "brackets": 0}
+        # what the engine is waiting on is read now, not on the orders loop's next pass:
+        # a waiting bracket's entry, and the stop whose cancel must confirm before the target
+        if ORDERS_LIVE:
+            for b in live:
+                if b["status"] == "waiting":
+                    refresh_orders(only_id=b["orderId"])
+                elif b["status"] == "firing" and b.get("slOrderId") and not b.get("tpOrderId"):
+                    refresh_orders(only_id=b["slOrderId"])
         orders = {o["id"]: o for o in store.list_orders()}
         if quotes is None:
             ids = sorted({b["securityId"] for b in live if b["status"] in ("armed", "firing")})
@@ -4649,7 +4626,7 @@ def cancel_bracket(bracket_id):
     if b["status"] not in BRACKET_LIVE:
         return {"ok": False, "error": "That bracket is not live."}
     for oid in (b.get("slOrderId"), b.get("tpOrderId")):
-        err = _cancel_exit(oid, paced=False)
+        err = _cancel_exit(oid)
         if err:
             return {"ok": False, "error": err}
     store.update_bracket(b["id"], {"status": "cancelled", "outcome": "cancelled by the user"})
