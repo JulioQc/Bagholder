@@ -1395,7 +1395,7 @@ function bracketLegs(b) {
   if (b.tpPrice) {
     let st = "Waiting for fill", on = false;
     if (b.status === "armed" || b.status === "firing") { on = true; st = b.status === "firing" && b.attempts ? "Retrying · " + (b.error || "") : "Watching"; }
-    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : "At Wealthsimple"; }
+    else if (b.status === "target_placed") { on = true; st = tpOrder && tpOrder.status === "filled" ? "Filled" : b.tpOrderId ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
     else if (done) { st = b.outcome === "target" ? "Filled" : "Cancelled"; on = b.outcome === "target"; }
     else if (off) st = b.status === "failed" ? "Failed" : "Off";
     legs.push({ key: "tp", text: "Take profit at " + px(b.tpPrice), state: st, on });
