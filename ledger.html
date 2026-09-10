@@ -1312,8 +1312,9 @@ function orderEditorHtml(o) {
 }
 function orderCardHtml(o) {
   const pill = orderPill(o), b = bracketOf(o);
-  // a filled entry under Open is there for its bracket: its fill is already the detail line
-  const fill = o.status === "filled" && state.ordersTab === "open" ? "" : orderFillLine(o);
+  const exitOf = o.role === "stop" || o.role === "target" ? orderById(o.parentId) : null;
+  // a bracket's own order names the buy it protects; anything else says how it filled or why it was refused
+  const fill = exitOf ? (o.role === "stop" ? "Stop loss for " : "Take profit for ") + orderLine(exitOf).replace(/ at .*$/, "") : orderFillLine(o);
   const live = ORDER_LIVE[o.status] && o.status !== "cancelling";
   const canEdit = live && o.type !== "STOP";   // Wealthsimple's modify has no stop price
   let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + esc(qty(o.quantity)) + " " + esc(o.symbol) + '</span><span class="od-pill ' + pill[1] + '">' + esc(pill[0]) + "</span></div>" +
@@ -1361,10 +1362,9 @@ function ordersBodyHtml() {
     const rows = entries.filter((o) => ["cancelled", "expired", "rejected", "failed", "dry"].indexOf(o.status) >= 0).sort(newest);
     return group("Cancelled and rejected", rows) || '<div class="dim" style="font-size:12px">Nothing cancelled or rejected.</div>';
   }
-  // resting orders under Open; filled entries whose bracket is still working under their own heading
-  const resting = entries.filter((o) => ORDER_LIVE[o.status]).sort(newest);
-  const working = entries.filter((o) => !ORDER_LIVE[o.status] && (() => { const b = bracketOf(o); return b && BRACKET_LIVE[b.status]; })()).sort(newest);
-  return (group("Open", resting) + group("Brackets working", working)) || '<div class="dim" style="font-size:12px">No open orders.</div>';
+  // Open is what rests at Wealthsimple: entries, and a bracket's own stop or target once it is an order there
+  const resting = data.orders.filter((o) => ORDER_LIVE[o.status]).sort(newest);
+  return group("Open", resting) || '<div class="dim" style="font-size:12px">No open orders.</div>';
 }
 function ordersPanelHtml() {
   const seg = (id, label) => '<button class="od-seg' + (state.ordersTab === id ? " on" : "") + '" data-act="ordersTab" data-arg=\'' + attr({ tab: id }) + "'>" + label + "</button>";
