@@ -81,7 +81,7 @@ Empty arrays/objects/`""` are the defaults when the corresponding `load_book()` 
 - 403 as above.
 - 200 body is `start_login_browser()`:
   - `{"ok": true}` on success.
-  - `{"ok": false, "error": "Install Chrome. Passkey login has to happen on Wealthsimple’s site."}` if Chrome is not found or `Popen` raises.
+  - `{"ok": false, "error": "Install Chrome, Brave, Edge, or another Chromium browser. Passkey login has to happen on Wealthsimple’s site."}` if no supported browser is found or `Popen` raises.
 - Status is always 200 (`200 if result.get("ok") else 200`).
 
 **POST `/api/capture`**
