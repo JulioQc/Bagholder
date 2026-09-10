@@ -2641,6 +2641,15 @@ def build_view(base, filters=None):
 
     tags = sorted({tag for t in trades_all for tag in t["tags"]})
     symbols = sorted({t["symbol"] for t in trades_all} | {p["symbol"] for p in positions_all})
+    # what the ⌘K list shows beside each symbol: its name, exchange and kind, from the
+    # rows that carry it (a name that is only the symbol again counts as none)
+    listings = {}
+    for r in list(trades_all) + list(positions_all):
+        cur = listings.setdefault(r["symbol"], {"name": "", "exchange": "", "kind": _s(r.get("kind")), "currency": _s(r.get("currency"))})
+        if not cur["name"] and _s(r.get("name")) and _s(r.get("name")) != r["symbol"]:
+            cur["name"] = _s(r.get("name"))
+        if not cur["exchange"] and _s(r.get("exchange")):
+            cur["exchange"] = _s(r.get("exchange"))
     accounts = sorted({t["account"] for t in trades_all} | {p["account"] for p in positions_all} | {r["account"] for r in base["cashflow"]})
     exchanges = sorted({t["exchange"] for t in trades_all if t["exchange"]} | {p["exchange"] for p in positions_all if p["exchange"]})
     kinds = [k for k in KINDS if any(t["kind"] == k for t in trades_all) or any(p["kind"] == k for p in positions_all)]
@@ -2661,6 +2670,7 @@ def build_view(base, filters=None):
         "options": {
             "accounts": accounts,
             "symbols": symbols,
+            "listings": listings,
             "tags": tags,
             "exchanges": exchanges,
             "kinds": kinds,
