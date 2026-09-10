@@ -981,7 +981,7 @@ function tkVals() {
   const last = q.last != null ? q.last : null;
   const mult = q.multiplier || 1;
   const qtyN = t.qty != null ? t.qty : 0;
-  const limit = t.limit != null ? t.limit : last;
+  const limit = t.limit != null ? t.limit : tkTick(last);   // a quote can carry more decimals than an order may
   const stop = t.stop != null ? t.stop : (last != null ? +(last * (buy ? 1.02 : 0.98)).toFixed(2) : null);
   const entry = t.type === "MARKET" ? (buy ? (q.ask != null ? q.ask : last) : (q.bid != null ? q.bid : last)) : t.type === "STOP" ? stop : limit;
   const notional = entry != null ? qtyN * entry * mult : null;
@@ -1010,6 +1010,8 @@ function tkVals() {
   return { buy, dir, last, mult, qtyN, limit, stop, entry, notional, slOn, tpOn, isTrail, trail, slPrice, tpPrice, risk, gain, slPct, tpPct, rr, cad, nav, acct, isMargin, after, typeWord, tifWord, trailWord, q, d };
 }
 function tkPlain(n) { return n == null ? "—" : Number.isInteger(n) ? String(n) : String(+n.toFixed(2)); }
+// a price an order may carry: two decimals from $1, four below it
+function tkTick(p) { return p == null || !isFinite(p) ? p : +p.toFixed(p >= 1 ? 2 : 4); }
 function tkAmt(n) { return n == null || !isFinite(n) ? "—" : money(n, "", Number.isInteger(+n.toFixed(2)) ? 0 : 2); }
 function tkSAmt(n) { return n == null || !isFinite(n) ? "—" : signedMoney(n, "", Number.isInteger(+n.toFixed(2)) ? 0 : 2); }
 function tkNum(v) { const n = parseFloat(String(v).replace(/[^0-9.\-]/g, "")); return isNaN(n) ? null : n; }

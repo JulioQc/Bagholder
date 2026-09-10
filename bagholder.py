@@ -3939,6 +3939,14 @@ def ticket_quote(symbol="", security_id="", account_id=""):
     }
 
 
+def order_tick(price):
+    """A price as Wealthsimple accepts it: two decimals from $1, four below. A quote
+    can carry more, and an order built from one must not."""
+    if price is None:
+        return None
+    return round(float(price), 2 if price >= 1 else 4)
+
+
 def order_request(body):
     """Validate a ticket and build the request Wealthsimple's web app sends for it.
     Returns (row, request, error); the row is what the store keeps."""
@@ -3956,8 +3964,8 @@ def order_request(body):
     qty = _num(b.get("quantity"), 0.0)
     if not qty or qty <= 0:
         return err("Quantity must be more than zero.")
-    limit_price = _num(b.get("limitPrice"), None)
-    stop_price = _num(b.get("stopPrice"), None)
+    limit_price = order_tick(_num(b.get("limitPrice"), None))
+    stop_price = order_tick(_num(b.get("stopPrice"), None))
     if exec_type in ("LIMIT", "STOP_LIMIT") and not (limit_price and limit_price > 0):
         return err("A limit price is required.")
     if exec_type in ("STOP", "STOP_LIMIT") and not (stop_price and stop_price > 0):
@@ -3980,11 +3988,11 @@ def order_request(body):
             return err("A stop loss price is required.")
         if kind == "trail" and not (_num(sl.get("trail"), 0) > 0):
             return err("A trail is required.")
-        sl = {"kind": kind, "price": _num(sl.get("price"), None), "trail": _num(sl.get("trail"), None), "trailUnit": "amt" if _s(sl.get("trailUnit")).lower() == "amt" else "pct"}
+        sl = {"kind": kind, "price": order_tick(_num(sl.get("price"), None)), "trail": _num(sl.get("trail"), None), "trailUnit": "amt" if _s(sl.get("trailUnit")).lower() == "amt" else "pct"}
     if tp:
         if not (_num(tp.get("price"), 0) > 0):
             return err("A take profit price is required.")
-        tp = {"price": _num(tp.get("price"), None)}
+        tp = {"price": order_tick(_num(tp.get("price"), None))}
     oid = "order-" + str(uuid.uuid4())
     req = {
         "canonicalAccountId": acct["id"],
@@ -4670,7 +4678,7 @@ def modify_order(order_id, quantity=None, limit_price=None):
     if row["type"] == "STOP":
         return {"ok": False, "error": "A stop order cannot be changed; cancel it and place another."}
     q = _num(quantity, None)
-    lp = _num(limit_price, None)
+    lp = order_tick(_num(limit_price, None))
     if q is not None and q <= 0:
         return {"ok": False, "error": "Shares must be more than zero."}
     if lp is not None and lp <= 0:

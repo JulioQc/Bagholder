@@ -2808,3 +2808,19 @@ class FeedMatchingTest(_OrdersBase):
         row = store.get_order("order-opt")
         self.assertEqual(row["symbol"], "QNC 20NOV26 3.00 CALL", "the book's name for the contract, not the underlying the feed gives")
         self.assertEqual((row["side"], row["quantity"], row["limitPrice"], row["account"]), ("SELL", 40.0, 0.25, "TFSA"))
+
+
+class OrderTickTest(_OrdersBase):
+    """A price Wealthsimple accepts: two decimals from a dollar, four below; a quote can carry more."""
+
+    def test_prices_are_rounded_to_the_tick_before_they_are_sent(self):
+        self.assertEqual(bagholder.order_tick(1.736), 1.74)
+        self.assertEqual(bagholder.order_tick(0.2537), 0.2537)
+        self.assertEqual(bagholder.order_tick(0.25371), 0.2537)
+        self.assertIsNone(bagholder.order_tick(None))
+        row, req, err = bagholder.order_request(self._ticket(limitPrice=1.736, stopLoss={"kind": "stop", "price": 1.6512}, takeProfit={"price": 1.9139}))
+        self.assertEqual(err, "")
+        self.assertEqual(req["limitPrice"], 1.74)
+        self.assertEqual((row["stopLoss"]["price"], row["takeProfit"]["price"]), (1.65, 1.91))
+        _, req, _ = bagholder.order_request(self._ticket(type="STOP_LIMIT", limitPrice=0.98765, stopPrice=1.005))
+        self.assertEqual((req["limitPrice"], req["stopPrice"]), (0.9877, 1.0))
