@@ -260,7 +260,7 @@ Avg and Market belong to the row's own position, matched by position id, never b
 
 ### Order ticket
 
-A side panel for placing an order with Wealthsimple, with an optional stop loss and take profit that Bagholder itself will watch (Wealthsimple has neither a bracket nor a trailing stop). It opens from the ⌘K list: a symbol row whose listing is shares or an ETF carries a Buy (`+`) and a Sell (`−`) icon at its right, and either opens the ticket on that symbol and side. Nothing else on the page opens it. Esc, the scrim, the × and Cancel close it. While it is open the keyboard belongs to it: the tab arrows and ⌘K do nothing.
+A side panel for placing an order with Wealthsimple, with an optional stop loss and take profit that Bagholder itself will watch (Wealthsimple has neither a bracket nor a trailing stop). It opens from the ⌘K list: a symbol row whose listing is shares or an ETF carries a Buy (`+`) and a Sell (`−`) icon at its right, in place of the field name the other rows show there, and either opens the ticket on that symbol and side. Nothing else on the page opens it. Esc, the scrim, the × and Cancel close it. While it is open the keyboard belongs to it: the tab arrows and ⌘K do nothing.
 
 **Frame.** Anchored to the right edge of the app panel, its full height, 400 px wide, over a scrim on the rest of the panel; a header (`New order`, then `Review order`), a body that scrolls inside the panel, a footer that does not move. Colours are the theme's tokens, so it follows Midnight and Light.
 
