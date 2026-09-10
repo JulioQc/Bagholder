@@ -294,7 +294,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.7"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-10.8"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -1146,7 +1146,7 @@ function tkFormHtml(v) {
   const t = state.ticket, tx = t.text;
   const types = ((t.data && t.data.orderTypes) || TK_TYPES.map((x) => x[0]));
   const showLimit = t.type === "LIMIT" || t.type === "STOP_LIMIT", showStop = t.type === "STOP" || t.type === "STOP_LIMIT";
-  const showTif = t.type !== "MARKET" || v.slOn || v.tpOn;
+  const showTif = t.type !== "MARKET";   // the order's own; the brackets always go out good till cancelled
   const val = (key, fmt) => tx[key] != null ? tx[key] : fmt;
   let grid = tkField("Account", tkSelect("tk-account", tkAccounts().map((a) => [a.id, a.name]), t.accountId)) +
     tkField("Shares", tkInput("tk-qty", val("qty", qty(v.qtyN)))) +

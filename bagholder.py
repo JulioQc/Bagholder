@@ -709,7 +709,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-10.7"
+PROTOCOL = "2026-09-10.8"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -4548,11 +4548,17 @@ _bracket_lock = threading.Lock()
 _bracket_said = set()   # dry-run lines already printed, so the terminal is not flooded every tick
 
 
+# An exit always goes out good till cancelled, whatever the entry's time in force: a
+# stop that lapsed at the close would leave the position unprotected overnight.
+# Wealthsimple keeps such an order ninety days; the engine places it again at that boundary.
+BRACKET_TIF = "UNTIL_CANCEL"
+
+
 def create_bracket(order_row):
     sl, tp = order_row.get("stopLoss"), order_row.get("takeProfit")
     b = {
         "id": "bracket-" + str(uuid.uuid4()), "orderId": order_row["id"], "accountId": order_row["accountId"], "securityId": order_row["securityId"],
-        "symbol": order_row.get("symbol") or "", "currency": order_row.get("currency") or "", "quantity": order_row.get("quantity"), "tif": order_row.get("tif") or "DAY",
+        "symbol": order_row.get("symbol") or "", "currency": order_row.get("currency") or "", "quantity": order_row.get("quantity"), "tif": BRACKET_TIF,
         "slKind": (sl or {}).get("kind") or "", "slPrice": (sl or {}).get("price"), "slTrail": (sl or {}).get("trail"), "slTrailUnit": (sl or {}).get("trailUnit") or "pct",
         "tpPrice": (tp or {}).get("price"), "status": "waiting",
     }
@@ -4574,7 +4580,7 @@ def _trail_distance(b, price):
 
 
 def _exit_body(b, exec_type, price, role):
-    body = {"symbol": b["symbol"], "securityId": b["securityId"], "accountId": b["accountId"], "side": "SELL", "type": exec_type, "tif": b["tif"] or "DAY",
+    body = {"symbol": b["symbol"], "securityId": b["securityId"], "accountId": b["accountId"], "side": "SELL", "type": exec_type, "tif": BRACKET_TIF,
             "quantity": b["quantity"], "currency": b["currency"]}
     if exec_type == "LIMIT":
         body["limitPrice"] = price

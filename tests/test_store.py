@@ -2589,7 +2589,7 @@ class BracketEngineTest(_EngineBase):
 
     def test_a_ticket_with_brackets_makes_a_waiting_bracket(self):
         oid, b = self._entry()
-        self.assertEqual((b["orderId"], b["status"], b["slKind"], b["slPrice"], b["tpPrice"], b["quantity"], b["tif"]), (oid, "waiting", "stop", 157.13, 181.94, 25.0, "DAY"))
+        self.assertEqual((b["orderId"], b["status"], b["slKind"], b["slPrice"], b["tpPrice"], b["quantity"], b["tif"]), (oid, "waiting", "stop", 157.13, 181.94, 25.0, "UNTIL_CANCEL"))
         self.assertIsNone(store.bracket_for_order("nope"))
         self._tick()
         self.assertEqual(store.get_bracket(b["id"])["status"], "waiting", "an unfilled entry leaves the bracket waiting")
@@ -2606,7 +2606,7 @@ class BracketEngineTest(_EngineBase):
         self.assertEqual(len(create), 1)
         inp = create[0]["input"]
         self.assertEqual({k: v for k, v in inp.items() if k != "externalId"},
-                         {"canonicalAccountId": "acct-margin", "executionType": "STOP", "orderType": "SELL_QUANTITY", "quantity": 25.0, "securityId": "sec-s-us", "timeInForce": "DAY", "stopPrice": 157.13})
+                         {"canonicalAccountId": "acct-margin", "executionType": "STOP", "orderType": "SELL_QUANTITY", "quantity": 25.0, "securityId": "sec-s-us", "timeInForce": "UNTIL_CANCEL", "stopPrice": 157.13})
         stop = store.get_order(b["slOrderId"])
         self.assertEqual((stop["role"], stop["parentId"], stop["side"], stop["type"], stop["status"]), ("stop", oid, "SELL", "STOP", "sent"))
         # armed and resting: a quote below the target changes nothing
@@ -2994,19 +2994,31 @@ class OrderTickTest(_OrdersBase):
 
 
 class StopExpiryTest(_EngineBase):
-    def test_a_day_stop_that_expires_is_placed_again(self):
+    def test_exits_go_out_good_till_cancelled_whatever_the_entry_was(self):
+        """A Day entry's stop must not lapse at the close: every exit is placed
+        good till cancelled, and the bracket records that."""
+        oid, b = self._entry()
+        self.assertEqual(store.get_order(oid)["tif"], "DAY", "the entry keeps its own time in force")
+        self.assertEqual(b["tif"], "UNTIL_CANCEL")
+        store.update_order(oid, {"status": "filled", "filledQty": 25})
+        self._tick()
+        create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
+        self.assertEqual((create[-1]["executionType"], create[-1]["timeInForce"]), ("STOP", "UNTIL_CANCEL"))
+        self.assertEqual(store.get_order(store.get_bracket(b["id"])["slOrderId"])["tif"], "UNTIL_CANCEL")
+
+    def test_a_stop_that_expires_is_placed_again_good_till_cancelled(self):
         oid, b = self._entry()
         store.update_order(oid, {"status": "filled", "filledQty": 25})
         self._tick()
         b = store.get_bracket(b["id"])
         first = b["slOrderId"]
-        store.update_order(first, {"status": "expired", "wsStatus": "EXPIRED"})
+        store.update_order(first, {"status": "expired", "wsStatus": "EXPIRED", "tif": "DAY"})   # a stop from before every exit went good till cancelled
         self.sent.clear()
         self._tick()
         b = store.get_bracket(b["id"])
         self.assertEqual((b["status"], b["slKind"], b["slPrice"]), ("armed", "stop", 157.13), "the leg stays")
         create = [v["input"] for op, v in self.sent if op == "SoOrdersOrderCreate"]
-        self.assertEqual((create[0]["executionType"], create[0]["stopPrice"]), ("STOP", 157.13), "a new stop at the same level")
+        self.assertEqual((create[0]["executionType"], create[0]["stopPrice"], create[0]["timeInForce"]), ("STOP", 157.13, "UNTIL_CANCEL"), "a new stop at the same level, good till cancelled")
         self.assertNotEqual(b["slOrderId"], first)
         # a stop cancelled by hand is different: the leg is dropped
         store.update_order(b["slOrderId"], {"status": "cancelled"})
