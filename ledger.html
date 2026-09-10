@@ -906,18 +906,56 @@ function extSchedule(q) {
 }
 function extRowHtml(r, cls) {
   const icon = '<span class="tk-rowbtns"><span class="tk-rowbtn buy" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.plus + '"/></svg></span></span>';
-  return symbolRowHtml(r.symbol, r.name, r.exchange, icon, cls, "tkOpenExt", { symbol: r.symbol, exchange: r.exchange, currency: r.currency, name: r.name });
+  const sym = r.sym || r.symbol;
+  return symbolRowHtml(sym, r.name, r.exchange, icon, cls, "tkOpenExt", { symbol: sym, exchange: r.exchange, currency: r.currency, name: r.name });
+}
+// The symbol rows for a text, the book's and the ones found outside it, in one order
+// of relevance: exact tickers on any exchange, then tickers starting with the text, then
+// name matches, then the option contracts of a matched underlying, nearest expiry first;
+// within a rank the book's rows come before found ones. A contract row carries no name.
+const OPTION_RE = /^\S+ (\d{2})([A-Z]{3})(\d{2}) /;
+function contractExpiry(sym) {
+  const m = OPTION_RE.exec(sym); if (!m) return "";
+  return "20" + m[3] + String("JANFEBMARAPRMAYJUNJULAUGSEPOCTNOVDEC".indexOf(m[2]) / 3 + 1).padStart(2, "0") + m[1];
+}
+function symbolRows(q) {
+  const Q = (q || "").trim().toUpperCase();
+  if (!Q) return [];
+  const opts = (state.model && state.model.options) || {};
+  const listings = opts.listings || {};
+  const rank = (sym, name) => {
+    const S = String(sym).toUpperCase();
+    if (S === Q || bareSymbol(S) === Q) return 0;
+    if (S.startsWith(Q)) return 1;
+    return S.indexOf(Q) >= 0 || String(name || "").toUpperCase().indexOf(Q) >= 0 ? 2 : -1;
+  };
+  const out = [];
+  (opts.symbols || []).forEach((sym) => {
+    const l = listings[sym] || {};
+    if (l.kind === "Options" || OPTION_RE.test(sym)) {
+      const under = String(sym).split(" ")[0].toUpperCase();
+      if (bareSymbol(under) === Q || under.startsWith(Q) || String(sym).toUpperCase().indexOf(Q) >= 0) out.push({ book: true, sym, name: "", exchange: l.exchange || "", rank: 3, sub: contractExpiry(sym) + sym });
+      return;
+    }
+    const r = rank(sym, l.name);
+    if (r >= 0) out.push({ book: true, sym, name: l.name || "", exchange: l.exchange || "", rank: r, sub: sym });
+  });
+  extRows(q).forEach((r) => { const k = rank(r.symbol, r.name); out.push({ book: false, sym: r.symbol, name: r.name || "", exchange: r.exchange, currency: r.currency, rank: k < 0 ? 2 : k, sub: r.symbol }); });
+  out.sort((a, b) => a.rank - b.rank || (a.book === b.book ? 0 : a.book ? -1 : 1) || (a.sub < b.sub ? -1 : a.sub > b.sub ? 1 : 0));
+  return out;
 }
 function popFieldsBodyHtml() {
   const f = state.filters;
   const q = state.fieldQuery == null ? f.search : state.fieldQuery;
-  const matches = fieldMatches(q);
-  const ext = q ? extRows(q) : [];
-  if (q && (matches.length || ext.length)) {
-    const hi = Math.min(state.valueHi || 0, matches.length + ext.length - 1);
-    return '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' + matches.map((m, i) =>
-      popRowHtml(m.key, m.value, (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (i === hi ? " hi" : ""), m.label)).join("") +
-      ext.map((r, i) => extRowHtml(r, matches.length + i === hi ? " hi" : "")).join("") + "</div>";
+  const syms = q ? symbolRows(q) : [];
+  const others = fieldMatches(q).filter((m) => m.key !== "symbol");
+  if (q && (syms.length || others.length)) {
+    const hi = Math.min(state.valueHi || 0, syms.length + others.length - 1);
+    return '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' +
+      syms.map((r, i) => r.book
+        ? symbolRowHtml(r.sym, r.name, r.exchange, tkRowButtons(r.sym), (f.lists.symbol.indexOf(r.sym) >= 0 ? " on" : "") + (i === hi ? " hi" : ""), "toggleList", { key: "symbol", value: r.sym })
+        : extRowHtml(r, i === hi ? " hi" : "")).join("") +
+      others.map((m, i) => popRowHtml(m.key, m.value, (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (syms.length + i === hi ? " hi" : ""), m.label)).join("") + "</div>";
   }
   return (q ? '<div class="muted" style="padding:2px 7px 8px;font-size:12px">No match.</div>' : "") +
     '<div class="lbl" style="padding:2px 7px 7px">Filter by</div><div class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' +
