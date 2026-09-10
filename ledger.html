@@ -1119,7 +1119,7 @@ function tkSubmit() {
     cur.busy = false;
     if (!r || !r.ok) { cur.submitError = (r && r.error) || "Could not submit the order."; renderTicket(); return; }
     state.notice = tkNotice(v, r.status === "sent"); state.noticeKind = "ok";
-    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 4000);
+    setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);   // longer than the other notices: it names the whole order
     closeTicket();
   });
 }
