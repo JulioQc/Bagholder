@@ -199,7 +199,7 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .od-line{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .od-when{flex:none;white-space:nowrap}
 .od-fill{font-size:12.5px;color:var(--ink55)}
-.od-leg{display:flex;align-items:center;gap:8px;padding:9px 0 0;margin-top:6px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:12.5px}
+.od-leg{display:flex;align-items:center;gap:7px;padding:9px 0 0;margin-top:6px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.08);font-size:12px}
 .od-dot{flex:none;width:6px;height:6px;border-radius:50%;background:rgba(var(--ink-rgb),.28)}
 .od-dot.on{background:var(--accent)}
 .od-leg-label{color:var(--ink55);flex:none}
@@ -1272,7 +1272,7 @@ function bracketLegs(b) {
   const stopOrder = b.slOrderId ? orderById(b.slOrderId) : null, tpOrder = b.tpOrderId ? orderById(b.tpOrderId) : null;
   const done = b.status === "done", off = b.status === "cancelled" || b.status === "failed";
   if (b.slKind) {
-    const value = b.slKind === "trail" ? "Trailing " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") + " · " + px(b.slPrice) + " now" : "Market at " + px(b.slPrice);
+    const value = b.slKind === "trail" ? "Trail " + (b.slTrailUnit === "amt" ? px(b.slTrail) : tkPlain(b.slTrail) + "%") + " · " + px(b.slPrice) : "Market at " + px(b.slPrice);
     let st = "Waiting for fill", on = false;
     if (b.status === "armed" || b.status === "firing") { on = true; st = b.slMode === "watched" ? "Watching" : stopOrder && stopOrder.status === "cancelling" ? "Cancelling" : stopOrder && ORDER_LIVE[stopOrder.status] ? "At Wealthsimple" : b.attempts ? "Retrying · " + (b.error || "") : "Placing"; }
     else if (b.status === "target_placed") st = "Cancelled";
@@ -1310,24 +1310,35 @@ function orderEditorHtml(o) {
     '<div class="od-edit-btns"><button class="od-link muted" data-act="orderEditCancel">Cancel</button><button class="tk-go od-save" data-act="orderEditSave" data-arg=\'' + attr({ id: o.id }) + "'" + (state.busy === "orders" ? " disabled" : "") + ">" + (state.busy === "orders" ? "Saving…" : "Save") + "</button></div>" +
     (e.error ? '<div class="status-err" style="font-size:12px">' + esc(e.error) + "</div>" : "") + "</div>";
 }
+// the two legs of a live bracket, each with its state and Adjust
+function bracketLegsHtml(b) {
+  return bracketLegs(b).map((leg) => {
+    const editing = state.bracketEdit && state.bracketEdit.id === b.id && state.bracketEdit.leg === leg.key;
+    return '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-label">' + leg.label + '</span><span class="od-leg-value num">' + esc(leg.value) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span>" +
+      (BRACKET_LIVE[b.status] && !editing ? '<button class="od-link" data-act="bracketEdit" data-arg=\'' + attr({ id: b.id, leg: leg.key }) + "'>Adjust</button>" : "") + "</div>" + (editing ? bracketEditorHtml(b, leg) : "");
+  }).join("");
+}
+// a live bracket is a card of its own under Open: the position it protects, then its legs
+function bracketCardHtml(b) {
+  const entry = orderById(b.orderId);
+  const detail = (entry && entry.avgFill ? "Bought " + px(entry.avgFill) : "Bought") + " · " + esc((entry && entry.account) || "—");
+  const value = entry && entry.avgFill ? money(b.quantity * entry.avgFill * orderMultiplier(entry), "", 2) : "";
+  return '<div class="od-card"><div class="od-row1"><span class="od-title">' + esc(qty(b.quantity)) + " " + esc(b.symbol) + '</span><span class="od-pill accent">Bracket</span></div>' +
+    '<div class="od-row2"><span class="od-line">' + detail + '</span><span class="od-when num">' + value + "</span></div>" +
+    bracketLegsHtml(b) +
+    '<div class="od-foot"><span class="od-when">' + esc(orderWhenWord(b.armedAt || b.createdAt)) + "</span></div></div>";
+}
 function orderCardHtml(o) {
-  const pill = orderPill(o), b = bracketOf(o);
-  const exitOf = o.role === "stop" || o.role === "target" ? orderById(o.parentId) : null;
-  // a bracket's own order names the buy it protects; anything else says how it filled or why it was refused
-  const fill = exitOf ? (o.role === "stop" ? "Stop loss for " : "Take profit for ") + orderLine(exitOf).replace(/ at .*$/, "") : orderFillLine(o);
+  const pill = orderPill(o);
+  const fill = orderFillLine(o);
   const live = ORDER_LIVE[o.status] && o.status !== "cancelling";
   const canEdit = live && o.type !== "STOP";   // Wealthsimple's modify has no stop price
   let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + esc(qty(o.quantity)) + " " + esc(o.symbol) + '</span><span class="od-pill ' + pill[1] + '">' + esc(pill[0]) + "</span></div>" +
     '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + '</span><span class="od-when num">' + esc(orderValue(o)) + "</span></div>" +
     (fill ? '<div class="od-fill">' + esc(fill) + "</div>" : "");
-  if (b) {
-    const legs = bracketLegs(b);
-    html += legs.map((leg) => {
-      const editing = state.bracketEdit && state.bracketEdit.id === b.id && state.bracketEdit.leg === leg.key;
-      return '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-label">' + leg.label + '</span><span class="od-leg-value num">' + esc(leg.value) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span>" +
-        (BRACKET_LIVE[b.status] && !editing ? '<button class="od-link" data-act="bracketEdit" data-arg=\'' + attr({ id: b.id, leg: leg.key }) + "'>Adjust</button>" : "") + "</div>" + (editing ? bracketEditorHtml(b, leg) : "");
-    }).join("");
-  }
+  // a bracket still waiting for this order's fill shows on the order; once armed it is a card of its own
+  const waiting = live ? bracketOf(o) : null;
+  if (waiting && waiting.status === "waiting") html += bracketLegsHtml(waiting);
   if (state.orderEdit && state.orderEdit.id === o.id) html += orderEditorHtml(o);
   // the foot: when it was placed at the left; Edit and Cancel at the right while it is open
   html += '<div class="od-foot"><span class="od-when">' + esc(orderWhenWord(o.createdAt)) + "</span>" +
@@ -1362,9 +1373,11 @@ function ordersBodyHtml() {
     const rows = entries.filter((o) => ["cancelled", "expired", "rejected", "failed", "dry"].indexOf(o.status) >= 0).sort(newest);
     return group("Cancelled and rejected", rows) || '<div class="dim" style="font-size:12px">Nothing cancelled or rejected.</div>';
   }
-  // Open is what rests at Wealthsimple: entries, and a bracket's own stop or target once it is an order there
-  const resting = data.orders.filter((o) => ORDER_LIVE[o.status]).sort(newest);
-  return group("Open", resting) || '<div class="dim" style="font-size:12px">No open orders.</div>';
+  // Open: the orders resting at Wealthsimple, and each live bracket as a card of its own, newest first together
+  const cards = entries.filter((o) => ORDER_LIVE[o.status]).map((o) => ({ at: o.createdAt, html: orderCardHtml(o) }))
+    .concat((data.brackets || []).filter((b) => BRACKET_LIVE[b.status] && b.status !== "waiting").map((b) => ({ at: b.armedAt || b.createdAt, html: bracketCardHtml(b) })))
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  return cards.length ? '<div class="od-group">Open</div>' + cards.map((c) => c.html).join("") : '<div class="dim" style="font-size:12px">No open orders.</div>';
 }
 function ordersPanelHtml() {
   const seg = (id, label) => '<button class="od-seg' + (state.ordersTab === id ? " on" : "") + '" data-act="ordersTab" data-arg=\'' + attr({ tab: id }) + "'>" + label + "</button>";
