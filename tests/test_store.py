@@ -2072,3 +2072,174 @@ class WealthsimpleHttpTest(unittest.TestCase):
         self.assertTrue(any(e.startswith("RRSP:") for e in errors))
         self.assertIn("nope", errors[0])
 
+
+
+class OrderTicketTest(unittest.TestCase):
+    """The order ticket: what the page asks for, what the store keeps, what would be sent."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["BAGHOLDER_HOME"] = self.tmp.name
+        store.set_home(self.tmp.name)
+        bagholder.set_home(self.tmp.name)
+        store.ensure()
+        store.replace_accounts([
+            {"id": "acct-margin", "nickname": "Trading", "unifiedAccountType": "SELF_DIRECTED_NON_REGISTERED_MARGIN", "currency": "CAD", "status": "open", "type": "non_registered"},
+            {"id": "acct-tfsa", "nickname": "TFSA", "unifiedAccountType": "SELF_DIRECTED_TFSA", "currency": "CAD", "status": "open", "type": "tfsa"},
+            {"id": "acct-crypto", "nickname": "Crypto", "unifiedAccountType": "SELF_DIRECTED_CRYPTO", "currency": "CAD", "status": "open", "type": "crypto"},
+            {"id": "acct-old", "nickname": "Old", "unifiedAccountType": "SELF_DIRECTED_RRSP", "currency": "CAD", "status": "closed", "type": "rrsp"},
+            {"id": "acct-managed", "nickname": "Managed", "unifiedAccountType": "MANAGED_TFSA", "currency": "CAD", "status": "open", "type": "tfsa"},
+        ])
+        store.upsert_securities([
+            {"id": "sec-o-1", "symbol": "QNC", "name": "", "primaryExchange": "", "primaryMic": "", "currency": "USD", "underlyingId": "sec-s-us"},
+            {"id": "sec-s-us", "symbol": "QNC", "name": "Quantum Emotion Corp", "primaryExchange": "NYSE", "primaryMic": "XNYS", "currency": "USD", "underlyingId": None},
+            {"id": "sec-s-ca", "symbol": "QNC.TO", "name": "Quantum Emotion Corp", "primaryExchange": "TSX-V", "primaryMic": "XTSX", "currency": "CAD", "underlyingId": None},
+        ])
+        store.replace_margin([{"accountId": "acct-margin", "buyingPower": 12680.45, "currency": "CAD"}])
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        os.environ.pop("BAGHOLDER_HOME", None)
+
+    def _ticket(self, **over):
+        body = {"symbol": "QNC", "securityId": "sec-s-us", "accountId": "acct-margin", "side": "BUY", "type": "LIMIT", "tif": "DAY",
+                "quantity": 25, "limitPrice": 165.4, "stopPrice": None, "currency": "USD",
+                "stopLoss": {"kind": "stop", "price": 157.13}, "takeProfit": {"price": 181.94}}
+        body.update(over)
+        return body
+
+    def test_tradable_accounts_are_open_self_directed_securities_accounts(self):
+        ids = [a["id"] for a in bagholder.order_accounts()]
+        self.assertEqual(ids, ["acct-margin", "acct-tfsa"], "crypto, managed and closed accounts are not offered")
+        margin = {a["id"]: a["margin"] for a in bagholder.order_accounts()}
+        self.assertTrue(margin["acct-margin"]); self.assertFalse(margin["acct-tfsa"])
+
+    def test_a_symbol_resolves_to_its_share_listing_before_an_option_contract(self):
+        self.assertEqual(bagholder.resolve_security("QNC")["id"], "sec-s-us")
+        self.assertEqual(bagholder.resolve_security("qnc.to")["id"], "sec-s-ca")
+        self.assertEqual(bagholder.resolve_security("", "sec-s-ca")["id"], "sec-s-ca")
+        self.assertIsNone(bagholder.resolve_security("NOPE"))
+        # an id the book carries before its listing was fetched still names a security
+        self.assertEqual(bagholder.resolve_security("NVDA", "sec-nvda")["id"], "sec-nvda")
+
+    def test_the_quote_card_is_read_from_wealthsimples_summary(self):
+        node = {"id": "sec-s-us", "buyable": True, "sellable": True, "wsTradeEligible": True, "securityType": "EQUITY", "currency": "USD", "status": "ACTIVE",
+                "stock": {"name": "NVIDIA Corp", "symbol": "NVDA", "primaryExchange": "NASDAQ", "primaryMic": "XNAS"},
+                "quoteV2": {"__typename": "EquityQuote", "ask": 165.42, "bid": 165.38, "currency": "USD", "price": 165.40, "previousBaseline": 163.42,
+                            "marketStatus": "OPEN", "askSize": 300, "bidSize": 100, "mid": 165.40, "quotedAsOf": "2026-09-10T15:30:00Z"}}
+        q = bagholder.parse_quote(node)
+        self.assertEqual((q["symbol"], q["exchange"], q["currency"]), ("NVDA", "NASDAQ", "USD"))
+        self.assertEqual((q["last"], q["bid"], q["ask"], q["bidSize"], q["askSize"], q["mid"]), (165.40, 165.38, 165.42, 100, 300, 165.40))
+        self.assertAlmostEqual(q["change"], 1.98, places=6)
+        self.assertAlmostEqual(q["changePct"], 1.98 / 163.42, places=9)
+        self.assertEqual(q["marketStatus"], "OPEN")
+        self.assertIsNone(bagholder.parse_quote({"stock": {}}), "no id, no quote")
+        md = bagholder.parse_market_data({"security": {"allowedOrderSubtypes": ["LIMIT", "FRACTIONAL", "MARKET"], "marginRates": {"clientMarginRate": 30}}})
+        self.assertEqual(md["orderTypes"], ["MARKET", "LIMIT"], "only the ticket's types, in the ticket's order")
+        self.assertAlmostEqual(md["marginRate"], 0.30, "a percentage becomes a fraction")
+        bp = bagholder.parse_buying_power({"account": {"financials": {"current": {"tradingBalanceViewV2": {"buyingPower": {"quantity": 12680.45, "currency": "USD"}, "cash": {"quantity": 3420.18, "currency": "USD"}}}}}})
+        self.assertEqual((bp["buyingPower"], bp["cash"], bp["currency"]), (12680.45, 3420.18, "USD"))
+
+    def test_ticket_quote_answers_with_everything_the_panel_shows(self):
+        def fake_graphql(sess, operation, variables, query=None):
+            if operation == "FetchSecuritiesSummary":
+                self.assertEqual(variables["ids"], ["sec-s-us"])
+                return {"securities": [{"id": "sec-s-us", "buyable": True, "sellable": True, "wsTradeEligible": True, "securityType": "EQUITY", "currency": "USD",
+                                        "stock": {"name": "Quantum Emotion Corp", "symbol": "QNC", "primaryExchange": "NYSE"},
+                                        "quoteV2": {"__typename": "EquityQuote", "ask": 3.02, "bid": 3.0, "currency": "USD", "price": 3.01, "previousBaseline": 2.9, "marketStatus": "OPEN", "askSize": 5, "bidSize": 7}}]}
+            if operation == "FetchSecurityMarketData":
+                return {"security": {"id": "sec-s-us", "allowedOrderSubtypes": ["MARKET", "LIMIT", "STOP_LIMIT"], "marginRates": {"clientMarginRate": 0.5}}}
+            if operation == "FetchTradingBalanceBuyingPower":
+                self.assertEqual((variables["accountCanonicalId"], variables["currency"], variables["securityId"]), ("acct-margin", "USD", "sec-s-us"))
+                return {"account": {"financials": {"current": {"tradingBalanceViewV2": {"buyingPower": {"quantity": 9000.0, "currency": "USD"}, "cash": {"quantity": 100.0, "currency": "USD"}}}}}}
+            raise AssertionError(operation)
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}):
+            r = bagholder.ticket_quote("QNC", "", "acct-margin")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["quote"]["symbol"], "QNC")
+        self.assertEqual(r["orderTypes"], ["MARKET", "LIMIT", "STOP_LIMIT"])
+        self.assertEqual(r["marginRate"], 0.5)
+        self.assertEqual(r["marginAvailable"], 12680.45, "the margin account's available margin, from the stored buying power")
+        self.assertEqual((r["buyingPower"], r["cash"]), (9000.0, 100.0))
+        self.assertEqual([a["id"] for a in r["accounts"]], ["acct-margin", "acct-tfsa"])
+        self.assertFalse(r["live"])
+        with mock.patch.object(bagholder, "_ticket_session", return_value=None):
+            self.assertEqual(bagholder.ticket_quote("QNC", "", "acct-margin")["error"], "Not connected.")
+        self.assertIn("No listing stored", bagholder.ticket_quote("NOPE", "", "acct-margin")["error"])
+
+    def test_the_request_is_the_one_wealthsimples_web_app_sends(self):
+        row, req, err = bagholder.order_request(self._ticket())
+        self.assertEqual(err, "")
+        self.assertTrue(req["externalId"].startswith("order-"))
+        self.assertEqual({k: v for k, v in req.items() if k != "externalId"},
+                         {"canonicalAccountId": "acct-margin", "executionType": "LIMIT", "orderType": "BUY_QUANTITY", "quantity": 25.0, "securityId": "sec-s-us", "timeInForce": "DAY", "limitPrice": 165.4})
+        self.assertEqual(row["stopLoss"], {"kind": "stop", "price": 157.13, "trail": None, "trailUnit": "pct"})
+        self.assertEqual(row["takeProfit"], {"price": 181.94})
+        self.assertEqual((row["symbol"], row["currency"], row["account"]), ("QNC", "USD", "Trading"))
+        _, req, _ = bagholder.order_request(self._ticket(type="MARKET", tif="UNTIL_CANCEL"))
+        self.assertNotIn("limitPrice", req); self.assertNotIn("stopPrice", req); self.assertEqual(req["timeInForce"], "UNTIL_CANCEL")
+        _, req, _ = bagholder.order_request(self._ticket(type="STOP_LIMIT", stopPrice=170.0))
+        self.assertEqual((req["executionType"], req["stopPrice"], req["limitPrice"]), ("STOP_LIMIT", 170.0, 165.4))
+        row, req, _ = bagholder.order_request(self._ticket(side="SELL", type="STOP", stopPrice=150.0))
+        self.assertEqual((req["executionType"], req["orderType"], req["stopPrice"]), ("STOP", "SELL_QUANTITY", 150.0))
+        self.assertIsNone(row["stopLoss"], "a sell has nothing to protect"); self.assertIsNone(row["takeProfit"])
+        row, _, _ = bagholder.order_request(self._ticket(stopLoss={"kind": "trail", "trail": 5, "trailUnit": "pct"}))
+        self.assertEqual(row["stopLoss"], {"kind": "trail", "price": None, "trail": 5.0, "trailUnit": "pct"})
+
+    def test_a_bad_ticket_is_refused_with_the_reason(self):
+        bad = lambda **o: bagholder.order_request(self._ticket(**o))[2]
+        self.assertIn("Quantity", bad(quantity=0))
+        self.assertIn("limit price", bad(limitPrice=None))
+        self.assertIn("stop price", bad(type="STOP", stopPrice=None))
+        self.assertIn("account", bad(accountId="acct-crypto"))
+        self.assertIn("No listing", bad(symbol="NOPE", securityId=""))
+        self.assertIn("Side", bad(side="HOLD"))
+        self.assertIn("Order type", bad(type="TRAILING"))
+        self.assertIn("Time in force", bad(tif="WEEK"))
+        self.assertIn("stop loss price", bad(stopLoss={"kind": "stop", "price": 0}))
+        self.assertIn("take profit", bad(takeProfit={"price": None}))
+
+    def test_without_the_switch_a_submit_is_recorded_and_nothing_is_sent(self):
+        with mock.patch.object(bagholder, "graphql", side_effect=AssertionError("must not be called")), mock.patch.object(bagholder, "ORDERS_LIVE", False):
+            r = bagholder.place_order(self._ticket())
+        self.assertTrue(r["ok"]); self.assertEqual(r["status"], "dry")
+        rows = store.list_orders()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]["id"], rows[0]["status"], rows[0]["side"], rows[0]["type"], rows[0]["quantity"]), (r["id"], "dry", "BUY", "LIMIT", 25.0))
+        self.assertEqual(rows[0]["request"]["executionType"], "LIMIT")
+        self.assertEqual(rows[0]["stopLoss"]["price"], 157.13)
+        self.assertEqual(store.get_order(r["id"])["takeProfit"], {"price": 181.94})
+        self.assertFalse(bagholder.status_payload()["ordersLive"])
+
+    def test_with_the_switch_the_order_goes_to_wealthsimple_and_the_answer_is_kept(self):
+        sent = []
+        def fake_graphql(sess, operation, variables, query=None):
+            sent.append((operation, variables))
+            return {"soOrdersCreateOrder": {"errors": [], "order": {"orderId": "ws-123", "createdAt": "2026-09-10T15:31:00Z"}}}
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "ORDERS_LIVE", True), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}):
+            r = bagholder.place_order(self._ticket())
+        self.assertTrue(r["ok"]); self.assertEqual((r["status"], r["wsOrderId"]), ("sent", "ws-123"))
+        self.assertEqual(sent[0][0], "SoOrdersOrderCreate")
+        self.assertEqual(sent[0][1]["input"]["externalId"], r["id"])
+        row = store.get_order(r["id"])
+        self.assertEqual((row["status"], row["wsOrderId"]), ("sent", "ws-123"))
+        # a rejection keeps its reason on the row and comes back as the error
+        def rejecting(sess, operation, variables, query=None):
+            return {"soOrdersCreateOrder": {"errors": [{"code": "ORDER.insufficient_funds", "message": "Insufficient funds"}], "order": None}}
+        with mock.patch.object(bagholder, "graphql", side_effect=rejecting), mock.patch.object(bagholder, "ORDERS_LIVE", True), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}):
+            r2 = bagholder.place_order(self._ticket())
+        self.assertFalse(r2["ok"]); self.assertIn("Insufficient funds", r2["error"])
+        self.assertEqual((store.get_order(r2["id"])["status"], store.get_order(r2["id"])["error"]), ("rejected", "Insufficient funds"))
+        # a session Wealthsimple refuses never sends and says so
+        with mock.patch.object(bagholder, "graphql", side_effect=PermissionError()), mock.patch.object(bagholder, "ORDERS_LIVE", True), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}):
+            r3 = bagholder.place_order(self._ticket())
+        self.assertIn("refused the session", r3["error"])
+        self.assertEqual(store.get_order(r3["id"])["status"], "failed")
+        self.assertEqual(len(store.list_orders()), 3, "every attempt is a row")
+
+    def test_the_orders_table_survives_clear_synced_data(self):
+        with mock.patch.object(bagholder, "ORDERS_LIVE", False):
+            r = bagholder.place_order(self._ticket())
+        store.clear_synced_data(keep_journal=False, keep_market=False)
+        self.assertEqual(len(store.list_orders()), 1, "what was submitted is a record of the user's own actions, never cleared with the synced rows")
+        self.assertEqual(store.list_orders()[0]["id"], r["id"])

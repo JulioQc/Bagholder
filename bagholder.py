@@ -519,6 +519,75 @@ query FetchSecurities($ids: [ID!]!) {
 
 SECURITY_BATCH = 50
 
+# --- the order ticket: Wealthsimple's own order operations, as its web app sends them ---
+
+Q_FETCH_SECURITIES_SUMMARY = """
+query FetchSecuritiesSummary($ids: [ID!]!) {
+  securities(ids: $ids) {
+    id
+    buyable
+    sellable
+    wsTradeEligible
+    securityType
+    currency
+    status
+    stock { name symbol primaryExchange primaryMic }
+    optionDetails { multiplier optionType strikePrice expiryDate underlyingSecurity { id } }
+    quoteV2(currency: null) {
+      __typename
+      securityId
+      ask
+      bid
+      currency
+      price
+      sessionPrice
+      quotedAsOf
+      previousBaseline
+      ... on EquityQuote { marketStatus askSize bidSize close high last lastSize low open mid referenceClose }
+      ... on OptionQuote { marketStatus askSize bidSize close high last lastSize low open mid underlyingSpot }
+    }
+  }
+}
+""".strip()
+
+Q_FETCH_SECURITY_MARKET_DATA = """
+query FetchSecurityMarketData($id: ID!) {
+  security(id: $id) {
+    id
+    allowedOrderSubtypes
+    marginRates { clientMarginRate }
+  }
+}
+""".strip()
+
+Q_FETCH_TRADING_BALANCE_BUYING_POWER = """
+query FetchTradingBalanceBuyingPower($accountCanonicalId: ID!, $currency: Currency!, $securityId: ID) {
+  account(id: $accountCanonicalId) {
+    id
+    financials {
+      current {
+        id
+        tradingBalanceViewV2 {
+          id
+          buyingPower(securityId: $securityId, currency: $currency) { id quantity currency }
+          cash(currency: $currency) { id quantity currency }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+Q_SO_ORDERS_ORDER_CREATE = """
+mutation SoOrdersOrderCreate($input: SoOrders_CreateOrderInput!) {
+  soOrdersCreateOrder(input: $input) {
+    errors { code message }
+    order { orderId createdAt }
+  }
+}
+""".strip()
+
+
 # Versions are GitHub releases tagged vMAJOR.MINOR.PATCH. APP_VERSION is bumped in
 # the commit that a release is cut from; once a day the app asks GitHub for the
 # latest release and shows an update link when that tag is newer than this copy.
@@ -547,11 +616,14 @@ IMAGE_PAGE = REPO_URL + "/pkgs/container/bagholder"   # where a container copy's
 # The sign-in window inside the page (a container, where the user sees no window): Chromium
 # runs on the container's virtual display, the page shows its frames and sends it clicks and keys.
 LOGIN_VIEW = bool((os.environ.get("BAGHOLDER_LOGIN_VIEW") or "").strip())
+# Orders reach Wealthsimple only with BAGHOLDER_LIVE_ORDERS=1. Without it a submitted
+# ticket is recorded and printed with the exact request that would have been sent.
+ORDERS_LIVE = (os.environ.get("BAGHOLDER_LIVE_ORDERS") or "").strip() == "1"
 LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-09.3"
+PROTOCOL = "2026-09-10.1"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -603,6 +675,10 @@ QUERIES = {
     "FetchAccountsWithBalance": Q_FETCH_ACCOUNTS_WITH_BALANCE,
     "FetchSecuritySearchResult": Q_FETCH_SECURITY_SEARCH_RESULT,
     "FetchSecurity": Q_FETCH_SECURITY,
+    "FetchSecuritiesSummary": Q_FETCH_SECURITIES_SUMMARY,
+    "FetchSecurityMarketData": Q_FETCH_SECURITY_MARKET_DATA,
+    "FetchTradingBalanceBuyingPower": Q_FETCH_TRADING_BALANCE_BUYING_POWER,
+    "SoOrdersOrderCreate": Q_SO_ORDERS_ORDER_CREATE,
 }
 
 SKIP_TYPE_MARKERS = (
@@ -3592,6 +3668,323 @@ def append_manual(body):
     return out
 
 
+# ---------------------------------------------------------------------------
+# order ticket
+# ---------------------------------------------------------------------------
+ORDER_EXEC_TYPES = ("MARKET", "LIMIT", "STOP", "STOP_LIMIT")
+ORDER_TIFS = ("DAY", "UNTIL_CANCEL")
+ORDER_TRADABLE_TYPES = ("SELF_DIRECTED",)   # account types the ticket offers, by prefix
+ORDER_UNTRADABLE_MARKERS = ("CRYPTO", "PREDICTIONS", "MANAGED")
+
+
+def _ticket_session():
+    """The session for a ticket call: refreshed when its token is near expiry.
+    None when there is no login."""
+    sess = load_session()
+    if not sess or not sess.get("access_token"):
+        return None
+    try:
+        ensure_fresh_token(sess)
+    except Exception:
+        pass
+    return load_session() or sess
+
+
+def order_accounts(accounts=None):
+    """The accounts a ticket can route to: open self-directed accounts that trade
+    securities (crypto and predictions accounts have their own order paths). Each
+    carries whether it is a margin account, which decides the review's last figure."""
+    out = []
+    for a in (accounts if accounts is not None else store.snapshot().get("accounts") or []):
+        typ = _s(a.get("unifiedAccountType") or a.get("unified_account_type")).upper()
+        status = _s(a.get("status")).lower()
+        if not a.get("id") or status == "closed" or not typ.startswith(ORDER_TRADABLE_TYPES):
+            continue
+        if any(m in typ for m in ORDER_UNTRADABLE_MARKERS):
+            continue
+        nick = model.norm_account_name(a.get("nickname") or typ)
+        out.append({"id": _s(a.get("id")), "name": nick, "type": typ, "margin": "MARGIN" in typ, "currency": _s(a.get("currency"))})
+    return out
+
+
+def resolve_security(symbol="", security_id=""):
+    """The security a ticket is for: by id when the page knows it, else the stored
+    listing under that exact symbol, a share listing before an option or cash row."""
+    rows = store.list_securities()
+    sid = _s(security_id).strip()
+    if sid:
+        for r in rows:
+            if r["id"] == sid:
+                return r
+        # an id the book carries but no listing was fetched for yet: the quote names it
+        return {"id": sid, "symbol": _s(symbol).strip().upper(), "name": "", "primaryExchange": "", "primaryMic": "", "currency": "", "underlyingId": None}
+    sym = _s(symbol).strip().upper()
+    if not sym:
+        return None
+    same = [r for r in rows if _s(r.get("symbol")).upper() == sym]
+    same.sort(key=lambda r: (0 if _s(r["id"]).startswith("sec-s-") else 1, r["id"]))
+    return same[0] if same else None
+
+
+def parse_quote(node):
+    """One securities(ids) node into the ticket's quote card. Prices in the
+    security's currency; the day's change against Wealthsimple's previous baseline."""
+    if not isinstance(node, dict) or not node.get("id"):
+        return None
+    q = node.get("quoteV2") if isinstance(node.get("quoteV2"), dict) else {}
+    stock = node.get("stock") if isinstance(node.get("stock"), dict) else {}
+    opt = node.get("optionDetails") if isinstance(node.get("optionDetails"), dict) else {}
+    last = _num(q.get("price"), None)
+    if last is None:
+        last = _num(q.get("last"), None)
+    base = _num(q.get("previousBaseline"), None)
+    if base is None:
+        base = _num(q.get("referenceClose"), None)
+    bid, ask = _num(q.get("bid"), None), _num(q.get("ask"), None)
+    change = (last - base) if (last is not None and base is not None) else None
+    return {
+        "securityId": _s(node.get("id")),
+        "symbol": _s(stock.get("symbol")),
+        "name": _s(stock.get("name")),
+        "exchange": _s(stock.get("primaryExchange")),
+        "currency": _s(q.get("currency") or node.get("currency")).upper(),
+        "securityType": _s(node.get("securityType")),
+        "buyable": bool(node.get("buyable")),
+        "sellable": bool(node.get("sellable")),
+        "tradeEligible": bool(node.get("wsTradeEligible")),
+        "status": _s(node.get("status")),
+        "last": last,
+        "bid": bid,
+        "ask": ask,
+        "bidSize": _num(q.get("bidSize"), None),
+        "askSize": _num(q.get("askSize"), None),
+        "mid": _num(q.get("mid"), None) if q.get("mid") is not None else ((bid + ask) / 2 if bid is not None and ask is not None else None),
+        "change": change,
+        "changePct": (change / base) if (change is not None and base) else None,
+        "marketStatus": _s(q.get("marketStatus")),
+        "quotedAsOf": _s(q.get("quotedAsOf")),
+        "multiplier": _num(opt.get("multiplier"), None) if opt else None,
+    }
+
+
+def parse_market_data(data):
+    sec = (data or {}).get("security") if isinstance(data, dict) else None
+    sec = sec if isinstance(sec, dict) else {}
+    subtypes = [str(s).upper() for s in (sec.get("allowedOrderSubtypes") or []) if s]
+    rate = _num(((sec.get("marginRates") or {}) if isinstance(sec.get("marginRates"), dict) else {}).get("clientMarginRate"), None)
+    if rate is not None and rate > 1:
+        rate = rate / 100.0   # a percentage; the ticket wants a fraction
+    return {"orderTypes": [t for t in ORDER_EXEC_TYPES if t in subtypes], "marginRate": rate}
+
+
+def parse_buying_power(data):
+    view = ((((data or {}).get("account") or {}).get("financials") or {}).get("current") or {}).get("tradingBalanceViewV2") or {}
+    bp = view.get("buyingPower") if isinstance(view.get("buyingPower"), dict) else {}
+    cash = view.get("cash") if isinstance(view.get("cash"), dict) else {}
+    return {"buyingPower": _num(bp.get("quantity"), None), "cash": _num(cash.get("quantity"), None), "currency": _s(bp.get("currency") or cash.get("currency"))}
+
+
+def fetch_quotes(sess, security_ids):
+    """The ticket's quote for each id, one request. Missing ids are absent."""
+    ids = [s for s in (_s(x).strip() for x in security_ids or []) if s]
+    if not ids:
+        return {}
+    data = graphql(sess, "FetchSecuritiesSummary", {"ids": ids})
+    out = {}
+    for node in (data or {}).get("securities") or []:
+        q = parse_quote(node)
+        if q:
+            out[q["securityId"]] = q
+    return out
+
+
+def ticket_quote(symbol="", security_id="", account_id=""):
+    """Everything the ticket shows for one security in one account: the quote card,
+    the order types Wealthsimple allows for it, its margin rate, the account's buying
+    power and cash for it, the margin account's available margin, today's USD rate.
+    Errors are answers, not exceptions: the page prints them in the panel."""
+    sec = resolve_security(symbol, security_id)
+    if not sec:
+        return {"ok": False, "error": "No listing stored for " + (_s(symbol) or _s(security_id)) + "."}
+    sess = _ticket_session()
+    if not sess:
+        return {"ok": False, "error": "Not connected."}
+    try:
+        quotes = fetch_quotes(sess, [sec["id"]])
+    except PermissionError:
+        return {"ok": False, "error": "Wealthsimple refused the session. Connect Wealthsimple again."}
+    except Exception as e:
+        return {"ok": False, "error": "Quote failed: " + (str(e) or e.__class__.__name__)}
+    quote = quotes.get(sec["id"])
+    if not quote:
+        return {"ok": False, "error": "Wealthsimple has no quote for " + (sec.get("symbol") or sec["id"]) + "."}
+    if not quote["symbol"]:
+        quote["symbol"] = sec.get("symbol") or ""
+    if not quote["name"]:
+        quote["name"] = sec.get("name") or ""
+    if not quote["exchange"]:
+        quote["exchange"] = sec.get("primaryExchange") or ""
+    if not quote["currency"]:
+        quote["currency"] = _s(sec.get("currency")).upper()
+    md = {"orderTypes": list(ORDER_EXEC_TYPES), "marginRate": None}
+    try:
+        md = parse_market_data(graphql(sess, "FetchSecurityMarketData", {"id": sec["id"]}))
+    except Exception as e:
+        sys.stderr.write("bagholder ticket: market data for %s failed: %s\n" % (sec["id"], e))
+    accounts = order_accounts()
+    acct = next((a for a in accounts if a["id"] == _s(account_id)), None)
+    balance = {"buyingPower": None, "cash": None, "currency": ""}
+    if acct:
+        try:
+            balance = parse_buying_power(graphql(sess, "FetchTradingBalanceBuyingPower", {"accountCanonicalId": acct["id"], "currency": quote["currency"] or "CAD", "securityId": sec["id"]}))
+        except Exception as e:
+            sys.stderr.write("bagholder ticket: buying power for %s failed: %s\n" % (acct["id"], e))
+    margin_available = None
+    if acct and acct["margin"]:
+        for m in store.snapshot().get("margin") or []:
+            if _s(m.get("accountId")) == acct["id"] and m.get("buyingPower") is not None:
+                margin_available = _num(m.get("buyingPower"), None)
+    fx = store.fx_rates()
+    return {
+        "ok": True,
+        "quote": quote,
+        "orderTypes": md["orderTypes"] or list(ORDER_EXEC_TYPES),
+        "marginRate": md["marginRate"],
+        "accounts": accounts,
+        "account": acct,
+        "buyingPower": balance["buyingPower"],
+        "cash": balance["cash"],
+        "marginAvailable": margin_available,
+        "fxUsdCad": model.rate_on(fx, model.today_local()) if fx else None,
+        "live": ORDERS_LIVE,
+    }
+
+
+def order_request(body):
+    """Validate a ticket and build the request Wealthsimple's web app sends for it.
+    Returns (row, request, error); the row is what the store keeps."""
+    b = body if isinstance(body, dict) else {}
+    err = lambda m: (None, None, m)
+    side = _s(b.get("side")).upper()
+    if side not in ("BUY", "SELL"):
+        return err("Side must be Buy or Sell.")
+    exec_type = _s(b.get("type")).upper()
+    if exec_type not in ORDER_EXEC_TYPES:
+        return err("Order type must be Market, Limit, Stop or Stop limit.")
+    tif = _s(b.get("tif") or "DAY").upper()
+    if tif not in ORDER_TIFS:
+        return err("Time in force must be Day or Good till cancelled.")
+    qty = _num(b.get("quantity"), 0.0)
+    if not qty or qty <= 0:
+        return err("Quantity must be more than zero.")
+    limit_price = _num(b.get("limitPrice"), None)
+    stop_price = _num(b.get("stopPrice"), None)
+    if exec_type in ("LIMIT", "STOP_LIMIT") and not (limit_price and limit_price > 0):
+        return err("A limit price is required.")
+    if exec_type in ("STOP", "STOP_LIMIT") and not (stop_price and stop_price > 0):
+        return err("A stop price is required.")
+    acct = next((a for a in order_accounts() if a["id"] == _s(b.get("accountId"))), None)
+    if not acct:
+        return err("Choose an account.")
+    sec = resolve_security(b.get("symbol"), b.get("securityId"))
+    if not sec:
+        return err("No listing stored for " + _s(b.get("symbol")) + ".")
+    sl = b.get("stopLoss") if isinstance(b.get("stopLoss"), dict) else None
+    tp = b.get("takeProfit") if isinstance(b.get("takeProfit"), dict) else None
+    if side == "SELL":
+        sl, tp = None, None   # nothing to protect: the shares leave
+    if sl:
+        kind = _s(sl.get("kind") or "stop").lower()
+        if kind not in ("stop", "trail"):
+            return err("Stop loss type must be Stop or Trailing stop.")
+        if kind == "stop" and not (_num(sl.get("price"), 0) > 0):
+            return err("A stop loss price is required.")
+        if kind == "trail" and not (_num(sl.get("trail"), 0) > 0):
+            return err("A trail is required.")
+        sl = {"kind": kind, "price": _num(sl.get("price"), None), "trail": _num(sl.get("trail"), None), "trailUnit": "amt" if _s(sl.get("trailUnit")).lower() == "amt" else "pct"}
+    if tp:
+        if not (_num(tp.get("price"), 0) > 0):
+            return err("A take profit price is required.")
+        tp = {"price": _num(tp.get("price"), None)}
+    oid = "order-" + str(uuid.uuid4())
+    req = {
+        "canonicalAccountId": acct["id"],
+        "externalId": oid,
+        "executionType": exec_type,
+        "orderType": side + "_QUANTITY",
+        "quantity": qty,
+        "securityId": sec["id"],
+        "timeInForce": tif,
+    }
+    if exec_type in ("LIMIT", "STOP_LIMIT"):
+        req["limitPrice"] = limit_price
+    if exec_type in ("STOP", "STOP_LIMIT"):
+        req["stopPrice"] = stop_price
+    row = {
+        "id": oid,
+        "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "accountId": acct["id"],
+        "account": acct["name"],
+        "securityId": sec["id"],
+        "symbol": _s(sec.get("symbol")),
+        "currency": _s(b.get("currency") or sec.get("currency")).upper(),
+        "side": side,
+        "type": exec_type,
+        "quantity": qty,
+        "limitPrice": req.get("limitPrice"),
+        "stopPrice": req.get("stopPrice"),
+        "tif": tif,
+        "stopLoss": sl,
+        "takeProfit": tp,
+        "status": "",
+        "wsOrderId": "",
+        "error": "",
+        "request": req,
+    }
+    return row, req, ""
+
+
+def place_order(body):
+    """Record the ticket; send it to Wealthsimple only when ORDERS_LIVE. The row is
+    written before the request goes out and updated with the answer, so a crash
+    between the two leaves a row that names the external id Wealthsimple knows."""
+    row, req, error = order_request(body)
+    if error:
+        return {"ok": False, "error": error}
+    if not ORDERS_LIVE:
+        row["status"] = "dry"
+        store.insert_order(row)
+        sys.stderr.write("bagholder order (dry run, not sent): %s\n" % json.dumps(req, sort_keys=True))
+        return {"ok": True, "id": row["id"], "status": "dry", "order": row}
+    sess = _ticket_session()
+    if not sess:
+        return {"ok": False, "error": "Not connected."}
+    row["status"] = "sending"
+    store.insert_order(row)
+    try:
+        data = graphql(sess, "SoOrdersOrderCreate", {"input": req})
+    except PermissionError:
+        store.update_order(row["id"], {"status": "failed", "error": "Wealthsimple refused the session."})
+        return {"ok": False, "error": "Wealthsimple refused the session. Connect Wealthsimple again.", "id": row["id"]}
+    except Exception as e:
+        msg = str(e) or e.__class__.__name__
+        store.update_order(row["id"], {"status": "failed", "error": msg})
+        sys.stderr.write("bagholder order: %s failed: %s\n" % (row["id"], msg))
+        return {"ok": False, "error": "Order failed: " + msg, "id": row["id"]}
+    result = (data or {}).get("soOrdersCreateOrder") or {}
+    errs = result.get("errors") or []
+    if errs:
+        first = errs[0] if isinstance(errs[0], dict) else {"message": str(errs[0])}
+        msg = _s(first.get("message") or first.get("code"))
+        store.update_order(row["id"], {"status": "rejected", "error": msg})
+        sys.stderr.write("bagholder order: %s rejected: %s\n" % (row["id"], msg))
+        return {"ok": False, "error": "Wealthsimple rejected the order: " + msg, "id": row["id"]}
+    order = result.get("order") or {}
+    store.update_order(row["id"], {"status": "sent", "wsOrderId": _s(order.get("orderId"))})
+    sys.stderr.write("bagholder order: %s sent, Wealthsimple order %s\n" % (row["id"], _s(order.get("orderId"))))
+    return {"ok": True, "id": row["id"], "status": "sent", "wsOrderId": _s(order.get("orderId"))}
+
+
 def status_payload():
     book = load_book()
     sess = load_session()
@@ -3619,6 +4012,7 @@ def status_payload():
             "canUpdate": can_update(),
             "updateBy": "image" if UPDATES_OFF else "app",
             "loginView": LOGIN_VIEW,
+            "ordersLive": ORDERS_LIVE,
             "updating": str(_state.get("updating") or ""),
             "updateError": str(_state.get("updateError") or ""),
         }
@@ -4192,6 +4586,20 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send(200, data, "text/html; charset=utf-8")
             return
+        if path == "/api/order/quote":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            qs = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            first = lambda k: (qs.get(k) or [""])[0]
+            self._send(200, ticket_quote(first("symbol"), first("security"), first("account")))
+            return
+        if path == "/api/orders":
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            self._send(200, {"ok": True, "orders": store.list_orders(), "live": ORDERS_LIVE})
+            return
         if path == "/api/status":
             if not self._gate():
                 self._send(403, {"ok": False})
@@ -4349,6 +4757,10 @@ class Handler(BaseHTTPRequestHandler):
             summary["ok"] = True
             summary["sessionPresent"] = bool(load_session())
             self._send(200, summary)
+            return
+        if path == "/api/order":
+            body = self._read_json()
+            self._send(200, place_order(body))
             return
         if path == "/api/journal":
             body = self._read_json()
