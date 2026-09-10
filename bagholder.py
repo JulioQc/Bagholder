@@ -4233,9 +4233,12 @@ def refresh_orders(only_id=""):
         identity = _identity_from(sess)
         if identity:
             try:
-                known = {o["id"] for o in store.list_orders()}
+                rows = store.list_orders()
+                known = {o["id"] for o in rows} | {o["wsOrderId"] for o in rows if o.get("wsOrderId")}
                 for node in fetch_order_feed(sess, identity):
-                    if node["id"] in known:
+                    # an order Bagholder sent is known by the external id it gave, and by the
+                    # order id Wealthsimple answered with: either match, it is the same order
+                    if node["id"] in known or _s(node.get("orderId")) in known:
                         continue
                     store.insert_order(feed_order_row(node))
                     added += 1

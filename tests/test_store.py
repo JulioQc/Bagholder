@@ -2109,6 +2109,13 @@ class _OrdersBase(unittest.TestCase):
         body.update(over)
         return body
 
+    def _sent(self):
+        """A ticket sent live against a fake Wealthsimple that answers with order id ws-1."""
+        with mock.patch.object(bagholder, "graphql", return_value={"soOrdersCreateOrder": {"errors": [], "order": {"orderId": "ws-1"}}}), \
+             mock.patch.object(bagholder, "ORDERS_LIVE", True), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}), \
+             mock.patch.object(bagholder.threading, "Thread"):
+            return bagholder.place_order(self._ticket())["id"]
+
 
 class OrderTicketTest(_OrdersBase):
     """The order ticket: what the page asks for, what the store keeps, what would be sent."""
@@ -2255,12 +2262,6 @@ class OrderTicketTest(_OrdersBase):
 
 class OrdersReadBackTest(_OrdersBase):
     """Orders read back from Wealthsimple: their state, the pending feed, and cancel."""
-
-    def _sent(self):
-        with mock.patch.object(bagholder, "graphql", return_value={"soOrdersCreateOrder": {"errors": [], "order": {"orderId": "ws-1"}}}), \
-             mock.patch.object(bagholder, "ORDERS_LIVE", True), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}), \
-             mock.patch.object(bagholder.threading, "Thread"):
-            return bagholder.place_order(self._ticket())["id"]
 
     def test_wealthsimple_statuses_group_as_the_page_shows_them(self):
         for ws in ("NEW", "PENDING_SUBMISSION", "SUBMITTED", "PLACED", "PARTIALLY_FILLED", "CONTINGENT"):
@@ -2772,3 +2773,22 @@ class OrdersPanelTest(_EngineBase):
             self.assertTrue(bagholder.adjust_bracket(b["id"], "tp", remove=True)["ok"])
         b = store.get_bracket(b["id"])
         self.assertEqual((b["status"], b["outcome"], b["tpPrice"]), ("cancelled", "both legs removed", None))
+
+
+class FeedMatchingTest(_OrdersBase):
+    """An order Bagholder sent is never duplicated from Wealthsimple's pending list."""
+
+    def test_the_feed_matches_bagholders_order_by_either_id(self):
+        oid = self._sent()   # stored with Wealthsimple's order id ws-1
+        node = {"id": "order-some-other-id", "orderId": "ws-1", "canonicalAccountId": "acct-margin", "createdAtUtc": "2026-09-10T01:00:00Z", "status": "SUBMITTED", "side": "BUY", "executionType": "LIMIT",
+                "submittedQuantity": 25, "limitPrice": 165.4, "securityCurrency": "USD", "securityId": "sec-s-us", "symbol": "QNC", "security": {"id": "sec-s-us", "stock": {"symbol": "QNC", "name": "Quantum Emotion Corp"}}}
+        def fake_graphql(sess, operation, variables, query=None):
+            if operation == "OrderServiceExtendedOrderFeed":
+                return {"identity": {"id": "ident-1", "orderServiceExtendedOrderFeed": {"edges": [{"cursor": "c1", "node": node}, {"cursor": "c2", "node": dict(node, id=oid, orderId="ws-1")}], "pageInfo": {"hasNextPage": False}}}}
+            if operation == "FetchSoOrdersExtendedOrder":
+                return {"soOrdersExtendedOrder": {"status": "SUBMITTED"}}
+            raise AssertionError(operation)
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t", "identity_canonical_id": "ident-1"}):
+            r = bagholder.refresh_orders()
+        self.assertEqual(r["added"], 0, "the same order under Wealthsimple's id, or under its own external id, is not a new row")
+        self.assertEqual(len(store.list_orders()), 1)
