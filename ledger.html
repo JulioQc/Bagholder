@@ -1338,9 +1338,11 @@ function bracketLegsHtml(b) {
   return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-dot' + (leg.on ? " on" : "") + '"></span><span class="od-leg-text num">' + esc(leg.text) + '</span><span class="od-leg-state">' + esc(leg.state) + "</span></div>").join("");
 }
 // every card's foot: when, at the left; Edit and Cancel at the right while it is live, Edit dimmed where a change is not possible
-function cardFootHtml(when, live, editAct, editArg, canEdit, cancelAct, cancelArg) {
+function cardFootHtml(when, live, editAct, editArg, canEdit, cancelAct, cancelArg, ended) {
+  // ended: [word, tone] for a finished card, shown where the actions would be
   return '<div class="od-foot"><span class="od-when">' + esc(when) + "</span>" +
-    (live ? '<span class="od-foot-acts"><button class="od-link" data-act="' + editAct + '" data-arg=\'' + attr(editArg) + "'" + (canEdit ? "" : " disabled") + '>Edit</button><button class="od-link muted" data-act="' + cancelAct + '" data-arg=\'' + attr(cancelArg) + "'>Cancel</button></span>" : "") + "</div>";
+    (live ? '<span class="od-foot-acts"><button class="od-link" data-act="' + editAct + '" data-arg=\'' + attr(editArg) + "'" + (canEdit ? "" : " disabled") + '>Edit</button><button class="od-link muted" data-act="' + cancelAct + '" data-arg=\'' + attr(cancelArg) + "'>Cancel</button></span>"
+      : ended ? '<span class="od-state' + (ended[1] === "neg" ? " neg" : "") + '">' + esc(ended[0]) + "</span>" : "") + "</div>";
 }
 // the accounts in scope, from the page's filter
 function ordersScope() { return (state.filters && state.filters.lists && state.filters.lists.account) || []; }
@@ -1378,13 +1380,13 @@ function orderCardHtml(o) {
   // the tab already says pending or filled; only the ended tab has states worth a word
   const ended = state.ordersTab === "cancelled" ? orderPill(o) : null;
   let html = '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:' + (o.side === "SELL" ? "var(--neg)" : "var(--pos)") + '">' + (o.side === "SELL" ? "Sell" : "Buy") + "</span> " + orderTitle(o) + '</span><span class="od-value num">' + esc(orderValue(o)) + "</span></div>" +
-    '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + "</span>" + (ended ? '<span class="od-state' + (ended[1] === "neg" ? " neg" : "") + '">' + esc(ended[0]) + "</span>" : "") + "</div>" +
+    '<div class="od-row2"><span class="od-line">' + esc(orderDetailLine(o)) + "</span></div>" +
     (fill ? '<div class="od-fill">' + esc(fill) + "</div>" : "");
   // a bracket still waiting for this order's fill shows on the order; once armed it is a card of its own
   const waiting = live ? bracketOf(o) : null;
   if (waiting && waiting.status === "waiting") html += bracketLegsHtml(waiting);
   if (editing) html += orderEditorHtml(o);
-  html += cardFootHtml(orderWhenWord(o.createdAt), live && !editing, "orderEdit", { id: o.id }, canEdit, "cancelOrder", { id: o.id });
+  html += cardFootHtml(orderWhenWord(o.createdAt), live && !editing, "orderEdit", { id: o.id }, canEdit, "cancelOrder", { id: o.id }, ended);
   return html + "</div>";
 }
 // what the order is worth: quantity × price, contracts × 100; a filled order, what it filled for
