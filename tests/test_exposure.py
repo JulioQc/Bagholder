@@ -50,6 +50,7 @@ class NamesTest(unittest.TestCase):
     def test_sector_names_fold_onto_one_set(self):
         self.assertEqual(exposure.norm_sector("Technology"), "Information Technology")
         self.assertEqual(exposure.norm_sector("Financial"), "Financials")
+        self.assertEqual(exposure.norm_sector("Communication"), "Communication Services")   # iShares' holdings file
         self.assertEqual(exposure.norm_sector("Consumer, Non-cyclical"), "Consumer Staples")
         self.assertEqual(exposure.norm_sector("Basic Materials"), "Materials")
         self.assertEqual(exposure.norm_sector("Bitcoin Holding"), "Digital assets")
@@ -220,6 +221,14 @@ class PortfolioSlicesTest(unittest.TestCase):
                          "the same positions as Allocation, the short included; the contract counts as its underlying; b's uncovered quarter and c, which has no record, are unclassified; the coin is Digital assets")
         self.assertAlmostEqual(sum(s["share"] for s in sectors), 1.0)
         self.assertEqual([(r["name"], round(r["value"], 2)) for r in regions], [("Canada", 1100.0), ("United States", 850.0), ("Not classified", 750.0)], "a coin has no country")
+
+    def test_a_stored_alias_folds_when_read(self):
+        positions = [{"mv": 100.0, "currency": "CAD", "securityId": "a", "short": False, "kind": "Shares"},
+                     {"mv": 100.0, "currency": "CAD", "securityId": "b", "short": False, "kind": "Shares"}]
+        exposures = {"a": {"sectors": {"Communication": 1.0}, "countries": {}, "coverage": 1.0},   # iShares' word, kept before the alias was known
+                     "b": {"sectors": {"Communication Services": 1.0}, "countries": {}, "coverage": 1.0}}
+        sectors, _ = model.exposure_slices(positions, exposures, lambda v, c: v)
+        self.assertEqual([(s["name"], round(s["value"], 2)) for s in sectors], [("Communication Services", 200.0)])
 
 
 if __name__ == "__main__":

@@ -72,6 +72,10 @@ textarea.input{resize:none;line-height:1.5}
 .pos{color:var(--pos)}
 .neg{color:var(--neg)}
 .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55)}
+.xrow{display:grid;grid-template-columns:160px minmax(0,1fr) 48px;align-items:center;gap:12px;font-size:12.5px}
+.xrow.r{grid-template-columns:48px minmax(0,1fr) 160px}
+.xrow .xname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xbar{height:16px;border-radius:3px}
 .seg{display:flex;gap:0;padding:0;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);overflow:hidden}
 .seg-opt{flex:1;display:flex;align-items:center;justify-content:center;padding:12px 0;cursor:pointer;font-size:13px;color:var(--ink);border-left:1px solid rgba(var(--ink-rgb),.14)}
 .seg-opt:first-child{border-left:0}
@@ -2108,10 +2112,10 @@ function portfolioPieHtml(pf) {
   const p = portfolioSlices(pf);
   return donutCardHtml("ppie", "Allocation", "Market value", p.items, p.total, "No open positions in scope.");
 }
-// the Sectors and Regions cards: the model's slices, ten at most plus Other, Not classified last in the neutral grey
-function exposureSlices(rows) {
+// the Sectors and Regions card: the model's slices, `cap` at most (ten) plus Other, Not classified last in the neutral grey
+function exposureSlices(rows, cap) {
   const known = (rows || []).filter((x) => x.name !== "Not classified"), unc = (rows || []).find((x) => x.name === "Not classified");
-  const top = known.slice(0, 10), rest = known.slice(10);
+  const top = known.slice(0, cap || 10), rest = known.slice(cap || 10);
   const items = top.map((x) => ({ label: x.name, v: x.value, share: x.share }));
   if (rest.length) items.push({ label: "Other (" + rest.length + ")", v: rest.reduce((a, x) => a + x.value, 0), share: rest.reduce((a, x) => a + x.share, 0) });
   items.forEach((x, i) => { x.color = "var(--pie-" + ((i % 11) + 1) + ")"; });
@@ -2119,12 +2123,21 @@ function exposureSlices(rows) {
   const total = (rows || []).reduce((a, x) => a + x.value, 0);
   return { total, items };
 }
+// one card the width of the row: each sector a bar from its name at the left edge toward the centre, each region a bar
+// from its name at the right edge toward the centre, the shares meeting in the middle; each side scaled to its own largest
 function exposureCardsHtml(pf) {
-  const sec = exposureSlices(pf.sectors), reg = exposureSlices(pf.regions);
-  const total = pf.marketValue || 0;   // the centre reads what Allocation's does
-  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch">' +
-    donutCardHtml("xsec", "Sectors", "Market value", sec.items, total, "No open positions in scope.") +
-    donutCardHtml("xreg", "Regions", "Market value", reg.items, total, "No open positions in scope.") + "</div>";
+  const sec = exposureSlices(pf.sectors, 12).items, reg = exposureSlices(pf.regions).items;
+  const width = (x, items) => { const m = Math.max(0, ...items.map((y) => y.share)); return Math.max(0.6, m > 0 ? x.share / m * 100 : 0).toFixed(2) + "%"; };
+  const bar = (x, items, side) => '<div style="display:flex;justify-content:' + (side === "l" ? "flex-start" : "flex-end") + '"><div class="xbar" style="width:' + width(x, items) + ';background:' + x.color + '"></div></div>';
+  const row = (x, items, side) => !x ? "<div></div>" : side === "l"
+    ? '<div class="xrow"><span class="xname">' + esc(x.label) + "</span>" + bar(x, items, side) + '<span class="tab" style="text-align:right">' + pctPlain(x.share) + "</span></div>"
+    : '<div class="xrow r"><span class="tab">' + pctPlain(x.share) + "</span>" + bar(x, items, side) + '<span class="xname" style="text-align:right">' + esc(x.label) + "</span></div>";
+  let rows = "";
+  for (let i = 0; i < Math.max(sec.length, reg.length); i++) rows += row(sec[i], sec, "l") + row(reg[i], reg, "r");
+  return '<div class="card elev-sm" style="padding:16px 18px 14px">' +
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:12px"><h5>Sectors</h5><h5>Regions</h5></div>' +
+    (rows ? '<div style="display:grid;grid-template-columns:1fr 1fr;column-gap:56px;row-gap:8px">' + rows + "</div>"
+      : '<div class="muted" style="font-size:12.5px">No open positions in scope.</div>') + "</div>";
 }
 function donutHover(e, key) {
   const el = e.target.closest("[data-slice]"); const plot = document.getElementById(key + "Plot"); if (!plot) return;

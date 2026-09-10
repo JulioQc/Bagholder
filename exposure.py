@@ -89,7 +89,7 @@ _SECTOR_ALIAS = {
     "materials": "Materials", "basic materials": "Materials",
     "utilities": "Utilities",
     "real estate": "Real Estate", "realestate": "Real Estate",
-    "communication services": "Communication Services", "communications": "Communication Services", "media": "Communication Services", "telecommunications services": "Communication Services", "telecommunications": "Communication Services", "telecommunication services": "Communication Services",
+    "communication services": "Communication Services", "communications": "Communication Services", "communication": "Communication Services", "media": "Communication Services", "telecommunications services": "Communication Services", "telecommunications": "Communication Services", "telecommunication services": "Communication Services",
     "bitcoin holding": "Digital assets", "digital assets": "Digital assets", "cryptocurrency": "Digital assets", "crypto": "Digital assets",
     "cash and/or derivatives": "", "cash": "", "other": "", "-": "", "n/a": "",
 }
