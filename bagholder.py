@@ -389,10 +389,14 @@ fragment SecuritySearchResult on Security {
   id
   buyable
   status
+  currency
+  securityType
+  wsTradeEligible
   stock {
     symbol
     name
     primaryExchange
+    primaryMic
     __typename
   }
   securityGroups {
@@ -4020,10 +4024,50 @@ def fetch_quotes(sess, security_ids):
     return out
 
 
+LOOKUP_TYPES = ("EQUITY", "EXCHANGE_TRADED_FUND")
+CANADIAN_SUFFIXES = (".TO", ".V", ".CN", ".NE")
+
+
+def _bare_symbol(sym):
+    sym = _s(sym).upper()
+    for suf in CANADIAN_SUFFIXES:
+        if sym.endswith(suf):
+            return sym[: -len(suf)]
+    return sym
+
+
+def parse_listing_search(data, symbol, exchange):
+    """The one result of a securitySearch answer that is the listing asked for: same
+    bare symbol (Wealthsimple writes a Canadian listing as QNC.TO whatever its
+    venue), same exchange, a share or an ETF; the stored shape, or None."""
+    want_sym, want_ex = _bare_symbol(symbol), _s(exchange).strip().upper()
+    for r in (((data or {}).get("securitySearch") or {}).get("results") or []) if isinstance(data, dict) else []:
+        if not isinstance(r, dict) or not r.get("id"):
+            continue
+        stock = r.get("stock") if isinstance(r.get("stock"), dict) else {}
+        if _bare_symbol(stock.get("symbol")) != want_sym or _s(stock.get("primaryExchange")).upper() != want_ex:
+            continue
+        if _s(r.get("securityType")).upper() not in LOOKUP_TYPES:
+            continue
+        return {"id": _s(r["id"]), "symbol": _s(stock.get("symbol")).upper(), "name": _s(stock.get("name")), "primaryExchange": _s(stock.get("primaryExchange")),
+                "primaryMic": _s(stock.get("primaryMic")), "currency": _s(r.get("currency")).upper(), "underlyingId": None}
+    return None
+
+
 def lookup_listing(sess, symbol, exchange):
     """Wealthsimple's listing for a symbol the book has never held: its id, which
-    an order is placed against. Not known yet: None."""
-    return None
+    an order is placed against, asked once by symbol and kept with the book's
+    listings, so the symbol is never asked for again. None when Wealthsimple
+    has no such listing."""
+    try:
+        data = graphql(sess, "FetchSecuritySearchResult", {"query": _s(symbol).strip()})
+    except Exception as e:
+        sys.stderr.write("bagholder ticket: listing search for %s failed: %s\n" % (symbol, e))
+        return None
+    sec = parse_listing_search(data, symbol, exchange)
+    if sec:
+        store.upsert_securities([sec])
+    return sec
 
 
 def ticket_quote(symbol="", security_id="", account_id="", exchange=""):

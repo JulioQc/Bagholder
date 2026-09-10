@@ -2200,11 +2200,56 @@ class OrderTicketTest(_OrdersBase):
         with mock.patch.object(bagholder.market, "_get_text", side_effect=OSError("down")):
             self.assertIn("Search failed", bagholder.symbol_search("zzz")["error"])
 
-    def test_ticket_quote_for_a_listing_the_book_lacks_says_so(self):
-        with mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}), mock.patch.object(bagholder, "graphql", side_effect=AssertionError("no call")):
+    SEARCH_ANSWER = {"securitySearch": {"results": [
+        {"id": "sec-s-bbai", "buyable": True, "status": "TRADING", "currency": "USD", "securityType": "EQUITY", "wsTradeEligible": True, "stock": {"symbol": "BBAI", "name": "BigBear.ai Holdings Inc", "primaryExchange": "NYSE", "primaryMic": "XNYS"}},
+        {"id": "sec-s-baig", "buyable": True, "status": "TRADING", "currency": "USD", "securityType": "EXCHANGE_TRADED_FUND", "wsTradeEligible": True, "stock": {"symbol": "BAIG", "name": "2X Long Bbai Daily ETF", "primaryExchange": "NASDAQ", "primaryMic": "XNAS"}},
+        {"id": "sec-s-qnc-ca", "buyable": True, "status": "TRADING", "currency": "CAD", "securityType": "EQUITY", "wsTradeEligible": True, "stock": {"symbol": "QNC.TO", "name": "Quantum Emotion Corp", "primaryExchange": "TSX-V", "primaryMic": "XTSX"}},
+        {"id": "sec-o-qnc", "buyable": True, "status": "TRADING", "currency": "USD", "securityType": "OPTION", "stock": {"symbol": "QNC", "name": "", "primaryExchange": "NYSE"}},
+    ]}}
+
+    def test_listing_search_picks_the_symbol_on_its_exchange(self):
+        pick = lambda sym, ex: bagholder.parse_listing_search(self.SEARCH_ANSWER, sym, ex)
+        self.assertEqual(pick("BBAI", "NYSE")["id"], "sec-s-bbai")
+        self.assertEqual(pick("bbai", "nyse")["currency"], "USD")
+        self.assertEqual(pick("QNC", "TSX-V")["id"], "sec-s-qnc-ca", "a Canadian listing is QNC.TO at Wealthsimple, QNC at the directory")
+        self.assertEqual(pick("QNC", "TSX-V")["symbol"], "QNC.TO", "kept under Wealthsimple's own symbol, like the book's rows")
+        self.assertIsNone(pick("QNC", "NYSE"), "the NYSE result is an option, not the share")
+        self.assertIsNone(pick("BBAI", "NASDAQ"))
+
+    def test_ticket_on_a_never_held_symbol_asks_wealthsimple_once_and_keeps_the_listing(self):
+        searches = []
+        def fake_graphql(sess, operation, variables, query=None):
+            if operation == "FetchSecuritySearchResult":
+                searches.append(variables["query"])
+                return self.SEARCH_ANSWER
+            if operation == "FetchSecuritiesSummary":
+                self.assertEqual(variables["ids"], ["sec-s-bbai"], "the quote is asked for the id the search gave")
+                return {"securities": [{"id": "sec-s-bbai", "buyable": True, "sellable": True, "wsTradeEligible": True, "securityType": "EQUITY", "currency": "USD",
+                                        "stock": {"name": "BigBear.ai Holdings Inc", "symbol": "BBAI", "primaryExchange": "NYSE"},
+                                        "quoteV2": {"__typename": "EquityQuote", "ask": 3.02, "bid": 3.0, "currency": "USD", "price": 3.01, "previousBaseline": 2.9, "marketStatus": "OPEN", "askSize": 5, "bidSize": 7}}]}
+            if operation == "FetchSecurityMarketData":
+                return {"security": {"id": "sec-s-bbai", "allowedOrderSubtypes": ["MARKET", "LIMIT"], "marginRates": {"clientMarginRate": 0.5}}}
+            if operation == "FetchTradingBalanceBuyingPower":
+                return {"account": {"financials": {"current": {"tradingBalanceViewV2": {"buyingPower": {"quantity": 9000.0, "currency": "USD"}, "cash": {"quantity": 100.0, "currency": "USD"}}}}}}
+            raise AssertionError(operation)
+        with mock.patch.object(bagholder, "graphql", side_effect=fake_graphql), mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}):
+            r = bagholder.ticket_quote("BBAI", "", "acct-margin", "NYSE")
+            self.assertTrue(r["ok"], r)
+            self.assertEqual(r["quote"]["securityId"], "sec-s-bbai")
+            again = bagholder.ticket_quote("BBAI", "", "acct-margin", "NYSE")
+        self.assertTrue(again["ok"])
+        self.assertEqual(searches, ["BBAI"], "Wealthsimple's search is asked once; the second ticket finds the stored listing")
+        stored = [x for x in store.list_securities() if x["id"] == "sec-s-bbai"]
+        self.assertEqual((stored[0]["symbol"], stored[0]["primaryExchange"], stored[0]["currency"]), ("BBAI", "NYSE", "USD"))
+        self.assertEqual(bagholder.resolve_security("BBAI")["id"], "sec-s-bbai", "a book symbol from now on")
+
+    def test_ticket_quote_for_a_listing_wealthsimple_lacks_says_so(self):
+        with mock.patch.object(bagholder, "_ticket_session", return_value={"access_token": "t"}), mock.patch.object(bagholder, "graphql", return_value={"securitySearch": {"results": []}}):
             r = bagholder.ticket_quote("NEWCO", "", "acct-margin", "NYSE")
         self.assertFalse(r["ok"])
         self.assertIn("No listing stored for NEWCO", r["error"])
+        with mock.patch.object(bagholder, "graphql", side_effect=AssertionError("no call")):
+            self.assertIn("No listing stored", bagholder.ticket_quote("NEWCO", "", "acct-margin")["error"])
 
     def test_collateral_account_names_the_margin_account_it_backs(self):
         """Wealthsimple marks an account linked as margin collateral with the feature
