@@ -2052,6 +2052,7 @@ def build_base(snapshot, market, journal, today=None):
         "accounts": accounts,
         "balances": [dict(b) for b in (snapshot.get("balances") or []) if isinstance(b, dict)],
         "margin": [dict(m) for m in (snapshot.get("margin") or []) if isinstance(m, dict)],
+        "exposures": dict(snapshot.get("exposures") or {}),
         "cashCurrencies": securities.cash_currencies(),
         "activityCount": len(raw_acts),
     }
@@ -2167,6 +2168,49 @@ def trade_matches(t, f, today):
     return in_date_scope(f, today, t["exitDate"])
 
 
+UNCLASSIFIED = "Not classified"
+
+
+def exposure_slices(positions, exposures, cad):
+    """The open long positions in scope by sector and by country: each position's
+    market value in CAD spread by its exposure record (a share's one sector and
+    country; a fund's look-through), what no record covers under Not classified.
+    Two lists of {name, value, share}, largest first, Not classified last."""
+    sec_tot, cty_tot = {}, {}
+    sec_unc = cty_unc = 0.0
+    total = 0.0
+    for p in positions:
+        if p.get("short") or p.get("kind") == "Options":
+            continue   # a contract is not a holding of a company; its underlying is
+        v = cad(p["mv"], p["currency"])
+        if v <= 0:
+            continue
+        total += v
+        rec = exposures.get(_s(p.get("securityId"))) or {}
+        s_map, c_map = rec.get("sectors") or {}, rec.get("countries") or {}
+        if p.get("kind") == "Crypto":
+            # a coin is its own sector and no country's
+            s_map, c_map = {"Digital assets": 1.0}, {}
+        s_sum = sum(_num(w, 0.0) for w in s_map.values())
+        c_sum = sum(_num(w, 0.0) for w in c_map.values())
+        for n, w in s_map.items():
+            sec_tot[n] = sec_tot.get(n, 0.0) + v * _num(w, 0.0)
+        for n, w in c_map.items():
+            cty_tot[n] = cty_tot.get(n, 0.0) + v * _num(w, 0.0)
+        sec_unc += v * max(0.0, 1.0 - min(1.0, s_sum))
+        cty_unc += v * max(0.0, 1.0 - min(1.0, c_sum))
+
+    def rows(tot, unc):
+        out = [{"name": n, "value": v} for n, v in tot.items() if v > 0]
+        out.sort(key=lambda x: -x["value"])
+        if unc > 0.005:
+            out.append({"name": UNCLASSIFIED, "value": unc})
+        for x in out:
+            x["share"] = (x["value"] / total) if total else 0.0
+        return out
+    return rows(sec_tot, sec_unc), rows(cty_tot, cty_unc)
+
+
 def portfolio_view(base, f, positions):
     """The Portfolio tiles: CAD aggregates over the accounts in scope. Market value,
     cost basis and unrealized P&L come from the open positions in scope, converted
@@ -2232,8 +2276,11 @@ def portfolio_view(base, f, positions):
     total = sum(x["value"] for x in alloc)
     for x in alloc:
         x["share"] = (x["value"] / total) if total else 0.0
+    sectors, regions = exposure_slices(positions, base.get("exposures") or {}, cad)
     return {
         "allocation": alloc,
+        "sectors": sectors,
+        "regions": regions,
         "marketValue": mv,
         "costBasis": cost,
         "unrealized": unreal,

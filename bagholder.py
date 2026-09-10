@@ -36,6 +36,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 import csvimport
+import exposure
 import market
 import model
 import store
@@ -709,7 +710,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-10.8"
+PROTOCOL = "2026-09-10.9"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -2318,6 +2319,44 @@ def refresh_portfolio():
     except Exception as e:
         sys.stderr.write("bagholder portfolio: failed: %s\n" % (e.__class__.__name__ + (": " + str(e) if str(e) else "")))
         return {"ok": False, "skipped": "error"}
+
+
+EXPOSURE_CHECK_SEC = 30 * 60
+EXPOSURE_FIRST_SEC = 20
+
+
+def refresh_exposures():
+    """The exposure record of every held security that has none or an old one, read
+    one at a time from records outside Wealthsimple (exposure.py). Never raises."""
+    snap = store.snapshot()
+    secs = {sec["id"]: sec for sec in (snap.get("securities") or []) if sec.get("id")}
+    # the open positions the book shows, plus anything Wealthsimple's balances list
+    held = {_s(p.get("securityId")) for p in (model.base_model().get("positions") or []) if not p.get("short") and p.get("kind") == "Shares"}
+    held |= {_s(b.get("securityId")) for b in (snap.get("balances") or []) if (_num(b.get("quantity"), 0.0) or 0.0) > 0 and _s(b.get("securityId")).startswith("sec-s-")}
+    held = sorted(sid for sid in held if sid and not sid.startswith("sec-c-"))
+    todo = [sid for sid in exposure.stale(held) if sid in secs]
+    done = 0
+    for sid in todo:
+        if _stop.is_set():
+            break
+        sec = secs[sid]
+        rec = exposure.refresh_security(sec)
+        done += 1
+        cov = rec.get("coverage") or 0.0
+        sys.stderr.write("bagholder exposure: %s %s: %s (%d%% covered)%s\n" % (sec.get("symbol"), "fund" if exposure.is_fund(sec.get("name"), sec.get("symbol")) else "share",
+                                                                             rec.get("source") or "no source", int(round(cov * 100)), (": " + rec["error"]) if rec.get("error") else ""))
+    return {"ok": True, "held": len(held), "refreshed": done}
+
+
+def exposure_loop():
+    """Soon after start and every half hour: the held securities' exposure records."""
+    wait = EXPOSURE_FIRST_SEC
+    while not _stop.wait(wait):
+        wait = EXPOSURE_CHECK_SEC
+        try:
+            refresh_exposures()
+        except Exception as e:
+            sys.stderr.write("bagholder exposure: refresh failed: %s\n" % (str(e) or e.__class__.__name__))
 
 
 def portfolio_loop():
@@ -6295,6 +6334,7 @@ def main():
     threading.Thread(target=portfolio_loop, name="bagholder-portfolio-loop", daemon=True).start()
     threading.Thread(target=orders_loop, name="bagholder-orders-loop", daemon=True).start()
     threading.Thread(target=bracket_loop, name="bagholder-bracket-loop", daemon=True).start()
+    threading.Thread(target=exposure_loop, name="bagholder-exposure-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()
