@@ -1459,18 +1459,15 @@ function ordersScopeLabel() { const s = ordersScope(); return s.length ? s.join(
 function bracketCardHtml(b) {
   const entry = orderById(b.orderId);
   const title = "Bracket " + ((entry && entry.exchange) ? esc(entry.exchange) + ": " : "") + esc(b.symbol);
-  // row two is the order resting for the bracket, in the pending cards' own words; the fill
-  // has its card on the Filled tab
+  // row two is the shares under the bracket; the legs say what rests and what is watched,
+  // and the fill has its card on the Filled tab. The value is the resting order's.
   const resting = [b.slOrderId, b.tpOrderId].map(orderById).find((o) => o && ORDER_LIVE[o.status]) || null;
-  const tifWord = (o) => o.tif === "UNTIL_CANCEL" ? "GTC" : o.tif === "DAY" ? "Day" : "";
-  let detail, value = "";
-  if (resting && resting.type === "MARKET") { detail = "Sell " + esc(qty(resting.quantity)) + " at market"; }
-  else if (resting) {
-    detail = "Sell " + esc(qty(resting.quantity)) + " at " + orderPrice(resting) + " " + orderTypeWord(resting.type).toLowerCase() + (tifWord(resting) ? " · " + tifWord(resting) : "");
+  const detail = esc(qty(b.quantity)) + " held";
+  let value = "";
+  if (resting && resting.type !== "MARKET") {
     const at = resting.type === "STOP" ? resting.stopPrice : resting.limitPrice;
     if (at) value = money(resting.quantity * at * orderMultiplier(resting), "", 2);
   }
-  else detail = esc(qty(b.quantity)) + " held · " + (b.status === "closing" || b.status === "stopping" ? "cancelling" : "watching");
   const editing = state.bracketEdit && state.bracketEdit.id === b.id;
   return '<div class="od-card"><div class="od-row1"><span class="od-title"><span style="color:var(--accent-300)">Bracket</span> ' + title.slice(8) + '</span><span class="od-value num">' + value + "</span></div>" +
     '<div class="od-row2"><span class="od-line">' + detail + "</span></div>" +
