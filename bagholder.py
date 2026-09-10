@@ -4327,7 +4327,8 @@ def orders_payload(kick=False):
 # brackets: the stop loss and take profit Bagholder watches for a filled order
 # ---------------------------------------------------------------------------
 BRACKET_POLL_SEC = 5
-BRACKET_MAX_ATTEMPTS = 3        # a rejected exit is tried this many times, a tick apart, then the bracket fails loudly
+BRACKET_MAX_ATTEMPTS = 5        # a rejected exit is tried this many times, spaced out, then the bracket fails loudly
+BRACKET_RETRY_SEC = (60, 300, 900, 3600)   # the wait before the second, third, fourth and fifth attempt
 TRAIL_MIN_MOVE = 0.005          # a trailing stop moves only when it would rise by half a percent of its level: each move is a cancel and a new order
 BRACKET_LIVE = ("waiting", "armed", "firing", "target_placed")
 _bracket_lock = threading.Lock()
@@ -4414,6 +4415,19 @@ def _exit_row(b, role):
     return rows[0] if rows else None
 
 
+def _may_retry(b):
+    """After a refused placement the next try waits: a minute, then five, fifteen, an hour."""
+    attempts = int(b.get("attempts") or 0)
+    if not attempts:
+        return True
+    wait = BRACKET_RETRY_SEC[min(attempts, len(BRACKET_RETRY_SEC)) - 1]
+    try:
+        since = (datetime.now(timezone.utc) - datetime.strptime(b.get("updatedAt") or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds()
+    except ValueError:
+        return True
+    return since >= wait
+
+
 def _fail(b, msg):
     attempts = int(b.get("attempts") or 0) + 1
     if attempts >= BRACKET_MAX_ATTEMPTS:
@@ -4463,6 +4477,8 @@ def _arm_step(b, entry):
         if b.get("slMode") != "watched":
             store.update_bracket(b["id"], {"slMode": "watched", "slNative": False})
             sys.stderr.write("bagholder bracket: %s for %s: Wealthsimple takes no stop order for it; the stop is watched here\n" % (b["id"], b["symbol"]))
+        return
+    if not _may_retry(b):
         return
     oid, err = _place_exit(b, "STOP", b["slPrice"], "stop")
     if err:
@@ -4560,6 +4576,8 @@ def _watch_step(b, quote):
     if b["status"] == "armed" and b["slKind"] and b.get("slMode") == "watched" and not b.get("slOrderId") and b.get("slPrice"):
         trigger = bid if bid is not None else last
         if trigger <= b["slPrice"]:
+            if not _may_retry(b):
+                return
             oid, err = _place_exit(b, "MARKET", b["slPrice"], "stop")
             if err:
                 _fail(b, "stop not placed: " + err)
@@ -4588,6 +4606,8 @@ def _watch_step(b, quote):
 
 
 def _fire_target(b):
+    if not _may_retry(b):
+        return
     oid, err = _place_exit(b, "LIMIT", b["tpPrice"], "target")
     if err:
         _fail(b, "target not placed: " + err)

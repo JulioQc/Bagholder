@@ -2616,20 +2616,30 @@ class BracketEngineTest(_EngineBase):
         self.assertEqual((b["status"], b["outcome"]), ("cancelled", "position closed elsewhere"))
         self.assertEqual([op for op, _ in self.sent], ["SoOrdersOrderCancel"])
 
-    def test_a_rejected_exit_is_tried_three_times_then_the_bracket_fails_loudly(self):
+    def test_a_rejected_exit_is_tried_again_spaced_out_then_the_bracket_fails_loudly(self):
         oid, b = self._entry()
         store.update_order(oid, {"status": "filled", "filledQty": 25})
-        self.rejections = ["Market closed", "Market closed", "Market closed"]
-        self._tick(); self._tick()
-        b = store.get_bracket(b["id"])
-        self.assertEqual((b["status"], b["attempts"]), ("armed", 2))
-        self.assertIn("Market closed", b["error"])
+        self.rejections = ["Market closed"] * 5
         self._tick()
         b = store.get_bracket(b["id"])
-        self.assertEqual((b["status"], b["attempts"]), ("failed", 3))
+        self.assertEqual((b["status"], b["attempts"]), ("armed", 1))
+        self.assertIn("Market closed", b["error"])
         self.sent.clear()
         self._tick()
-        self.assertEqual(self.sent, [], "a failed bracket is left alone")
+        self.assertEqual([op for op, _ in self.sent if op == "SoOrdersOrderCreate"], [], "no second try within the minute")
+        # each later try comes only after its wait: a minute, five, fifteen, an hour
+        for n, wait in enumerate((60, 300, 900, 3600), start=2):
+            with mock.patch.object(store, "_now_iso", return_value="2020-01-01T00:00:00Z"):
+                store.update_bracket(b["id"], {"error": "Market closed"})   # the last failure, long enough ago
+            self._tick()
+            b = store.get_bracket(b["id"])
+            self.assertEqual(b["attempts"], n, "attempt %d after %d s" % (n, wait))
+        self.assertEqual(b["status"], "failed")
+        self.sent.clear()
+        with mock.patch.object(store, "_now_iso", return_value="2020-01-01T00:00:00Z"):
+            store.update_bracket(b["id"], {"error": "Market closed"})
+        self._tick()
+        self.assertEqual([op for op, _ in self.sent if op == "SoOrdersOrderCreate"], [], "a failed bracket is left alone")
 
     def test_with_orders_off_nothing_is_placed_and_the_line_is_printed_once(self):
         with mock.patch.object(bagholder, "ORDERS_LIVE", False):
