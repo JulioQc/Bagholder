@@ -1040,6 +1040,7 @@ function tkRememberedAccount(accounts) {
   return "";
 }
 function openTicket(symbol, side, listing) {
+  delete _keptScroll["ticket-form"]; delete _keptScroll["ticket-review"];   // a ticket opens at its top
   const info = tkLookup(symbol);
   const accounts = tkAccounts();
   const held = info.position;
@@ -1163,7 +1164,7 @@ function tkFormHtml(v) {
     '<div class="tk-read"><span class="l" id="tk-sl-l">' + esc(slRead[0]) + '</span><span class="r num" id="tk-sl-r" style="color:var(--neg)">' + esc(slRead[1]) + "</span></div>";
   const tpBody = '<div class="tk-grid">' + tkField("Limit price", tkInput("tk-tp", val("tp", px(v.tpPrice)))) + "<div></div></div>" +
     '<div class="tk-read"><span class="l" id="tk-tp-l">' + esc(tpRead[0]) + '</span><span class="r num" id="tk-tp-r" style="color:var(--pos)">' + esc(tpRead[1]) + "</span></div>";
-  return '<div class="tk-body">' +
+  return '<div class="tk-body" data-keep-scroll="ticket-form">' +
     '<div class="tk-quote" id="tkQuote">' + tkQuoteHtml(v) + "</div>" +
     (t.error ? '<div class="status-err" style="font-size:12px;margin-top:-12px">' + esc(t.error) + "</div>" : "") +
     '<div class="tk-seg"><button class="tk-segopt buy' + (v.buy ? " on" : "") + '" data-act="tkSide" data-arg=\'{"side":"BUY"}\'>Buy</button><button class="tk-segopt sell' + (v.buy ? "" : " on") + '" data-act="tkSide" data-arg=\'{"side":"SELL"}\'>Sell</button></div>' +
@@ -1178,7 +1179,7 @@ function tkReviewHtml(v) {
   const line = v.typeWord + (t.type === "MARKET" ? "" : " " + px(v.entry) + " · " + v.tifWord) + " · " + esc(v.acct ? v.acct.name : "");
   const slLine = !v.slOn ? "None" : v.isTrail ? "Trails " + v.trailWord + (v.buy ? " under the high" : " over the low") + " · starts at " + px(v.slPrice) : "Market at " + px(v.slPrice);
   const rrStr = v.rr == null ? "—" : "1:" + tkPlain(+v.rr.toFixed(1));
-  return '<div class="tk-body">' +
+  return '<div class="tk-body" data-keep-scroll="ticket-review">' +
     '<div style="padding-bottom:14px;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.10)"><div style="font-size:20px;line-height:1.2;font-weight:500"><span style="color:' + (v.buy ? "var(--pos)" : "var(--neg)") + '">' + (v.buy ? "Buy" : "Sell") + "</span> " + esc(qty(v.qtyN)) + " " + esc(q.symbol || t.symbol) + '</div><div style="font-size:12px;color:var(--ink55);margin-top:2px">' + line + "</div></div>" +
     (v.buy ? '<div style="display:flex;flex-direction:column;gap:10px">' + row("Stop loss", slLine) + row("Take profit", v.tpOn ? "Limit at " + px(v.tpPrice) : "None") + "</div>" : "") +
     '<div style="display:flex;flex-direction:column;gap:10px;padding-top:16px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10)">' +
@@ -1198,11 +1199,19 @@ function ticketHtml() {
     '<div class="tk-hd"><span class="tk-title">' + (t.step === "review" ? "Review order" : "New order") + '</span><button class="tk-x" aria-label="Close" data-act="tkClose"><svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.x + '"/></svg></button></div>' +
     (t.step === "review" ? tkReviewHtml(v) : tkFormHtml(v)) + "</div></div>";
 }
+// A side panel redrawn in place keeps where it was scrolled to: a new quote or a poll must
+// not move what the person is reading.
+function replacePanel(id, html) {
+  const old = document.getElementById(id);
+  if (old) old.querySelectorAll("[data-keep-scroll]").forEach((el) => { _keptScroll[el.dataset.keepScroll] = { top: el.scrollTop, left: el.scrollLeft }; });
+  const tmp = document.createElement("div"); tmp.innerHTML = html;
+  const fresh = tmp.firstElementChild;
+  if (old) old.replaceWith(fresh); else document.getElementById("app").appendChild(fresh);
+  fresh.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
+}
 function renderTicket() {
-  const old = document.getElementById("tkWrap");
-  if (!state.ticket) { if (old) old.remove(); return; }
-  const tmp = document.createElement("div"); tmp.innerHTML = ticketHtml();
-  if (old) old.replaceWith(tmp.firstElementChild); else document.getElementById("app").appendChild(tmp.firstElementChild);
+  if (!state.ticket) { const old = document.getElementById("tkWrap"); if (old) old.remove(); return; }
+  replacePanel("tkWrap", ticketHtml());
 }
 // A new quote or a typed value: the figures move, the typed field does not.
 function tkPatch() {
@@ -1315,6 +1324,7 @@ function ordersPoll() {
   loadOrders().then(() => { if (state.ordersOpen) _ordersTimer = setTimeout(ordersPoll, ORDERS_POLL_MS); else _ordersTimer = 0; });
 }
 function openOrders() {
+  delete _keptScroll.orders;   // the panel opens at its top; a poll while it is open keeps its place
   state.picker = null; state.menuOpen = false;
   state.ordersOpen = true; state.orderEdit = null; state.bracketEdit = null;
   render();
@@ -1521,14 +1531,13 @@ function ordersPanelHtml() {
   const seg = (id, label) => '<button class="od-seg' + (state.ordersTab === id ? " on" : "") + '" data-act="ordersTab" data-arg=\'' + attr({ tab: id }) + "'>" + label + "</button>";
   return '<div id="odWrap"><div class="tk-scrim" data-act="ordersClose"></div><div class="tk" role="dialog" aria-label="Orders">' +
     '<div class="tk-hd"><span class="tk-title">Orders</span><button class="tk-x" aria-label="Close" data-act="ordersClose"><svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.x + '"/></svg></button></div>' +
-    '<div class="tk-body" style="gap:16px"><div class="od-segs">' + seg("pending", "Pending") + seg("filled", "Filled") + seg("cancelled", "Cancelled") + "</div>" +
+    '<div class="tk-body" data-keep-scroll="orders" style="gap:16px"><div class="od-segs">' + seg("pending", "Pending") + seg("filled", "Filled") + seg("cancelled", "Cancelled") + "</div>" +
     '<div id="odBody" class="od-list">' + ordersBodyHtml() + "</div></div></div></div>";
 }
 function renderOrders() {
   const old = document.getElementById("odWrap");
   if (!state.ordersOpen) { if (old) old.remove(); return; }
-  const tmp = document.createElement("div"); tmp.innerHTML = ordersPanelHtml();
-  if (old) old.replaceWith(tmp.firstElementChild); else document.getElementById("app").appendChild(tmp.firstElementChild);
+  replacePanel("odWrap", ordersPanelHtml());
 }
 function openOrdersCount() { return ((state.orders && state.orders.orders) || []).filter((o) => o.role !== "stop" && o.role !== "target" && ORDER_LIVE[o.status]).length; }
 function orderEditSave(id) {
@@ -2502,7 +2511,7 @@ function act(name, arg, ev) {
     case "cancelBracketNow": cancelBracketNow(arg.id); break;
     case "ordersOpen": openOrders(); break;
     case "ordersClose": closeOrders(); break;
-    case "ordersTab": state.ordersTab = arg.tab; state.orderEdit = null; state.bracketEdit = null; renderOrders(); break;
+    case "ordersTab": delete _keptScroll.orders; state.ordersTab = arg.tab; state.orderEdit = null; state.bracketEdit = null; renderOrders(); break;
     case "orderEdit": state.orderEdit = { id: arg.id, error: "" }; state.bracketEdit = null; renderOrders(); { const q = document.getElementById("od-qty"); if (q) q.focus(); } break;
     case "orderEditCancel": state.orderEdit = null; renderOrders(); break;
     case "orderEditSave": orderEditSave(arg.id); break;
