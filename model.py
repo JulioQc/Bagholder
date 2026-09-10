@@ -2180,13 +2180,18 @@ def exposure_slices(positions, exposures, cad):
     sec_unc = cty_unc = 0.0
     total = 0.0
     for p in positions:
-        if p.get("short") or p.get("kind") == "Options":
-            continue   # a contract is not a holding of a company; its underlying is
+        # the same positions and values as Allocation: every one worth something
         v = cad(p["mv"], p["currency"])
         if v <= 0:
             continue
         total += v
         rec = exposures.get(_s(p.get("securityId"))) or {}
+        if p.get("kind") == "Options":
+            # a contract is its underlying's exposure, under the share's record
+            under = _s(p.get("underlying") or "").upper()
+            us, ca = "share:" + under + "::US", "share:" + under + ":"   # exposure.share_exposure's keys: ticker, then the venue form
+            first, second = (us, ca) if _s(p.get("currency")).upper() == "USD" else (ca, us)
+            rec = exposures.get(first) or exposures.get(second) or {}
         s_map, c_map = rec.get("sectors") or {}, rec.get("countries") or {}
         if p.get("kind") == "Crypto":
             # a coin is its own sector and no country's

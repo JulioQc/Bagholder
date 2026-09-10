@@ -210,15 +210,16 @@ class PortfolioSlicesTest(unittest.TestCase):
                      {"mv": 300.0, "currency": "CAD", "securityId": "c", "short": False, "kind": "Shares"},
                      {"mv": 100.0, "currency": "CAD", "securityId": "a", "short": True, "kind": "Shares"},
                      {"mv": 200.0, "currency": "CAD", "securityId": "btc", "short": False, "kind": "Crypto"},
-                     {"mv": 900.0, "currency": "USD", "securityId": "opt", "short": False, "kind": "Options"}]
+                     {"mv": 50.0, "currency": "USD", "securityId": "opt", "short": True, "kind": "Options", "underlying": "AAPL"}]
         exposures = {"a": {"sectors": {"Financials": 1.0}, "countries": {"Canada": 1.0}, "coverage": 1.0},
-                     "b": {"sectors": {"Information Technology": 0.5, "Energy": 0.25}, "countries": {"United States": 0.75}, "coverage": 0.75}}
+                     "b": {"sectors": {"Information Technology": 0.5, "Energy": 0.25}, "countries": {"United States": 0.75}, "coverage": 0.75},
+                     "share:AAPL::US": {"sectors": {"Information Technology": 1.0}, "countries": {"United States": 1.0}, "coverage": 1.0}}
         cad = lambda v, c: v * (2.0 if c == "USD" else 1.0)
         sectors, regions = model.exposure_slices(positions, exposures, cad)
-        self.assertEqual([(s["name"], round(s["value"], 2)) for s in sectors], [("Financials", 1000.0), ("Information Technology", 500.0), ("Energy", 250.0), ("Digital assets", 200.0), ("Not classified", 550.0)],
-                         "b's uncovered quarter and c, which has no record, are unclassified; the short and the option are out; the coin is Digital assets")
+        self.assertEqual([(s["name"], round(s["value"], 2)) for s in sectors], [("Financials", 1100.0), ("Information Technology", 600.0), ("Energy", 250.0), ("Digital assets", 200.0), ("Not classified", 550.0)],
+                         "the same positions as Allocation, the short included; the contract counts as its underlying; b's uncovered quarter and c, which has no record, are unclassified; the coin is Digital assets")
         self.assertAlmostEqual(sum(s["share"] for s in sectors), 1.0)
-        self.assertEqual([(r["name"], round(r["value"], 2)) for r in regions], [("Canada", 1000.0), ("United States", 750.0), ("Not classified", 750.0)], "a coin has no country")
+        self.assertEqual([(r["name"], round(r["value"], 2)) for r in regions], [("Canada", 1100.0), ("United States", 850.0), ("Not classified", 750.0)], "a coin has no country")
 
 
 if __name__ == "__main__":

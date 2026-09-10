@@ -2331,11 +2331,22 @@ def refresh_exposures():
     snap = store.snapshot()
     secs = {sec["id"]: sec for sec in (snap.get("securities") or []) if sec.get("id")}
     # the open positions the book shows, plus anything Wealthsimple's balances list
-    held = {_s(p.get("securityId")) for p in (model.base_model().get("positions") or []) if not p.get("short") and p.get("kind") == "Shares"}
+    positions = model.base_model().get("positions") or []
+    held = {_s(p.get("securityId")) for p in positions if p.get("kind") == "Shares"}
     held |= {_s(b.get("securityId")) for b in (snap.get("balances") or []) if (_num(b.get("quantity"), 0.0) or 0.0) > 0 and _s(b.get("securityId")).startswith("sec-s-")}
     held = sorted(sid for sid in held if sid and not sid.startswith("sec-c-"))
     todo = [sid for sid in exposure.stale(held) if sid in secs]
     done = 0
+    # a contract's exposure is its underlying's: the share is classified under its own key
+    for under, ccy in sorted({(_s(p.get("underlying")).upper(), _s(p.get("currency"))) for p in positions if p.get("kind") == "Options" and p.get("underlying")}):
+        if _stop.is_set():
+            break
+        try:
+            if exposure.stale([exposure.SHARE_KEY + under + ":" + (market.tmx_form("", ccy) or "")]):
+                exposure.share_exposure(under, "", ccy)
+                done += 1
+        except Exception as e:
+            sys.stderr.write("bagholder exposure: %s (an option's underlying): %s\n" % (under, str(e) or e.__class__.__name__))
     for sid in todo:
         if _stop.is_set():
             break
@@ -2345,6 +2356,8 @@ def refresh_exposures():
         cov = rec.get("coverage") or 0.0
         sys.stderr.write("bagholder exposure: %s %s: %s (%d%% covered)%s\n" % (sec.get("symbol"), "fund" if exposure.is_fund(sec.get("name"), sec.get("symbol")) else "share",
                                                                              rec.get("source") or "no source", int(round(cov * 100)), (": " + rec["error"]) if rec.get("error") else ""))
+    if done:
+        model.invalidate()   # the page's next model carries the new records
     return {"ok": True, "held": len(held), "refreshed": done}
 
 

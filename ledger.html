@@ -2121,9 +2121,10 @@ function exposureSlices(rows) {
 }
 function exposureCardsHtml(pf) {
   const sec = exposureSlices(pf.sectors), reg = exposureSlices(pf.regions);
+  const total = pf.marketValue || 0;   // the centre reads what Allocation's does
   return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch">' +
-    donutCardHtml("xsec", "Sectors", "Market value", sec.items, sec.total, "No open positions in scope.") +
-    donutCardHtml("xreg", "Regions", "Market value", reg.items, reg.total, "No open positions in scope.") + "</div>";
+    donutCardHtml("xsec", "Sectors", "Market value", sec.items, total, "No open positions in scope.") +
+    donutCardHtml("xreg", "Regions", "Market value", reg.items, total, "No open positions in scope.") + "</div>";
 }
 function donutHover(e, key) {
   const el = e.target.closest("[data-slice]"); const plot = document.getElementById(key + "Plot"); if (!plot) return;
