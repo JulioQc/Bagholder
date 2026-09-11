@@ -2238,8 +2238,8 @@ def watch_symbols(base=None):
     out = []
     for w in base.get("watchlist") or []:
         inst = instruments.find(w["symbol"], w.get("exchange"))
-        crypto = _s(w.get("exchange")).upper() == "CRYPTO"   # a coin from the book's rows: Coinbase quotes it, in its currency
-        rec = {"symbol": w["symbol"], "exchange": w.get("exchange") or "", "currency": w.get("currency") or "CAD", "kind": "Instrument" if inst else "Crypto" if crypto else "Shares",
+        crypto = _s(w.get("exchange")).upper() == "CRYPTO"   # a watched coin is the USD pair, whatever currency the book holds it in
+        rec = {"symbol": w["symbol"], "exchange": w.get("exchange") or "", "currency": "USD" if crypto else (w.get("currency") or ""), "kind": "Instrument" if inst else "Crypto" if crypto else "Shares",
                "quoteKey": watch_quote_key(w["symbol"], w.get("exchange"))}
         if inst:
             rec["yahoo"] = inst["yahoo"]
@@ -2278,7 +2278,7 @@ def watch_rows(base, positions):
         crypto = _s(w.get("exchange")).upper() == "CRYPTO"
         rec = None if inst or crypto else exposures.get(watch_exposure_key(w["symbol"], w.get("exchange"), w.get("currency")))
         out.append({
-            "symbol": w["symbol"], "exchange": inst["exchange"] if inst else "Crypto" if crypto else (w.get("exchange") or ""), "name": w.get("name") or "", "currency": w.get("currency") or "",
+            "symbol": w["symbol"], "exchange": inst["exchange"] if inst else "Crypto" if crypto else (w.get("exchange") or ""), "name": w.get("name") or "", "currency": "USD" if crypto else (w.get("currency") or ""),
             "last": _num(q.get("price"), None), "priceChange": _num(q.get("priceChange"), None), "percentChange": _num(q.get("percentChange"), None),
             "sector": instruments.KIND_LABEL.get(inst["kind"], inst["kind"]) if inst else "Digital assets" if crypto else dominant_sector(rec) if rec else UNCLASSIFIED,
             "kind": inst["kind"] if inst else "Crypto" if crypto else "Shares", "positionId": pos["id"] if pos else None,

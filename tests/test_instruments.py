@@ -95,8 +95,8 @@ class ConventionTest(unittest.TestCase):
         store.add_watch("BTC", "Crypto", "Bitcoin", "CAD")
         model.invalidate()
         base = model.base_model()
-        self.assertEqual(model.watch_symbols(base), [{"symbol": "BTC", "exchange": "CRYPTO", "currency": "CAD", "kind": "Crypto", "quoteKey": "BTC@CRYPTO"}])
-        self.assertEqual(market.quote_symbols_needing_refresh(model.watch_symbols(base)), [("BTC@CRYPTO", "coinbase", "BTC-CAD")])
+        self.assertEqual(model.watch_symbols(base), [{"symbol": "BTC", "exchange": "CRYPTO", "currency": "USD", "kind": "Crypto", "quoteKey": "BTC@CRYPTO"}], "the USD pair, whatever currency the book holds the coin in")
+        self.assertEqual(market.quote_symbols_needing_refresh(model.watch_symbols(base)), [("BTC@CRYPTO", "coinbase", "BTC-USD")])
         row = model.watch_rows(dict(base, quotes={"BTC@CRYPTO": {"price": 150000.0}}), [])[0]
         self.assertEqual((row["sector"], row["kind"], row["last"]), ("Digital assets", "Crypto", 150000.0))
         self.assertEqual(bagholder.news_listings(), [], "no news wire for a coin")
@@ -104,3 +104,36 @@ class ConventionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoinChangeTest(unittest.TestCase):
+    """A coin's day change: the spot against the previous UTC day's close on its Coinbase market."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["BAGHOLDER_HOME"] = self.tmp.name
+        store.set_home(self.tmp.name)
+        bagholder.set_home(self.tmp.name)
+        store.ensure()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_previous_close_from_the_usd_market_when_the_pair_has_none(self):
+        from datetime import datetime, timezone
+        now = datetime(2026, 9, 11, 16, 0, tzinfo=timezone.utc)
+        store.upsert_fx_rates([{"date": "2026-09-10", "rate": 1.38}, {"date": "2026-09-11", "rate": 1.39}]) if hasattr(store, "upsert_fx_rates") else None
+        bars = [{"time": int(datetime(2026, 9, 9, tzinfo=timezone.utc).timestamp()), "open": 1, "high": 1, "low": 1, "close": 76000.0, "volume": 1},
+                {"time": int(datetime(2026, 9, 10, tzinfo=timezone.utc).timestamp()), "open": 1, "high": 1, "low": 1, "close": 77000.0, "volume": 1},
+                {"time": int(datetime(2026, 9, 11, tzinfo=timezone.utc).timestamp()), "open": 1, "high": 1, "low": 1, "close": 78000.0, "volume": 1}]
+        markets = {"BTC-CAD": "", "BTC-USD": "BTC-USD"}
+        with mock.patch.object(market, "coinbase_market", side_effect=lambda p, *a, **k: markets.get(p, "")), mock.patch.object(market, "fetch_coinbase_candles", return_value=bars) as fc, mock.patch.object(market, "in_position_currency", side_effect=lambda b, q, c: [dict(x, close=x["close"] * 1.38) for x in b]), mock.patch.object(market, "_get_text", return_value='{"data": {"amount": "107907.0", "base": "BTC", "currency": "CAD"}}'):
+            rec = market.fetch_coinbase_spot("BTC-CAD", None, now)
+            self.assertEqual((rec["price"], rec["prevClose"], round(rec["percentChange"], 2)), (107907.0, 77000.0 * 1.38, round((107907.0 - 106260.0) / 106260.0 * 100, 2)),
+                             "yesterday's close, not today's running bar, converted to the pair's currency")
+            self.assertEqual(fc.call_args[0][0], "BTC-USD")
+            market.fetch_coinbase_spot("BTC-CAD", None, now)
+            self.assertEqual(fc.call_count, 1, "the previous close is remembered for the day")
+        with mock.patch.object(market, "coinbase_market", return_value=""), mock.patch.object(market, "_get_text", return_value='{"data": {"amount": "2.0", "currency": "CAD"}}'):
+            rec = market.fetch_coinbase_spot("XYZ-CAD", None, now)
+            self.assertEqual(rec, {"price": 2.0, "currency": "CAD"}, "no market, no change: the price alone")

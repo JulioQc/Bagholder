@@ -650,11 +650,55 @@ def option_mark(row):
     return {"price": px, "prevClose": prev, "priceChange": (px - prev) if prev else None, "percentChange": ((px / prev - 1) * 100) if prev else None, "currency": "USD"}
 
 
-def fetch_coinbase_spot(pair, ssl_context=None):
+def coinbase_prev_close(pair, ssl_context=None, now=None):
+    """The close of the last completed UTC day on the pair's Coinbase market, in the pair's
+    currency: the pair's own market when Coinbase has one, else the USD market converted at
+    the day's Bank of Canada rate. Remembered per day, so the quote loop asks once a day."""
+    pair = str(pair or "").strip().upper()
+    now = now or datetime.now(timezone.utc)
+    today = now.date().isoformat()
+    meta_key = "coinbase_prev:" + pair
+    v = store.get_meta(meta_key)
+    if v.startswith(today + "@"):
+        try:
+            return float(v.split("@", 1)[1])
+        except ValueError:
+            return None
+    base, _, ccy = pair.partition("-")
+    prev = None
+    for product in ([pair] if ccy == "USD" else [pair, base + "-USD"]):
+        if not coinbase_market(product, ssl_context, now):
+            continue
+        start = int((now - timedelta(days=4)).timestamp())
+        bars = fetch_coinbase_candles(product, 86400, start, int(now.timestamp()), ssl_context)
+        bars = in_position_currency(bars, product.split("-")[-1], ccy)
+        done = [b for b in bars if datetime.fromtimestamp(b["time"], tz=timezone.utc).date().isoformat() < today]
+        if done:
+            prev = done[-1]["close"]
+            break
+    if prev:
+        store.set_meta(meta_key, "%s@%r" % (today, prev))
+    return prev
+
+
+def fetch_coinbase_spot(pair, ssl_context=None, now=None):
+    """The spot price, with the day's change against the previous UTC day's close when
+    Coinbase has a market to take it from."""
     try:
-        return parse_coinbase(_get_text(COINBASE_URL % pair, ssl_context), pair)
+        rec = parse_coinbase(_get_text(COINBASE_URL % pair, ssl_context), pair)
     except Exception:
         return None
+    if not rec:
+        return None
+    try:
+        prev = coinbase_prev_close(pair, ssl_context, now)
+    except Exception:
+        prev = None
+    if prev:
+        rec["prevClose"] = prev
+        rec["priceChange"] = rec["price"] - prev
+        rec["percentChange"] = (rec["price"] - prev) / prev * 100.0
+    return rec
 
 
 def fetch_cboe_ca_quote(sym, ssl_context=None):
@@ -706,7 +750,7 @@ def refresh_quotes(symbols, ssl_context=None, now=None):
         elif source == "cboe_ca":
             rec = fetch_cboe_ca_quote(key, ssl_context)
         elif source == "coinbase":
-            rec = fetch_coinbase_spot(key, ssl_context)
+            rec = fetch_coinbase_spot(key, ssl_context, now)
         elif source == "yahoo_quote":
             rec = fetch_yahoo_quote(key, ssl_context)
         elif source == "cboe_options":
