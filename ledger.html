@@ -1005,7 +1005,7 @@ function symbolRows(q) {
     const r = rank(sym, l.name);
     if (r >= 0) out.push({ book: true, sym, name: l.name || "", exchange: l.exchange || "", rank: r, sub: sym });
   });
-  extRows(q).forEach((r) => { const k = rank(r.symbol, r.name); out.push({ book: false, sym: r.symbol, name: r.name || "", exchange: r.exchange, currency: r.currency, kind: r.kind || "", rank: k < 0 ? 2 : k, sub: r.symbol }); });
+  extRows(q).forEach((r) => { const k = r.rank != null ? r.rank : rank(r.symbol, r.name); out.push({ book: false, sym: r.symbol, name: r.name || "", exchange: r.exchange, currency: r.currency, kind: r.kind || "", rank: k < 0 ? 2 : k, sub: r.symbol }); });
   out.sort((a, b) => a.rank - b.rank || (a.book === b.book ? 0 : a.book ? -1 : 1) || (a.sub < b.sub ? -1 : a.sub > b.sub ? 1 : 0));
   return out;
 }

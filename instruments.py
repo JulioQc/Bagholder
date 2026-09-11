@@ -74,6 +74,6 @@ def search(text):
         else:
             rank = -1
         if rank >= 0:
-            out.append((rank, {"symbol": r["symbol"], "name": r["name"], "exchange": r["exchange"], "currency": r["currency"], "kind": r["kind"]}))
+            out.append((rank, {"symbol": r["symbol"], "name": r["name"], "exchange": r["exchange"], "currency": r["currency"], "kind": r["kind"], "rank": rank}))
     out.sort(key=lambda x: x[0])
     return [r for _, r in out]

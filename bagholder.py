@@ -4006,7 +4006,8 @@ def rank_search(text, rows):
             continue
         seen.add(k)
         out.append(r)
-    out.sort(key=lambda r: 0 if r["symbol"] == key else 1 if r["symbol"].startswith(key) else 2)
+    # an instrument found by an alias (`WTI` for the crude future) ranks as the exact match it is
+    out.sort(key=lambda r: r["rank"] if r.get("rank") is not None else 0 if r["symbol"] == key else 1 if r["symbol"].startswith(key) else 2)
     return out[:SEARCH_MAX]
 
 

@@ -579,7 +579,8 @@ def parse_yahoo_quote(text):
 
 def fetch_yahoo_quote(code, ssl_context=None):
     try:
-        return parse_yahoo_quote(_yahoo_get("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=5d&interval=1d" % quote(code, safe=""), ssl_context))
+        # a one-day chart: its stated previous close is yesterday's, where a longer range states the close before the range
+        return parse_yahoo_quote(_yahoo_get("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=1d" % quote(code, safe=""), ssl_context))
     except Exception:
         return None
 

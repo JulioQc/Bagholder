@@ -29,6 +29,10 @@ class SearchTest(unittest.TestCase):
         row = instruments.search("VIX")[0]
         self.assertEqual((row["name"], row["exchange"], row["currency"], row["kind"]), ("CBOE Volatility Index", "Index", "USD", "Index"))
 
+    def test_an_alias_hit_ranks_as_the_exact_match_it_is(self):
+        rows = bagholder.rank_search("WTI", instruments.search("WTI") + [{"symbol": "WTI", "name": "W&T Offshore", "exchange": "NYSE", "currency": "USD"}, {"symbol": "WTIB", "name": "USCF", "exchange": "NYSE", "currency": "USD"}])
+        self.assertEqual([(r["symbol"], r["exchange"]) for r in rows][:3], [("CL", "NYMEX"), ("WTI", "NYSE"), ("WTIB", "NYSE")])
+
     def test_find_by_symbol_and_venue(self):
         self.assertEqual(instruments.find("cl", "nymex")["yahoo"], "CL=F")
         self.assertIsNone(instruments.find("CL", "TSX"), "a listing with the same letters is not the future")
