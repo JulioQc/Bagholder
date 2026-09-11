@@ -2063,6 +2063,24 @@ def clear_synced_data(keep_journal=True, keep_market=True):
     return data_summary()
 
 
+def book_version():
+    """Fingerprint of what the FIFO match reads: the activity rows and the securities."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            parts = []
+            for sql in (
+                "SELECT COUNT(*), MAX(COALESCE(occurred_at, transaction_date)) FROM activities",
+                "SELECT COUNT(*), MAX(fetched_at) FROM securities",
+            ):
+                row = conn.execute(sql).fetchone()
+                parts.append("%s:%s" % (row[0], row[1]))
+            return "|".join(parts)
+        finally:
+            conn.close()
+
+
 def data_version():
     """Cheap fingerprint of everything the derived model depends on."""
     with _lock:
@@ -2212,13 +2230,13 @@ def needs_security_id_backfill():
             conn.close()
 
 
-def snapshot():
+def snapshot(activities=True):
     ensure()
     with _lock:
         conn = _connect()
         try:
             _init_schema(conn)
-            activities = _all_activities(conn)
+            activities = _all_activities(conn) if activities else []
             accounts = []
             for r in conn.execute("SELECT * FROM accounts ORDER BY id").fetchall():
                 accounts.append(

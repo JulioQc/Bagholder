@@ -2263,6 +2263,72 @@ class ImportStoreTest(unittest.TestCase):
         self.assertFalse(csvimport.status()["watching"])
 
 
+class DetailTest(unittest.TestCase):
+    """Legs and fills are most of the model's bytes and the lists never read them:
+    they travel only for the trade or holding open on the page."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["BAGHOLDER_HOME"] = self.tmp.name
+        store.set_home(self.tmp.name)
+        bagholder.set_home(self.tmp.name)
+        store.ensure()
+        model.invalidate()
+        store.upsert_fx_rates({"2099-01-01": 1.0})
+        store.upsert_benchmark_prices({"2099-01-01": 1.0})
+        store.merge_local_rows([
+            buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
+            sell("s1", "AAA", 10, 2, "2026-01-05", source="csv"),
+            buy("b2", "BBB", 5, 3, "2026-01-02", source="csv"),
+        ])
+
+    def tearDown(self):
+        model.invalidate()
+        self.tmp.cleanup()
+        os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_the_view_carries_legs_and_fills_for_the_open_trade_only(self):
+        base = model.base_model()
+        trade = base["trades"][0]
+        holding = base["positions"][0]
+        self.assertEqual((len(trade["fills"]), len(holding["fills"])), (2, 1), "the base model keeps every fill")
+        v = model.view()
+        self.assertEqual([k for k in v["trades"][0] if k in ("legs", "fills")], [])
+        self.assertEqual([k for k in v["positions"][0] if k in ("legs", "fills")], [])
+        self.assertEqual(v["trades"][0]["legCount"], 1, "the counts stay on the row")
+        v = model.view(None, trade["id"])
+        self.assertEqual(len(v["trades"][0]["fills"]), 2)
+        self.assertNotIn("fills", v["positions"][0])
+        v = model.view(None, holding["id"])
+        self.assertEqual(len(v["positions"][0]["fills"]), 1)
+        self.assertNotIn("fills", v["trades"][0])
+        self.assertEqual(len(base["trades"][0]["fills"]), 2, "slimming the view never touches the base model")
+
+    def test_trade_detail_finds_a_trade_or_a_holding_by_id(self):
+        base = model.base_model()
+        d = model.trade_detail(base["trades"][0]["id"])
+        self.assertEqual((d["id"], len(d["legs"]), [f["id"] for f in d["fills"]]), (base["trades"][0]["id"], 1, ["s1", "b1"]))
+        d = model.trade_detail(base["positions"][0]["id"])
+        self.assertEqual((d["legs"], [f["id"] for f in d["fills"]]), ([], ["b2"]))
+        self.assertIsNone(model.trade_detail("nope"))
+        self.assertIsNone(model.trade_detail(None))
+
+    def test_a_quote_tick_reuses_the_matched_book(self):
+        base = model.base_model()
+        with mock.patch.object(model, "build_book", wraps=model.build_book) as bb:
+            store.upsert_quote("AAA", {"price": 9.0}, source="tmx")   # a new data version, the same book
+            ticked = model.base_model()
+            self.assertIsNot(ticked, base, "a quote changes the data version, so the base is rebuilt")
+            self.assertFalse(bb.called, "but the activity rows are not matched again")
+            self.assertEqual([t["id"] for t in ticked["trades"]], [t["id"] for t in base["trades"]])
+            self.assertEqual(ticked["positions"][0]["fills"], base["positions"][0]["fills"])
+            store.merge_local_rows([buy("b3", "CCC", 1, 4, "2026-01-03", source="csv")])
+            grown = model.base_model()
+            self.assertTrue(bb.called, "a new activity row is matched")
+            self.assertEqual(sorted(p["symbol"] for p in grown["positions"]), ["BBB", "CCC"])
+            self.assertEqual(grown["activityCount"], 4)
+
+
 class ServerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -2320,6 +2386,25 @@ class ServerTest(unittest.TestCase):
         data = json.loads(body.decode("utf-8"))
         self.assertEqual(data["kpi"]["count"], 0)
         self.assertEqual(data["tradeTotal"], 1)
+
+    def test_the_model_route_takes_the_open_trade_and_the_trade_route_serves_its_detail(self):
+        store.merge_local_rows([
+            buy("b1", "AAA", 10, 1, "2026-01-01", source="csv"),
+            sell("s1", "AAA", 10, 2, "2026-01-05", source="csv"),
+        ])
+        _, body = self._get("/api/model")
+        row = json.loads(body.decode("utf-8"))["trades"][0]
+        self.assertNotIn("fills", row)
+        from urllib.parse import quote
+        _, body = self._get("/api/model?trade=" + quote(row["id"]))
+        self.assertEqual(len(json.loads(body.decode("utf-8"))["trades"][0]["fills"]), 2)
+        status, body = self._get("/api/trade?id=" + quote(row["id"]))
+        data = json.loads(body.decode("utf-8"))
+        self.assertEqual((status, data["ok"], data["id"], len(data["legs"]), [f["id"] for f in data["fills"]]), (200, True, row["id"], 1, ["s1", "b1"]))
+        from urllib.error import HTTPError
+        with self.assertRaises(HTTPError) as cm:
+            self._get("/api/trade?id=nope")
+        self.assertEqual(cm.exception.code, 404)
 
     def test_journal_post_persists(self):
         store.merge_local_rows([
