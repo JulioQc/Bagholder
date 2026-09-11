@@ -58,6 +58,12 @@ def crypto(id, kind, symbol, qty, px, day, account="Crypto"):
     return act(id=id, activityType=raw, activitySubType="MARKET_ORDER" if kind != "reward" else "other", rawType=raw, quantity=qty, unitPrice=px, netCashAmount=qty * px, transactionDate=day, symbol=symbol, currency="CAD", accountType=account)
 
 
+def crypto_transfer(id, symbol, qty, value, day, out=False, account="Crypto"):
+    return act(id=id, activityType="CRYPTO_TRANSFER", activitySubType="TRANSFER_OUT" if out else "TRANSFER_IN", rawType="CRYPTO_TRANSFER",
+               direction="DEBIT" if out else "CREDIT", quantity=qty, unitPrice=value / qty, netCashAmount=-value if out else value,
+               transactionDate=day, symbol=symbol, currency="CAD", accountType=account)
+
+
 def nav(day, equity, deposits=None):
     return {"date": day, "equity": equity, "netDeposits": deposits}
 
@@ -385,6 +391,18 @@ CASES = {
         "market": {"fx": {}, "benchmark": {}},
     },
     # crypto bought, a staking reward (a lot at zero cost), then everything sold
+    # coins sent out of the account leave at cost: no slice, no P&L; the sale that
+    # follows closes what is left, first-in first-out (1 ETH at 100, 1 at 120)
+    "crypto_transfer_out_leaves_at_cost": {
+        "today": "2026-03-01",
+        "activities": [
+            crypto("cb", "buy", "ETH", 2, 100, "2026-01-01"),
+            crypto_transfer("ti", "ETH", 1, 120, "2026-01-05"),
+            crypto_transfer("to", "ETH", 1, 200, "2026-01-10", out=True),
+            crypto("cs", "sell", "ETH", 2, 150, "2026-02-01"),
+        ],
+        "market": {"fx": {}, "benchmark": {}},
+    },
     "crypto_buy_reward_sell": {
         "today": "2026-03-01",
         "activities": [

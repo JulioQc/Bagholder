@@ -19,7 +19,7 @@ The model is defined by `model.py`, the reference implementation; the iOS and An
 A trade is one round trip: a position in one account, symbol and currency going from flat, through open, back to flat. Lots are matched first-in first-out within that account, symbol and currency. Its id is `rt:` followed by the id of the activity that opened it. A trade always has a close date; there is no open trade.
 
 - **Options.** Contracts are matched per contract. A multileg fill is a roll: the far leg is opened in the same trade and the whole chain, from the first short to the last buy-back or expiry, is one trade named after the last contract. Expiry closes a contract at zero. Assignment closes the option at zero, keeping the premium, and delivers the shares at the strike into the share book.
-- **Crypto.** Matched like shares. Staking rewards open a lot at zero cost and carry a `reward` flag.
+- **Crypto.** Matched like shares. Staking rewards open a lot at zero cost and carry a `reward` flag. A transfer in opens a lot at the value the feed carries. A transfer out is not a sale: the coins come off the open lots first-in first-out at their cost, with no P&L, and the transfer is not a fill of the trade.
 - **Splits.** Inferred from Wealthsimple's corporate action markers and applied to the open lots on the split date.
 - **Manual and imported trades** enter the same activity table and are matched the same way.
 
