@@ -35,6 +35,7 @@ from datetime import date, datetime, timedelta, timezone
 import exposure
 import instruments
 import market
+import news
 import store
 
 EPS = 1e-10
@@ -2366,16 +2367,21 @@ def news_rows(base, positions, watch):
     watched = {lk(w["symbol"], w.get("exchange")): w for w in watch}
     rows, by_id = [], {}
     for n in base.get("news") or []:
+        # the market feed's items carry no tag: they are the market's, not a listing's
+        is_market = (_s(n["symbol"]), _s(n.get("exchange")).upper()) == (news.MARKET[0], news.MARKET[1])
         key = lk(n["symbol"], n.get("exchange"))
         p, w = held.get(key), watched.get(key)
-        tag = {"symbol": key[0], "exchange": n.get("exchange") or "", "held": bool(p), "watched": bool(w),
-               "percentChange": p.get("percentChange") if p else (w.get("percentChange") if w else None), "positionId": p["id"] if p else None}
+        tag = None if is_market else {"symbol": key[0], "exchange": n.get("exchange") or "", "held": bool(p), "watched": bool(w),
+                                      "percentChange": p.get("percentChange") if p else (w.get("percentChange") if w else None), "positionId": p["id"] if p else None}
         row = by_id.get(n["id"])
         if row:
-            if not any(lk(t["symbol"], t["exchange"]) == key for t in row["tags"]):
+            if is_market:
+                row["market"] = True
+            elif not any(lk(t["symbol"], t["exchange"]) == key for t in row["tags"]):
                 row["tags"].append(tag)
             continue
-        row = {"id": n["id"], "headline": n.get("headline") or "", "source": n.get("wire") or "", "url": n.get("url") or "", "publishedAt": n.get("publishedAt") or "", "tags": [tag]}
+        row = {"id": n["id"], "headline": n.get("headline") or "", "source": n.get("wire") or "", "url": n.get("url") or "", "publishedAt": n.get("publishedAt") or "",
+               "market": is_market, "tags": [] if is_market else [tag]}
         by_id[n["id"]] = row
         rows.append(row)
     rows.sort(key=lambda r: r["publishedAt"], reverse=True)

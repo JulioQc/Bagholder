@@ -11,6 +11,7 @@ import exposure
 import instruments
 import market
 import model
+import news
 import store
 
 
@@ -89,7 +90,7 @@ class ConventionTest(unittest.TestCase):
         self.assertEqual(model.watch_symbols(base), [{"symbol": "CL", "exchange": "NYMEX", "currency": "USD", "kind": "Instrument", "quoteKey": "CL@NYMEX", "yahoo": "CL=F"}])
         rows = model.watch_rows(dict(base, quotes={"CL@NYMEX": {"price": 99.4, "priceChange": 6.37, "percentChange": 6.85}}), [])
         self.assertEqual((rows[0]["sector"], rows[0]["kind"], rows[0]["last"]), ("Commodities", "Commodity", 99.4), "an instrument groups under its kind on the heatmap")
-        self.assertEqual(bagholder.news_listings(), [], "no news wire for a future")
+        self.assertEqual(bagholder.news_listings(), [news.MARKET], "no news wire for a future: only the market feed")
 
     def test_a_coin_from_the_book_is_quoted_by_coinbase(self):
         store.add_watch("BTC", "Crypto", "Bitcoin", "CAD")
@@ -99,7 +100,7 @@ class ConventionTest(unittest.TestCase):
         self.assertEqual(market.quote_symbols_needing_refresh(model.watch_symbols(base)), [("BTC@CRYPTO", "coinbase", "BTC-USD")])
         row = model.watch_rows(dict(base, quotes={"BTC@CRYPTO": {"price": 150000.0}}), [])[0]
         self.assertEqual((row["sector"], row["kind"], row["last"]), ("Digital assets", "Crypto", 150000.0))
-        self.assertEqual(bagholder.news_listings(), [], "no news wire for a coin")
+        self.assertEqual(bagholder.news_listings(), [news.MARKET], "no news wire for a coin: only the market feed")
 
 
 if __name__ == "__main__":

@@ -17,10 +17,14 @@ TMX_NEWS_QUERY = ("query getNewsForSymbol($symbol: String!, $page: Int!, $limit:
                   "{ news: getNewsForSymbol(symbol: $symbol, page: $page, limit: $limit, locale: $locale) { headline datetime source newsid summary } }")
 TMX_NEWS_URL = "https://money.tmx.com/en/quote/%s/news/%s"
 NASDAQ_NEWS_URL = "https://api.nasdaq.com/api/news/topic/articlebysymbol?q=%s|STOCKS&offset=0&limit=%d"
+NASDAQ_LATEST_URL = "https://api.nasdaq.com/api/news/topic/latestnews?offset=0&limit=%d"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
 NASDAQ_HEADERS = {"User-Agent": UA, "Accept": "application/json, text/plain, */*", "Origin": "https://www.nasdaq.com", "Referer": "https://www.nasdaq.com/"}
 TMX_HEADERS = {"User-Agent": UA, "locale": "en", "Origin": "https://money.tmx.com", "Referer": "https://money.tmx.com/"}
 PER_SYMBOL = 12
+# the market-wide feed is a listing of its own: Nasdaq's latest news, whatever it names
+MARKET = ("*", "MARKET", "")
+PER_MARKET = 50
 FRESH_MINUTES = 15
 KEEP = 400            # items kept in the database, newest first
 
@@ -98,7 +102,9 @@ def parse_nasdaq_news(data, now=None, symbol=""):
 
 
 def source_for(symbol, exchange, currency):
-    """Which wire answers for a listing: TMX for the Canadian venues it carries, Nasdaq for US ones."""
+    """Which wire answers for a listing: TMX for the Canadian venues it carries, Nasdaq for US ones and for the market feed."""
+    if (symbol, _s(exchange).upper()) == (MARKET[0], MARKET[1]):
+        return "nasdaq"
     form = market.tmx_form(exchange, currency)
     if form == ":US":
         return "nasdaq"
@@ -114,6 +120,10 @@ def fetch_symbol(symbol, exchange, currency, ssl_context=None, now=None):
     if not src or not sym:
         return src, []
     try:
+        if symbol == MARKET[0]:
+            _pace("api.nasdaq.com")
+            text = market._get_text(NASDAQ_LATEST_URL % PER_MARKET, ssl_context, headers=NASDAQ_HEADERS)
+            return src, parse_nasdaq_news(json.loads(text), now, "")
         if src == "tmx":
             _pace("app-money.tmx.com")
             data = market._post_json("https://app-money.tmx.com/graphql",

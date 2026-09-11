@@ -97,6 +97,19 @@ class ModelTest(unittest.TestCase):
                          [("nasdaq:9", [("NVDA", False, True, None, None)]), ("tmx:1", [("SHOP", False, True, 3.28, None), ("HHIS", True, False, 0.6, "p1")])],
                          "newest first; an item two listings share is one row with both tags")
 
+    def test_the_market_feed_is_a_listing_of_its_own_with_no_tag(self):
+        self.assertEqual(news.source_for(*news.MARKET), "nasdaq")
+        data = {"data": {"rows": [{"id": 1, "title": "Stocks Settle Lower", "publisher": "Barchart", "url": "/articles/a", "ago": "7 minutes ago", "related_symbols": ["ryam|stocks"]},
+                                  {"id": 2, "title": "Value ETFs", "publisher": "Zacks", "url": "/articles/b", "ago": "2 hours ago", "related_symbols": ["mu|stocks"]}]}}
+        now = datetime(2026, 9, 11, 16, 0, tzinfo=timezone.utc)
+        self.assertEqual([r["id"] for r in news.parse_nasdaq_news(data, now, "")], ["nasdaq:1", "nasdaq:2"], "asked without a symbol, the feed keeps every item")
+        base = {"news": [{"id": "nasdaq:1", "symbol": "*", "exchange": "MARKET", "wire": "Barchart", "headline": "Stocks Settle Lower", "url": "u1", "publishedAt": "2026-09-11T15:53:00Z"},
+                         {"id": "nasdaq:2", "symbol": "*", "exchange": "MARKET", "wire": "Zacks", "headline": "Value ETFs", "url": "u2", "publishedAt": "2026-09-11T14:00:00Z"},
+                         {"id": "nasdaq:2", "symbol": "MU", "exchange": "NASDAQ", "wire": "Zacks", "headline": "Value ETFs", "url": "u2", "publishedAt": "2026-09-11T14:00:00Z"}]}
+        rows = model.news_rows(base, [], [{"symbol": "MU", "exchange": "NASDAQ", "percentChange": -0.18}])
+        self.assertEqual([(r["id"], r["market"], [t["symbol"] for t in r["tags"]]) for r in rows], [("nasdaq:1", True, []), ("nasdaq:2", True, ["MU"])],
+                         "a market item carries no tag; the same story read for a watched listing is one row, tagged, and still the market's")
+
     def test_the_books_form_and_the_bare_ticker_are_one_listing(self):
         base = {"news": [{"id": "tmx:7", "symbol": "QNC.TO", "exchange": "TSX-V", "wire": "TMX Newsfile", "headline": "Seven", "url": "u7", "publishedAt": "2026-09-08T13:00:00Z"},
                          {"id": "tmx:7", "symbol": "QNC", "exchange": "TSX-V", "wire": "TMX Newsfile", "headline": "Seven", "url": "u7", "publishedAt": "2026-09-08T13:00:00Z"}]}

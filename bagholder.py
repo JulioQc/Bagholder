@@ -713,7 +713,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-11.4"
+PROTOCOL = "2026-09-11.5"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -5442,9 +5442,9 @@ def watch_remove(body):
 
 
 def news_listings():
-    """Every listing whose news is wanted: the shares and funds held, and the watched ones."""
+    """Every listing whose news is wanted: the market feed, the shares and funds held, and the watched ones."""
     base = model.base_model()
-    seen, out = set(), []
+    seen, out = set(), [news.MARKET]
     # one listing, one read, under its bare ticker: the book's QNC.TO and the watchlist's QNC are the same wire
     for p in base.get("positions") or []:
         if p.get("kind") != "Shares":

@@ -367,7 +367,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-11.4"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-11.5"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -2449,7 +2449,8 @@ function newsCardHtml(items) {
   const isOnly = (t) => only && bareSymbol(t.symbol) === only.symbol && String(t.exchange || "").toUpperCase() === only.exchange;
   // the box: a ticker first (a listing's symbol starting with the text); only when no listing matches, a word of the
   // headline or publisher starting with it, so `SH` is Shopify's news and not every headline with "shake" in it
-  let rows = (items || []).filter((n) => only ? n.tags.some(isOnly) : scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
+  // All is the market's own feed; Holdings and Watchlist are the stories read for those listings
+  let rows = (items || []).filter((n) => only ? n.tags.some(isOnly) : scope === "all" ? n.market : n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
   if (q) {
     const tokens = q.split(/\s+/);
     const bySym = tokens.length === 1 && q.length <= 5 ? rows.filter((n) => n.tags.some((t) => bareSymbol(t.symbol).startsWith(q))) : [];
@@ -2457,7 +2458,7 @@ function newsCardHtml(items) {
     rows = bySym.length ? bySym : rows.filter((n) => { const h = text(n); return tokens.every((t) => h.indexOf(t) >= 0); });
   }
   const first = (n) => n.tags[0] || {};
-  rows = sortRows(rows, s.key, s.dir, (n, k) => k === "when" ? n.publishedAt : k === "news" ? n.headline.toLowerCase() : k === "symbol" ? bareSymbol(first(n).symbol || "").toLowerCase() : first(n).percentChange);
+  rows = sortRows(rows, s.key, s.dir, (n, k) => k === "when" ? n.publishedAt : k === "news" ? n.headline.toLowerCase() : k === "symbol" ? (first(n).symbol ? bareSymbol(first(n).symbol).toLowerCase() : null) : first(n).percentChange);
   const sym = (t) => '<button class="nw-sym go" data-act="newsSym" data-arg=\'' + attr({ symbol: bareSymbol(t.symbol), exchange: String(t.exchange || "").toUpperCase() }) + "'>" + esc(bareSymbol(t.symbol)) + "</button>";
   const chg = (t) => '<span class="tab" style="font-size:13px;color:' + (t.percentChange == null ? "var(--ink55)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(t.percentChange) + "</span>";
   // one line per row: the headline cut with an ellipsis, a story two listings share naming both on the line
