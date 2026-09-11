@@ -484,7 +484,12 @@ function cmp(a, b) {
 }
 function sortRows(rows, key, dir, get) {
   const out = rows.slice();
-  out.sort((a, b) => { const c = cmp(get(a, key), get(b, key)); return dir === "desc" ? -c : c; });
+  out.sort((a, b) => {
+    const va = get(a, key), vb = get(b, key);
+    if (va == null || vb == null) return cmp(va, vb);   // a row with nothing in the column goes last either way
+    const c = cmp(va, vb);
+    return dir === "desc" ? -c : c;
+  });
   return out;
 }
 function th(table, cols) {
@@ -1988,7 +1993,7 @@ function gradeChip(t) {
 }
 function tradeSortValue(t, key) {
   if (key === "tags") return t.tags && t.tags.length ? t.tags.slice().sort()[0] : "￿";
-  if (key === "grade") { const i = ["A", "B", "C", "F"].indexOf(t.grade); return i < 0 ? 9 : i; }
+  if (key === "grade") { const i = ["F", "C", "B", "A"].indexOf(t.grade); return i < 0 ? null : i; }   // A first on the first click; ungraded last either way
   if (key === "pnl") return t.pnlCad;
   return t[key];
 }
