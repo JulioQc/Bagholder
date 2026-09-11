@@ -2278,7 +2278,7 @@ def watch_rows(base, positions):
         crypto = _s(w.get("exchange")).upper() == "CRYPTO"
         rec = None if inst or crypto else exposures.get(watch_exposure_key(w["symbol"], w.get("exchange"), w.get("currency")))
         out.append({
-            "symbol": w["symbol"], "exchange": inst["exchange"] if inst else (w.get("exchange") or ""), "name": w.get("name") or "", "currency": w.get("currency") or "",
+            "symbol": w["symbol"], "exchange": inst["exchange"] if inst else "Crypto" if crypto else (w.get("exchange") or ""), "name": w.get("name") or "", "currency": w.get("currency") or "",
             "last": _num(q.get("price"), None), "priceChange": _num(q.get("priceChange"), None), "percentChange": _num(q.get("percentChange"), None),
             "sector": instruments.KIND_LABEL.get(inst["kind"], inst["kind"]) if inst else "Digital assets" if crypto else dominant_sector(rec) if rec else UNCLASSIFIED,
             "kind": inst["kind"] if inst else "Crypto" if crypto else "Shares", "positionId": pos["id"] if pos else None,
