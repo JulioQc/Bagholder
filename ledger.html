@@ -12,7 +12,7 @@
 <style>
 html{color-scheme:dark}
 :root{
-  --mat:#101220;--bg:#161826;--surface:#232532;--n900:#292b31;--accent:#9184d9;--accent-300:#d2cefd;--accent-900:#2b2741;
+  --mat:#101220;--bg:#161826;--surface:#232532;--n900:#292b31;--draft:#e8b36a;--draft-rgb:232,179,106;--accent:#9184d9;--accent-300:#d2cefd;--accent-900:#2b2741;
   --ink:#e9e9ed;--ink-rgb:233,233,237;--ink75:rgba(233,233,237,.8);--ink60:rgba(233,233,237,.68);--ink55:rgba(233,233,237,.62);
   --hair:rgba(233,233,237,.14);--grid:rgba(233,233,237,.07);--pos:#6fd39b;--neg:#e0778a;--mixed:#7972a9;
   --shadow-sm:0 1px 2px rgba(0,0,0,.28);--shadow-md:0 10px 28px rgba(0,0,0,.45),0 0 0 1px rgba(233,233,237,.06);
@@ -22,7 +22,7 @@ html{color-scheme:dark}
   --pos-rgb:111,211,155;--neg-rgb:224,119,138;--accent-rgb:145,132,217;--accent-bar:var(--accent);--hover:.08;--area:.22;--well:var(--n900);--well-line:.12;
 }
 html[data-theme="midnight"]{
-  --mat:#06070b;--bg:#0b0d12;--surface:#10131a;--n900:#171b24;--accent:#3fd68a;--accent-300:#8fe8b8;--accent-900:#123324;
+  --mat:#06070b;--bg:#0b0d12;--surface:#10131a;--n900:#171b24;--draft:#e8b36a;--draft-rgb:232,179,106;--accent:#3fd68a;--accent-300:#8fe8b8;--accent-900:#123324;
   --ink:#e6e8ee;--ink-rgb:230,232,238;--ink75:rgba(230,232,238,.8);--ink60:rgba(230,232,238,.66);--ink55:rgba(230,232,238,.6);
   --hair:rgba(230,232,238,.16);--grid:rgba(230,232,238,.08);--pos:#3fd68a;--neg:#ff6b7a;--mixed:#6c6f8a;
   --shadow-sm:0 1px 2px rgba(0,0,0,.5);--shadow-md:0 10px 28px rgba(0,0,0,.6),0 0 0 1px rgba(230,232,238,.08);
@@ -32,7 +32,7 @@ html[data-theme="midnight"]{
   --pie-1:#3fd68a;--pie-2:#5fb0e6;--pie-3:#9184d9;--pie-4:#e8b36a;--pie-5:#ff6b7a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;--pie-9:#f0955f;--pie-10:#a3c96f;--pie-11:#9aa4b5;
 }
 html[data-theme="light"]{color-scheme:light;
-  --mat:#e0e2ea;--bg:#eef0f5;--surface:#fafafc;--n900:#f1f2f6;--accent:#6b5cd6;--accent-300:#4a3bb8;--accent-900:#e9e6fa;--accent-bar:#a89ee6;
+  --mat:#e0e2ea;--bg:#eef0f5;--surface:#fafafc;--n900:#f1f2f6;--draft:#a8711c;--draft-rgb:168,113,28;--accent:#6b5cd6;--accent-300:#4a3bb8;--accent-900:#e9e6fa;--accent-bar:#a89ee6;
   --ink:#1b1d27;--ink-rgb:27,29,39;--ink75:rgba(27,29,39,.82);--ink60:rgba(27,29,39,.72);--ink55:rgba(27,29,39,.66);
   --hair:rgba(27,29,39,.12);--grid:rgba(27,29,39,.06);--pos:#2e8a62;--neg:#c0505f;--mixed:#9a95c4;--pos-rgb:46,138,98;--neg-rgb:192,80,95;--accent-rgb:107,92,214;
   --shadow-sm:0 1px 2px rgba(20,22,40,.06);--shadow-md:0 10px 28px rgba(20,22,40,.14),0 0 0 1px rgba(27,29,39,.08);
@@ -240,6 +240,10 @@ html.panel-open{overflow:hidden}
 .od-foot-acts .od-link:hover{color:var(--ink);background:rgba(var(--ink-rgb),var(--hover))}
 .od-foot-acts .od-link.neg{color:var(--neg);box-shadow:inset 0 0 0 1px rgba(var(--neg-rgb),.45)}
 .od-foot-acts .od-link.neg:hover{color:var(--neg);background:rgba(var(--neg-rgb),.14);box-shadow:inset 0 0 0 1px rgba(var(--neg-rgb),.7)}
+.od-card.draft{background:rgba(var(--draft-rgb),.10);box-shadow:inset 0 0 0 1px rgba(var(--draft-rgb),.45)}
+.od-card.draft .od-draft{color:var(--draft);font-weight:600}
+.od-foot-acts .od-link.draft{color:var(--draft);box-shadow:inset 0 0 0 1px var(--draft)}
+.od-foot-acts .od-link.draft:hover{background:rgba(var(--draft-rgb),.14)}
 .od-foot-acts .od-link[disabled]{opacity:.4}
 .od-foot-acts .od-link[disabled]:hover{color:var(--ink);background:transparent}
 .od-edit{display:flex;flex-direction:column;gap:10px;padding:10px 0 2px}
@@ -1062,7 +1066,7 @@ function tkRememberedAccount(accounts) {
 }
 const TK_DRAFT_KEYS = ["accountId", "type", "tif", "qty", "limit", "stop", "sl", "tp", "text"];
 function tkSaveDraft(t) {
-  const d = { symbol: t.symbol, side: t.side }; TK_DRAFT_KEYS.forEach((k) => { d[k] = t[k]; });
+  const d = { symbol: t.symbol, side: t.side, exchange: t.exchange, at: new Date().toISOString() }; TK_DRAFT_KEYS.forEach((k) => { d[k] = t[k]; });
   state.ticketDraft = d;
   try { localStorage.setItem("bh2.ticketDraft", JSON.stringify(d)); } catch (e) {}
 }
@@ -1510,6 +1514,29 @@ function bracketLegsHtml(b) {
   return bracketLegs(b).map((leg) => '<div class="od-leg"><span class="od-leg-label ' + leg.tone + '">' + esc(leg.label) + '</span><span class="od-leg-value num">' + esc(leg.line) + "</span>" +
     (leg.note ? '<span class="od-leg-state">' + esc(leg.note) + "</span>" : "") + '<span class="od-leg-amt num ' + leg.tone + '">' + esc(leg.amount) + "</span></div>").join("");
 }
+// the ticket set aside: first in Pending, in amber, with Resume and Discard; only prices the draft itself holds are shown
+function draftCardHtml(d) {
+  const buy = d.side !== "SELL", qtyN = d.qty || 0;
+  const entry = d.type === "MARKET" ? null : d.type === "STOP" ? d.stop : d.limit;
+  const typeWord = { MARKET: "Market", LIMIT: "limit", STOP: "stop", STOP_LIMIT: "stop limit" }[d.type] || "limit";
+  const line = (buy ? "Buy " : "Sell ") + qty(qtyN) + (entry != null ? " at " + px(entry) + " " + typeWord : " " + (d.type === "MARKET" ? "market" : typeWord)) + (d.type === "MARKET" ? "" : " · " + (d.tif === "DAY" ? "Day" : "GTC"));
+  const leg = (label, tone, price, note) => price == null && !note ? "" :
+    '<div class="od-leg"><span class="od-leg-label ' + tone + '">' + label + '</span><span class="od-leg-value num">' + esc(price != null ? qty(qtyN) + " at " + px(price) : note) + "</span>" +
+    '<span class="od-leg-amt num ' + tone + '">' + (price != null ? esc(money(qtyN * price, "", 2)) : "") + "</span></div>";
+  let legs = "";
+  if (buy && d.sl && d.sl.on) {
+    const sl = d.sl;
+    if (sl.kind === "trail") legs += leg("Stop loss", "neg", null, "trailing " + (sl.trail != null ? (sl.unit === "pct" ? tkPlain(sl.trail) + "%" : px(sl.trail)) : "5%"));
+    else if (sl.priceUnit === "pct" ? sl.pct != null && entry != null : sl.price != null) legs += leg("Stop loss", "neg", sl.priceUnit === "pct" ? +(entry * (1 - sl.pct / 100)).toFixed(2) : sl.price);
+  }
+  if (buy && d.tp && d.tp.on) {
+    const tp = d.tp;
+    if (tp.unit === "pct" ? tp.pct != null && entry != null : tp.price != null) legs += leg("Take profit", "pos", tp.unit === "pct" ? +(entry * (1 + tp.pct / 100)).toFixed(2) : tp.price);
+  }
+  return '<div class="od-card draft"><div class="od-row1"><span class="od-title"><span class="od-draft">Draft</span> ' + (d.exchange ? esc(d.exchange) + ": " : "") + esc(d.symbol) + '</span><span class="od-value num">' + (entry != null ? esc(money(qtyN * entry, "", 2)) : "") + "</span></div>" +
+    '<div class="od-row2"><span class="od-line">' + esc(line) + "</span></div>" + legs +
+    '<div class="od-foot"><span class="od-when">' + esc(orderWhenWord(d.at)) + '</span><span class="od-foot-acts"><button class="od-link draft" data-act="tkResume">Resume</button><button class="od-link neg" data-act="tkDiscardDraft">Discard</button></span></div></div>';
+}
 // every card's foot: when, at the left; Edit and Cancel at the right while it is live, Edit dimmed where a change is not possible
 function cardFootHtml(when, live, editAct, editArg, canEdit, cancelAct, cancelArg, ended) {
   // ended: [word, tone] for a finished card, shown where the actions would be
@@ -1590,7 +1617,8 @@ function ordersBodyHtml() {
   const cards = entries.filter((o) => ORDER_LIVE[o.status]).map((o) => ({ at: o.createdAt, html: orderCardHtml(o) }))
     .concat((data.brackets || []).filter((b) => BRACKET_LIVE[b.status] && b.status !== "waiting" && (() => { const e = orderById(b.orderId); return !e || inOrdersScope(e.account); })()).map((b) => ({ at: b.armedAt || b.createdAt, html: bracketCardHtml(b) })))
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-  return head("Pending orders") + (cards.length ? cards.map((c) => c.html).join("") : '<div class="dim" style="font-size:12px">No pending orders.</div>');
+  const draft = state.ticketDraft ? draftCardHtml(state.ticketDraft) : "";
+  return head("Pending orders") + draft + (cards.length ? cards.map((c) => c.html).join("") : draft ? "" : '<div class="dim" style="font-size:12px">No pending orders.</div>');
 }
 const ORDERS_TABS = ["pending", "filled", "cancelled"];
 function ordersPanelHtml() {
@@ -2640,6 +2668,8 @@ function act(name, arg, ev) {
     case "bracketRemove": bracketRemove(arg.id, arg.leg); break;
     case "tkClose": closeTicket(); break;
     case "tkDiscard": closeTicket(true); break;
+    case "tkResume": if (state.ticketDraft) { const d = state.ticketDraft; closeOrders(); openTicket(d.symbol, d.side, { exchange: d.exchange }); } break;
+    case "tkDiscardDraft": tkDropDraft(); renderOrders(); break;
     case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.pct = null; t.sl.trail = null; t.tp.price = null; t.tp.pct = null; t.limit = null; t.stop = null; renderTicket(); } break;
     case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
     case "tkSlUnit": if (state.ticket) { const t = state.ticket, u = arg.unit === "amt" ? "amt" : "pct"; if (t.sl.kind === "trail") { t.sl.unit = u; t.sl.trail = null; t.text.sltrail = null; } else { t.sl.priceUnit = u; t.sl.price = null; t.sl.pct = null; t.text.slprice = null; } renderTicket(); } break;
