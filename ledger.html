@@ -89,11 +89,16 @@ textarea.input{resize:none;line-height:1.5}
 .heat-chg{color:rgba(255,255,255,.82);font-variant-numeric:tabular-nums}
 html[data-theme="light"] .heat-tile{color:#1b1d27}
 html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
-.nw-row{display:grid;grid-template-columns:66px minmax(0,1fr);gap:12px;padding:11px 8px;margin:0 -8px;border-radius:6px;cursor:pointer;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.06)}
+.gth{font:500 10.5px/18px var(--font);letter-spacing:.09em;text-transform:uppercase;color:var(--ink60);user-select:none;cursor:pointer;white-space:nowrap}
+.gth.on{color:var(--ink)}
+.nw-head,.nw-row{display:grid;grid-template-columns:66px minmax(0,1fr) 84px 72px;gap:12px;padding:0 16px}
+.nw-head{padding-bottom:6px;margin:0 -16px}
+.nw-list{margin:0 -16px}
+.nw-row{padding:10px 16px;align-items:start;cursor:pointer;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.06)}
 .nw-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
-.nw-chip{display:inline-flex;gap:5px;align-items:center;padding:2px 7px;border-radius:5px;background:var(--chip-bg);font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;border:0;cursor:default;font-family:var(--font)}
-.nw-chip.go{cursor:pointer}
-.nw-chip.go:hover{box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.2)}
+.nw-sym{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent;padding:0;text-align:left;color:var(--ink);font-family:var(--font);display:block;max-width:100%}
+.nw-sym.go{cursor:pointer}
+.nw-sym.go:hover{color:var(--accent-300)}
 .wl-head,.wl-row{display:grid;grid-template-columns:minmax(0,1fr) 84px 74px 66px 22px;gap:10px;align-items:center;padding:0 16px;white-space:nowrap}
 .wl-row > *{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .wl-head{padding-bottom:6px;margin:0 -16px}
@@ -325,6 +330,8 @@ const state = {
     yoc: { key: "ttm", dir: "desc" },
     cash: { key: "date", dir: "desc" },
     orders: { key: "placed", dir: "desc" },
+    watchlist: { key: "added", dir: "asc" },
+    news: { key: "when", dir: "desc" },
   },
   orders: null,
   ordersError: "",
@@ -486,6 +493,15 @@ function th(table, cols) {
       (c.padLeft ? ";padding-left:" + c.padLeft : "") + (c.padRight ? ";padding-right:" + c.padRight : "") + (c.width ? ";width:" + c.width : "") + '">' +
       '<span class="th-in" style="flex-direction:' + (right ? "row-reverse" : "row") + '">' + esc(c.label) +
       '<span class="arrow" style="color:' + (on ? "var(--accent)" : "transparent") + (center ? ";position:absolute;left:100%;margin-left:4px" : "") + '">' + (on && s.dir === "asc" ? "▲" : "▼") + "</span></span></th>";
+  }).join("");
+}
+// the same head cells for a grid of rows: the label, the arrow, first click descending
+function gridTh(table, cols) {
+  const s = state.sort[table];
+  return cols.map((c) => {
+    const on = s.key === c.key, right = c.align === "right";
+    return '<div class="gth' + (on ? " on" : "") + '" data-act="sort" data-arg=\'' + attr({ table, key: c.key }) + "' style=\"text-align:" + (c.align || "left") + '">' +
+      '<span class="th-in" style="flex-direction:' + (right ? "row-reverse" : "row") + '">' + esc(c.label) + '<span class="arrow" style="color:' + (on ? "var(--accent)" : "transparent") + '">' + (on && s.dir === "asc" ? "▲" : "▼") + "</span></span></div>";
   }).join("");
 }
 function api(method, path, body) {
@@ -2396,19 +2412,28 @@ function newsWhen(iso) {
   if (d.toDateString() === now.toDateString()) return (d.getHours() % 12 || 12) + ":" + String(d.getMinutes()).padStart(2, "0") + " " + (d.getHours() < 12 ? "AM" : "PM");
   return MON[d.getMonth()] + " " + d.getDate() + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "");
 }
+const NEWS_COLS = [{ key: "when", label: "When" }, { key: "news", label: "News" }, { key: "symbol", label: "Symbol" }, { key: "change", label: "Change", align: "right" }];
 function newsCardHtml(items) {
-  const scope = state.newsScope;
-  const rows = (items || []).filter((n) => scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
-  const chip = (t) => '<button class="nw-chip' + (t.positionId ? " go" : "") + '"' + (t.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: t.positionId }) + "'" : "") + ' style="color:' + (t.percentChange == null ? "var(--ink60)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + esc(bareSymbol(t.symbol)) + (t.percentChange == null ? "" : " " + signedPct(t.percentChange)) + "</button>";
+  const scope = state.newsScope, s = state.sort.news;
+  let rows = (items || []).filter((n) => scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
+  const first = (n) => n.tags[0] || {};
+  rows = sortRows(rows, s.key, s.dir, (n, k) => k === "when" ? n.publishedAt : k === "news" ? n.headline.toLowerCase() : k === "symbol" ? bareSymbol(first(n).symbol || "").toLowerCase() : first(n).percentChange);
+  const sym = (t) => '<button class="nw-sym' + (t.positionId ? " go" : "") + '"' + (t.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: t.positionId }) + "'" : ' data-act="noop"') + ">" + esc(bareSymbol(t.symbol)) + "</button>";
+  const chg = (t) => '<div class="tab" style="font-size:13px;text-align:right;color:' + (t.percentChange == null ? "var(--ink55)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(t.percentChange) + "</div>";
   const row = (n) => '<div class="nw-row" data-act="newsOpen" data-arg=\'' + attr({ url: n.url }) + "'>" +
-    '<div class="tab" style="font-size:11px;color:var(--ink55);padding-top:1px">' + esc(newsWhen(n.publishedAt)) + "</div>" +
-    '<div style="min-width:0;display:flex;flex-direction:column;gap:5px"><div style="font-size:13px;line-height:1.35">' + esc(n.headline) + "</div>" +
-    '<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink55);flex-wrap:wrap"><span>' + esc(n.source) + "</span>" + n.tags.map(chip).join("") + "</div></div></div>";
-  return '<div class="card elev-sm" style="padding:14px 16px 6px"><div style="display:flex;align-items:center;gap:14px;margin-bottom:6px"><h5>News</h5>' +
+    '<div class="tab" style="font-size:11px;color:var(--ink55);padding-top:2px">' + esc(newsWhen(n.publishedAt)) + "</div>" +
+    '<div style="min-width:0;display:flex;flex-direction:column;gap:4px"><div style="font-size:13px;line-height:1.35">' + esc(n.headline) + '</div><div style="font-size:11px;color:var(--ink55)">' + esc(n.source) + "</div></div>" +
+    '<div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:1px">' + n.tags.map(sym).join("") + "</div>" +
+    '<div style="display:flex;flex-direction:column;gap:2px;padding-top:1px">' + n.tags.map(chg).join("") + "</div></div>";
+  return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;min-height:28px;margin-bottom:8px"><h5>News</h5>' +
     msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) + "</div>" +
-    (rows.length ? '<div class="scroll" style="max-height:436px">' + rows.map(row).join("") + "</div>" : '<div class="muted" style="font-size:12px;padding-bottom:8px">No news.</div>') + "</div>";
+    (rows.length ? '<div class="nw-head">' + gridTh("news", NEWS_COLS) + '</div><div class="scroll nw-list" style="max-height:436px">' + rows.map(row).join("") + "</div>"
+      : '<div class="muted" style="font-size:12px">No news.</div>') + "</div>";
 }
+const WATCH_COLS = [{ key: "symbol", label: "Symbol" }, { key: "exchange", label: "Exchange" }, { key: "last", label: "Last", align: "right" }, { key: "chg", label: "Chg", align: "right" }];
 function watchlistCardHtml(rows) {
+  const s = state.sort.watchlist;
+  rows = sortRows(rows.map((w, i) => Object.assign({ added: i }, w)), s.key, s.dir, (w, k) => k === "symbol" ? bareSymbol(w.symbol).toLowerCase() : k === "exchange" ? String(w.exchange || "").toLowerCase() : k === "last" ? w.last : k === "chg" ? w.percentChange : w.added);
   const row = (w) => '<div class="wl-row' + (w.positionId ? " go" : "") + '"' + (w.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: w.positionId }) + "'" : "") + ">" +
     '<div><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis">' + esc(bareSymbol(w.symbol)) + '</div><div style="font-size:11px;color:var(--ink55);overflow:hidden;text-overflow:ellipsis">' + esc(w.name || "") + "</div></div>" +
     '<div style="font-size:12px;color:var(--ink55)">' + esc(w.exchange || "") + "</div>" +
@@ -2416,8 +2441,8 @@ function watchlistCardHtml(rows) {
     '<div class="tab" style="text-align:right;font-size:13px;color:' + (w.percentChange == null ? "var(--ink55)" : w.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(w.percentChange) + "</div>" +
     '<button class="tk-rowbtn sell" aria-label="Remove ' + esc(w.symbol) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.x) + "</button></div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px">' +
-    '<div style="display:flex;align-items:center;margin-bottom:8px"><h5>Watchlist</h5><button class="wl-add" style="margin-left:auto" aria-label="Add to the watchlist" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button></div>" +
-    (rows.length ? '<div class="wl-head lbl"><div>Symbol</div><div>Exchange</div><div style="text-align:right">Last</div><div style="text-align:right">Chg</div><div></div></div>' +
+    '<div style="display:flex;align-items:center;min-height:28px;margin-bottom:8px"><h5>Watchlist</h5><button class="wl-add" style="margin-left:auto" aria-label="Add to the watchlist" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button></div>" +
+    (rows.length ? '<div class="wl-head">' + gridTh("watchlist", WATCH_COLS) + "<div></div></div>" +
       '<div class="scroll wl-list" style="max-height:398px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">Nothing watched.</div>') + "</div>";
 }
