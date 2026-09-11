@@ -2197,6 +2197,28 @@ class OrderTicketTest(_OrdersBase):
         self.assertEqual(again["matches"], r["matches"])
         self.assertEqual(bagholder.symbol_search("  ")["matches"], [])
 
+    def test_symbol_search_takes_yahoos_suffix_as_the_venue(self):
+        nasdaq = {"data": {"stocks": [{"symbol": "YSWY", "name": "Yesway, Inc.", "exchange": "NASDAQ"}, {"symbol": "EYES", "name": "Corgi Data", "exchange": "BATS"}]}}
+        tsxv = {"results": [{"symbol": "YES", "name": "Char Technologies Ltd.", "instruments": [{"symbol": "YES"}]}]}
+        asked = []
+        def fake_get(url, ssl_context=None, headers=None):
+            asked.append(url)
+            if "nasdaq.com" in url:
+                return json.dumps(nasdaq)
+            if "/search/tsx/" in url:
+                return json.dumps({"results": []})
+            return json.dumps(tsxv)
+        bagholder._search_cache.clear()
+        with mock.patch.object(bagholder.market, "_get_text", side_effect=fake_get):
+            r = bagholder.symbol_search("yes.v")
+            plain = bagholder.symbol_search("yes")
+        self.assertTrue(all("YES.V" not in u.upper() for u in asked), "the directories are asked for the bare ticker")
+        self.assertEqual([(m["symbol"], m["exchange"]) for m in r["matches"]], [("YES", "TSX-V")], "the suffix names the venue")
+        self.assertEqual([m["symbol"] for m in plain["matches"]][:1], ["YES"], "without a suffix every venue answers")
+        self.assertEqual(market.yahoo_split("shop.to"), ("SHOP", ("TSX",)))
+        self.assertEqual(market.yahoo_split("SHOP"), ("SHOP", None))
+        self.assertEqual(market.yahoo_split(".V"), (".V", None))
+
     def test_symbol_search_keeps_what_answered_and_forgets_a_partial_round(self):
         def flaky(url, ssl_context=None, headers=None):
             if "nasdaq.com" in url:

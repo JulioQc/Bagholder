@@ -713,7 +713,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-11.6"
+PROTOCOL = "2026-09-11.7"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -4021,6 +4021,8 @@ def symbol_search(text):
     key = text.upper()
     if key in _search_cache:
         return {"ok": True, "matches": _search_cache[key]}
+    # `YES.V` as Yahoo writes it: the directories are asked for YES, and the suffix's venue is kept
+    text, venues = market.yahoo_split(text)
     q = quote(text, safe="")
     jobs = [("nasdaq", NASDAQ_SEARCH_URL % q, lambda d: parse_nasdaq_search(d)),
             ("tsx", TSX_SEARCH_URL % ("tsx", q), lambda d: parse_tsx_search(d, "TSX")),
@@ -4040,6 +4042,8 @@ def symbol_search(text):
     if not answers:
         return {"ok": False, "error": "Search failed: " + "; ".join(errors.values()), "matches": []}
     rows = rank_search(text, instruments.search(text) + [r for name, _, _ in jobs for r in answers.get(name, [])])
+    if venues:
+        rows = [r for r in rows if _s(r.get("exchange")).upper() in venues] or rows
     if not errors:
         _search_cache[key] = rows
     return {"ok": True, "matches": rows}
