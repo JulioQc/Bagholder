@@ -675,7 +675,7 @@ function headerHtml() {
     '<div style="position:relative" data-pop="filter">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Filters" data-act="openFields"><svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M230.6 49.5A15.8 15.8 0 0 0 216 40H40a16 16 0 0 0-12.6 25.9l68.6 81.1v55a16 16 0 0 0 25.6 13.3l32-21.3a16 16 0 0 0 7.4-13.3v-33.7l68.6-81.1a15.8 15.8 0 0 0 1-15.4Z"/></svg></button>' +
     (filtersActive() ? '<span style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);pointer-events:none"></span>' : "") +
-    (state.picker ? filterPopHtml() : "") +
+    (state.picker && !state.watchMode ? filterPopHtml() : "") +
     "</div>" +
     '<div style="position:relative" data-pop="menu">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Menu" data-act="menu"><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></button>' +
@@ -967,7 +967,7 @@ function symbolRowHtml(sym, name, exchange, icons, cls, act, arg) {
 function popRowHtml(key, value, cls, label) {
   if (key === "symbol") {
     const l = (((state.model && state.model.options) || {}).listings || {})[value] || {};
-    return symbolRowHtml(value, l.name || "", l.exchange || "", tkRowButtons(value), cls, "toggleList", { key, value });
+    return symbolRowHtml(OPTION_RE.test(value) ? value : bareSymbol(value), l.name || "", l.exchange || "", tkRowButtons(value), cls, "toggleList", { key, value });
   }
   return '<button class="pop-row' + cls + '" tabindex="-1" data-act="toggleList" data-arg=\'' + attr({ key, value }) + "'>" + esc(value) +
     (label ? '<span style="margin-left:auto;font-size:11px;color:var(--ink55)">' + esc(label) + "</span>" : "") + "</button>";
@@ -1050,7 +1050,7 @@ function symbolRows(q) {
       return;
     }
     const r = rank(sym, l.name);
-    if (r >= 0) out.push({ book: true, sym, name: l.name || "", exchange: l.exchange || "", rank: r, sub: sym });
+    if (r >= 0) out.push({ book: true, sym, name: l.name || "", exchange: l.exchange || "", rank: r, sub: bareSymbol(sym) });
   });
   extRows(q).forEach((r) => { const k = r.rank != null ? r.rank : rank(r.symbol, r.name); out.push({ book: false, sym: r.symbol, name: r.name || "", exchange: r.exchange, currency: r.currency, kind: r.kind || "", rank: k < 0 ? 2 : k, sub: r.symbol }); });
   out.sort((a, b) => a.rank - b.rank || (a.book === b.book ? 0 : a.book ? -1 : 1) || (a.sub < b.sub ? -1 : a.sub > b.sub ? 1 : 0));
@@ -1066,7 +1066,7 @@ function popFieldsBodyHtml() {
     const hi = Math.min(state.valueHi || 0, syms.length + others.length - 1);
     return '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' +
       syms.map((r, i) => r.book
-        ? symbolRowHtml(r.sym, r.name, r.exchange, tkRowButtons(r.sym), (f.lists.symbol.indexOf(r.sym) >= 0 ? " on" : "") + (i === hi ? " hi" : ""), "toggleList", { key: "symbol", value: r.sym })
+        ? symbolRowHtml(OPTION_RE.test(r.sym) ? r.sym : bareSymbol(r.sym), r.name, r.exchange, tkRowButtons(r.sym), (f.lists.symbol.indexOf(r.sym) >= 0 ? " on" : "") + (i === hi ? " hi" : ""), "toggleList", { key: "symbol", value: r.sym })
         : extRowHtml(r, i === hi ? " hi" : "")).join("") +
       others.map((m, i) => popRowHtml(m.key, m.value, (f.lists[m.key].indexOf(m.value) >= 0 ? " on" : "") + (syms.length + i === hi ? " hi" : ""), m.label)).join("") + "</div>";
   }
@@ -2491,7 +2491,8 @@ function watchlistCardHtml(rows) {
     '<div class="tab" style="text-align:right;font-size:13px;color:' + (w.percentChange == null ? "var(--ink55)" : w.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(w.percentChange) + "</div>" +
     '<button class="tk-rowbtn sell" aria-label="Remove ' + esc(w.symbol) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.x) + "</button></div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px">' +
-    '<div style="display:flex;align-items:center;min-height:28px;margin-bottom:8px"><h5>Watchlist</h5><button class="wl-add" style="margin-left:auto" aria-label="Add to the watchlist" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button></div>" +
+    '<div style="display:flex;align-items:center;min-height:28px;margin-bottom:8px;position:relative"><h5>Watchlist</h5><button class="wl-add" style="margin-left:auto" aria-label="Add to the watchlist" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button>" +
+    (state.picker && state.watchMode ? filterPopHtml() : "") + "</div>" +
     (rows.length ? '<div class="wl-head">' + gridTh("watchlist", WATCH_COLS) + "<div></div></div>" +
       '<div class="scroll wl-list" style="max-height:398px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">Nothing watched.</div>') + "</div>";
