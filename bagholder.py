@@ -5387,8 +5387,10 @@ def adjust_bracket(bracket_id, leg, price=None, trail=None, remove=False):
 
 
 def open_orders_count():
-    """Every order resting at Wealthsimple, the brackets' stops and targets included: the number its Pending orders lists."""
-    return sum(1 for o in store.list_orders() if o["status"] in LIVE_STATUSES)
+    """The Orders panel's Pending cards: every entry resting at Wealthsimple, and every live bracket once its entry has filled."""
+    entries = sum(1 for o in store.list_orders() if o["status"] in LIVE_STATUSES and o.get("role", "entry") == "entry")
+    brackets = sum(1 for b in store.list_brackets() if b["status"] in BRACKET_LIVE and b["status"] != "waiting")
+    return entries + brackets
 
 
 def qty_text(q):
