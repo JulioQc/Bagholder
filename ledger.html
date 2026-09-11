@@ -2332,7 +2332,11 @@ function heatmapLayout(tiles, W, H) {
   const bySector = {};
   tiles.forEach((t) => { (bySector[t.sector] = bySector[t.sector] || []).push(t); });
   const wmean = (xs) => { const q = xs.filter((x) => x.percentChange != null); const v = q.reduce((s, x) => s + x.value, 0); return v ? q.reduce((s, x) => s + x.value * x.percentChange, 0) / v : null; };
-  const groups = Object.keys(bySector).map((label) => ({ label, v: bySector[label].reduce((s, x) => s + x.value, 0), chg: wmean(bySector[label]), syms: bySector[label] }));
+  let groups = Object.keys(bySector).map((label) => ({ label, v: bySector[label].reduce((s, x) => s + x.value, 0), chg: wmean(bySector[label]), syms: bySector[label] }));
+  // the floor applies to the sector blocks as well: a sector worth one percent of a market would otherwise be a sliver
+  const gv = groups.reduce((a, b) => a + b.v, 0), gArea = W * H;
+  const gMinArea = Math.min(52 * Math.min(W, H), gArea * 0.22), gMinV = Math.min(gv / groups.length, gv * gMinArea / gArea);
+  groups = groups.map((g) => Object.assign({}, g, { v: Math.max(g.v, gMinV) }));
   const cells = [];
   const blocks = squarify(groups, { x: 0, y: 0, w: W, h: H }).map((g) => {
     const inner = { x: g.x + GAP / 2, y: g.y + GAP / 2 + HEAD, w: Math.max(1, g.w - GAP), h: Math.max(1, g.h - GAP - HEAD) };
