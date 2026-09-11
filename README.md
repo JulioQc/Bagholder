@@ -2,9 +2,17 @@
 
 A local-first trading journal for Wealthsimple users. It runs on your own computer, syncs your activity from Wealthsimple, and keeps everything in a local SQLite file. Nothing is uploaded anywhere.
 
-![Bagholder on the desktop](docs/screenshots/desktop-tour.gif)
+## Disclaimer
 
-Use at your own risk. The app has you sign in to the real Wealthsimple website in order to sync. The author is not responsible for your use or misuse of the app or any consequences thereof.
+**Use at your own risk.** Bagholder is an independent project. It is not affiliated with, endorsed by or supported by Wealthsimple.
+
+- **Unofficial API.** Wealthsimple publishes no API for clients. Bagholder signs you in to the real Wealthsimple website with your own credentials and reads your accounts, positions and activity through the same private interface Wealthsimple's own web app uses. That interface is undocumented, can change or be withdrawn at any time, and Wealthsimple may treat automated access to it as a breach of its terms.
+- **Your account, your terms.** It is your responsibility to read and understand Wealthsimple's Terms of Service and to decide whether using this app is compatible with them. Wealthsimple may restrict, suspend or close an account it finds in breach. If you are not prepared to put your account at that risk, do not use Bagholder.
+- **Real orders, real money.** Orders placed from the app are placed at Wealthsimple in your account and are as real as any placed on Wealthsimple's site. Stops and targets the app manages are ordinary orders resting at Wealthsimple; the app can cancel, replace or fail to place them like any software can.
+- **No warranty.** The software is provided as is, without warranty of any kind. Figures can be wrong, sources can change, and syncing can fail.
+- **Sole responsibility.** You alone are responsible for your use of the app and for every outcome of it, including any loss, account restriction or closure, or other consequence. The author accepts no liability for any of them.
+
+![Bagholder on the desktop](docs/screenshots/desktop-tour.gif)
 
 ## Screenshots
 
