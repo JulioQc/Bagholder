@@ -91,15 +91,16 @@ html[data-theme="light"] .heat-tile{color:#1b1d27}
 html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
 .gth{font:500 10.5px/18px var(--font);letter-spacing:.09em;text-transform:uppercase;color:var(--ink60);user-select:none;cursor:pointer;white-space:nowrap}
 .gth.on{color:var(--ink)}
-.nw-head,.nw-row{display:grid;grid-template-columns:66px minmax(0,1fr) 84px 72px;gap:12px;padding:0 16px}
+.nw-head,.nw-row{display:grid;grid-template-columns:66px minmax(0,1fr) auto 64px;gap:12px;padding:0 16px;white-space:nowrap}
 .nw-head{padding-bottom:6px;margin:0 -16px}
 .nw-list{margin:0 -16px}
-.nw-row{padding:10px 16px;align-items:start;cursor:pointer;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.06)}
+.nw-row{padding:7px 16px;align-items:center;cursor:pointer;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.06)}
+.nw-row > *{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .nw-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
-.nw-sym{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent;padding:0;text-align:left;color:var(--ink);font-family:var(--font);display:block;max-width:100%}
+.nw-sym{font-size:13px;font-weight:500;border:0;background:transparent;padding:0;color:var(--ink);font-family:var(--font)}
 .nw-sym.go{cursor:pointer}
 .nw-sym.go:hover{color:var(--accent-300)}
-.wl-head,.wl-row{display:grid;grid-template-columns:minmax(0,1fr) 84px 74px 66px 22px;gap:10px;align-items:center;padding:0 16px;white-space:nowrap}
+.wl-head,.wl-row{display:grid;grid-template-columns:minmax(0,1fr) 62px 78px 58px 22px;gap:8px;align-items:center;padding:0 16px;white-space:nowrap}
 .wl-row > *{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .wl-head{padding-bottom:6px;margin:0 -16px}
 .wl-list{margin:0 -16px}
@@ -338,6 +339,7 @@ const state = {
   ordersOpen: false,
   ticketDraft: null,   // a closed ticket's typed fields, until the same symbol and side open again
   watchMode: false,   // ⌘K opened from the Watchlist's plus: its rows add to the list instead of filtering
+  newsSymbol: null,   // {symbol, exchange}: the one listing the News card is scoped to, from a click on its symbol
   newsScope: (function () { try { return localStorage.getItem("bh2.news") || "all"; } catch (e) { return "all"; } })(),
   heat: (function () { try { return Object.assign({ universe: "holdings", size: "value" }, JSON.parse(localStorage.getItem("bh2.heatmap") || "{}")); } catch (e) { return { universe: "holdings", size: "value" }; } })(),
   ordersTab: "pending",
@@ -2412,31 +2414,34 @@ function newsWhen(iso) {
   if (d.toDateString() === now.toDateString()) return (d.getHours() % 12 || 12) + ":" + String(d.getMinutes()).padStart(2, "0") + " " + (d.getHours() < 12 ? "AM" : "PM");
   return MON[d.getMonth()] + " " + d.getDate() + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "");
 }
-const NEWS_COLS = [{ key: "when", label: "When" }, { key: "news", label: "News" }, { key: "symbol", label: "Symbol" }, { key: "change", label: "Change", align: "right" }];
+const NEWS_COLS = [{ key: "when", label: "When" }, { key: "news", label: "News" }, { key: "symbol", label: "Symbol", align: "right" }, { key: "change", label: "Change", align: "right" }];
 function newsCardHtml(items) {
-  const scope = state.newsScope, s = state.sort.news;
-  let rows = (items || []).filter((n) => scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
+  const scope = state.newsScope, s = state.sort.news, only = state.newsSymbol;
+  const isOnly = (t) => only && bareSymbol(t.symbol) === only.symbol && String(t.exchange || "").toUpperCase() === only.exchange;
+  let rows = (items || []).filter((n) => only ? n.tags.some(isOnly) : scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
   const first = (n) => n.tags[0] || {};
   rows = sortRows(rows, s.key, s.dir, (n, k) => k === "when" ? n.publishedAt : k === "news" ? n.headline.toLowerCase() : k === "symbol" ? bareSymbol(first(n).symbol || "").toLowerCase() : first(n).percentChange);
-  const sym = (t) => '<button class="nw-sym' + (t.positionId ? " go" : "") + '"' + (t.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: t.positionId }) + "'" : ' data-act="noop"') + ">" + esc(bareSymbol(t.symbol)) + "</button>";
-  const chg = (t) => '<div class="tab" style="font-size:13px;text-align:right;color:' + (t.percentChange == null ? "var(--ink55)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(t.percentChange) + "</div>";
+  const sym = (t) => '<button class="nw-sym go" data-act="newsSym" data-arg=\'' + attr({ symbol: bareSymbol(t.symbol), exchange: String(t.exchange || "").toUpperCase() }) + "'>" + esc(bareSymbol(t.symbol)) + "</button>";
+  const chg = (t) => '<span class="tab" style="font-size:13px;color:' + (t.percentChange == null ? "var(--ink55)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(t.percentChange) + "</span>";
+  // one line per row: the headline cut with an ellipsis, a story two listings share naming both on the line
   const row = (n) => '<div class="nw-row" data-act="newsOpen" data-arg=\'' + attr({ url: n.url }) + "'>" +
-    '<div class="tab" style="font-size:11px;color:var(--ink55);padding-top:2px">' + esc(newsWhen(n.publishedAt)) + "</div>" +
-    '<div style="min-width:0;display:flex;flex-direction:column;gap:4px"><div style="font-size:13px;line-height:1.35">' + esc(n.headline) + '</div><div style="font-size:11px;color:var(--ink55)">' + esc(n.source) + "</div></div>" +
-    '<div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:1px">' + n.tags.map(sym).join("") + "</div>" +
-    '<div style="display:flex;flex-direction:column;gap:2px;padding-top:1px">' + n.tags.map(chg).join("") + "</div></div>";
+    '<div class="tab" style="font-size:11px;color:var(--ink55)">' + esc(newsWhen(n.publishedAt)) + "</div>" +
+    '<div><div style="font-size:13px;overflow:hidden;text-overflow:ellipsis">' + esc(n.headline) + '</div><div style="font-size:11px;color:var(--ink55);overflow:hidden;text-overflow:ellipsis">' + esc(n.source) + "</div></div>" +
+    '<div style="text-align:right">' + n.tags.map(sym).join(" ") + "</div>" +
+    '<div style="text-align:right">' + n.tags.map(chg).join(" ") + "</div></div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;min-height:28px;margin-bottom:8px"><h5>News</h5>' +
-    msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) + "</div>" +
+    msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) +
+    (only ? '<span class="chip"><span class="cf">Symbol</span><span class="cv" style="cursor:default">' + esc(only.symbol) + '</span><button class="cx" aria-label="Show every listing" data-act="newsSymClear">×</button></span>' : "") + "</div>" +
     (rows.length ? '<div class="nw-head">' + gridTh("news", NEWS_COLS) + '</div><div class="scroll nw-list" style="max-height:436px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">No news.</div>') + "</div>";
 }
-const WATCH_COLS = [{ key: "symbol", label: "Symbol" }, { key: "exchange", label: "Exchange" }, { key: "last", label: "Last", align: "right" }, { key: "chg", label: "Chg", align: "right" }];
+const WATCH_COLS = [{ key: "symbol", label: "Symbol" }, { key: "exchange", label: "Exchange", align: "right" }, { key: "last", label: "Last", align: "right" }, { key: "chg", label: "Chg", align: "right" }];
 function watchlistCardHtml(rows) {
   const s = state.sort.watchlist;
   rows = sortRows(rows.map((w, i) => Object.assign({ added: i }, w)), s.key, s.dir, (w, k) => k === "symbol" ? bareSymbol(w.symbol).toLowerCase() : k === "exchange" ? String(w.exchange || "").toLowerCase() : k === "last" ? w.last : k === "chg" ? w.percentChange : w.added);
   const row = (w) => '<div class="wl-row' + (w.positionId ? " go" : "") + '"' + (w.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: w.positionId }) + "'" : "") + ">" +
     '<div><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis">' + esc(bareSymbol(w.symbol)) + '</div><div style="font-size:11px;color:var(--ink55);overflow:hidden;text-overflow:ellipsis">' + esc(w.name || "") + "</div></div>" +
-    '<div style="font-size:12px;color:var(--ink55)">' + esc(w.exchange || "") + "</div>" +
+    '<div style="font-size:12px;color:var(--ink55);text-align:right">' + esc(w.exchange || "") + "</div>" +
     '<div class="tab" style="text-align:right;font-size:13px">' + (w.last == null ? "—" : px(w.last)) + "</div>" +
     '<div class="tab" style="text-align:right;font-size:13px;color:' + (w.percentChange == null ? "var(--ink55)" : w.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(w.percentChange) + "</div>" +
     '<button class="tk-rowbtn sell" aria-label="Remove ' + esc(w.symbol) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.x) + "</button></div>";
@@ -2864,7 +2869,9 @@ function act(name, arg, ev) {
     }
     case "noop": break;
     case "heatOpen": openHolding(arg.id); break;
-    case "newsScope": state.newsScope = arg.scope; try { localStorage.setItem("bh2.news", arg.scope); } catch (e) {} render(); break;
+    case "newsSym": state.newsSymbol = { symbol: arg.symbol, exchange: arg.exchange }; render(); break;
+    case "newsSymClear": state.newsSymbol = null; render(); break;
+    case "newsScope": state.newsSymbol = null; state.newsScope = arg.scope; try { localStorage.setItem("bh2.news", arg.scope); } catch (e) {} render(); break;
     case "newsOpen": if (arg.url) window.open(arg.url, "_blank", "noopener"); break;
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
