@@ -1544,6 +1544,20 @@ def last_fill_prices(activities):
     return out
 
 
+def quote_fits(quote, kind):
+    """A quote prices a position only when its source is the kind's: the coin BTC's
+    Coinbase price must never price a share or a warrant called BTC, and a listing's
+    TMX price never a coin. A quote with no source stated is taken as the kind's own."""
+    source = _s((quote or {}).get("source"))
+    if not source:
+        return True
+    if kind == "Crypto":
+        return source == "coinbase"
+    if kind == "Options":
+        return source == "cboe_options"
+    return source not in ("coinbase", "cboe_options")
+
+
 def build_positions(open_lots, last_prices, balances, accounts, securities, journal, today, quotes=None, acts_by_id=None):
     quotes = quotes or {}
     acts_by_id = acts_by_id or {}
@@ -1580,6 +1594,8 @@ def build_positions(open_lots, last_prices, balances, accounts, securities, jour
         last_at = last["date"] if last else ""
         price_source = "fill"
         quote = quotes.get(symbol)
+        if quote and not quote_fits(quote, lots[0]["kind"]):
+            quote = None
         if quote and _num(quote.get("price"), None):
             last_px = _num(quote.get("price"))
             last_at = _s(quote.get("fetchedAt"))
@@ -2706,6 +2722,8 @@ def cashflow_view(base, f, positions_all, margin_used=0.0, has_margin=True):
 
     def last_price(p):
         q = quotes.get(p["symbol"]) or {}
+        if not quote_fits(q, p.get("kind")):
+            q = {}
         px = _num(q.get("price"), None)
         if px and px > 0:
             return px, "close"
