@@ -2237,7 +2237,7 @@ function portfolioTilesHtml(pf) {
       ? tile("Margin used", money0(pf.marginUsed), pf.marginUsedPct == null ? "—" : pctPlain(pf.marginUsedPct) + " of market value") +
         tile("Available margin", pf.availableMargin == null ? "—" : money0(pf.availableMargin), unavailable.length ? "unavailable for " + esc(unavailable.join(", ")) : pf.availableMargin == null ? "—" : "buying power")
       : tile("Cash", money0(pf.cash), pf.cashPct == null ? "—" : pctPlain(pf.cashPct) + " of net asset value")) +
-    tile("1d change", pf.dayChange == null ? "—" : signedMoney(pf.dayChange, null, 2), pf.dayChangePct == null ? "—" : pct(pf.dayChangePct) + " in last 24h", pf.dayChange == null ? "" : cls(pf.dayChange)) +
+    tile("1d change", pf.dayChange == null ? "—" : signedMoney(pf.dayChange, null, 2), pf.dayChangePct == null ? "—" : pct(pf.dayChangePct) + " today", pf.dayChange == null ? "" : cls(pf.dayChange)) +
     tile("Unrealized P&amp;L", signedMoney(pf.unrealized, null, 2), pf.unrealizedPct == null ? "—" : pct(pf.unrealizedPct) + (pf.unrealized >= 0 ? " gain" : " loss"), cls(pf.unrealized));
   return '<div style="display:grid;grid-template-columns:repeat(' + (pf.hasMargin ? 6 : 5) + ',minmax(0,1fr));gap:14px">' + tiles + "</div>";
 }

@@ -203,7 +203,7 @@ Tiles in the style of the dashboard tiles, CAD aggregates over the accounts in s
 | Margin used | The negative cash balances of the accounts in scope, one per currency, shown positive, converted to CAD | Its share of Market value |
 | Available margin | Sum of Wealthsimple's buying power over the open margin accounts in scope, the figure Wealthsimple labels Margin available. Only margin accounts are asked: every self-directed account answers the same query with the cash it could buy with, which is not margin | `buying power`; `unavailable for <account>` when Wealthsimple cannot price a security in it; `—` with no margin account in scope |
 | Cash (no margin account in scope) | The positive cash balances of the accounts in scope, one per currency, converted to CAD | Its share of Net asset value, or `—` without one |
-| 1d change | The day's change of every quoted open position in scope (quantity × the quote's price change, reversed on a short), converted to CAD, signed and coloured; `—` when nothing has a quote | That change over what those positions were worth at the previous close, signed, `+x% in last 24h` |
+| 1d change | The day's change of every quoted open position in scope (quantity × the quote's price change, reversed on a short), converted to CAD, signed and coloured; `—` when nothing has a quote | That change over what those positions were worth at the previous close, signed, `+x% today` |
 | Unrealized P&L | Unrealized P&L of the open positions in scope, converted at today's rate | Its percentage of Cost basis, `gain` or `loss` |
 
 Nothing on the tab is derived beyond these sums: Max buying power, Portfolio value and the interest panel of Wealthsimple's margin page have no source and are not shown.
