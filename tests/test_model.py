@@ -1172,6 +1172,21 @@ class QuoteTest(unittest.TestCase):
         held = model.held_symbols(base)
         self.assertEqual(sorted((h["symbol"], h["kind"]) for h in held), [("BTC", "Crypto"), ("QNC 20NOV26 3.00 CALL", "Options")])
 
+    def test_a_coins_price_never_prices_a_share_with_the_same_symbol(self):
+        # a share or warrant called BTC beside the coin BTC: one quote row per symbol, and only the coin may take Coinbase's price
+        acts = [
+            act(id="c1", category="trade", activityType="BUY", rawType="CRYPTO_BUY", quantity=0.5, unitPrice=100000, netCashAmount=-50000, transactionDate="2026-01-05", symbol="BTC", currency="CAD", accountType="Crypto", securityId="sec-z-btc-1"),
+            act(id="s1", category="trade", activityType="BUY", rawType="DIY_BUY", quantity=4653, unitPrice=1.75, netCashAmount=-8142.75, transactionDate="2026-02-05", symbol="BTC", currency="CAD", accountType="TFSA", securityId="sec-s-btc-warrant"),
+        ]
+        snapshot = {"activities": acts, "accounts": [], "balances": [], "navHistory": [], "navByAccount": {}, "syncedAt": "", "tradeGroups": [], "notes": {}, "securities": []}
+        quotes = {"BTC": {"price": 109998.0, "source": "coinbase"}}
+        base = model.build_base(snapshot, {"fx": {}, "benchmark": {}, "quotes": quotes}, {}, today="2026-09-06")
+        by = {(p["symbol"], p["kind"]): p for p in base["positions"]}
+        self.assertEqual((by[("BTC", "Crypto")]["priceSource"], by[("BTC", "Crypto")]["last"]), ("quote", 109998.0))
+        self.assertEqual((by[("BTC", "Shares")]["priceSource"], by[("BTC", "Shares")]["last"], round(by[("BTC", "Shares")]["mv"], 2)), ("fill", 1.75, 8142.75), "the share keeps its fill price rather than the coin's")
+        self.assertTrue(model.quote_fits({"price": 1.0}, "Shares"), "a quote with no source stated is the kind's own")
+        self.assertFalse(model.quote_fits({"price": 1.0, "source": "tmx"}, "Crypto"))
+
     def test_refresh_quotes_respects_the_interval(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["BAGHOLDER_HOME"] = tmp

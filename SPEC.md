@@ -50,7 +50,7 @@ An open position is the lots still held in one account, symbol, currency and dir
 | Qty | Units held |
 | Avg cost | Cost ÷ (qty × multiplier) |
 | Book | Sum of lot qty × price × multiplier |
-| Price | Live quote, refreshed every minute while the app runs: TMX Money or Cboe Canada for shares and ETFs, Coinbase for crypto in the position's currency, and for a US-listed option the bid/ask midpoint while both are quoted, else its last trade, else its previous close. Otherwise the last fill price in the history, and the Price cell says so |
+| Price | Live quote, refreshed every minute while the app runs, taken only when its source is the position's kind's (a share or warrant that shares the coin BTC's symbol never takes the coin's Coinbase price, and keeps its last fill instead): TMX Money or Cboe Canada for shares and ETFs, Coinbase for crypto in the position's currency, and for a US-listed option the bid/ask midpoint while both are quoted, else its last trade, else its previous close. Otherwise the last fill price in the history, and the Price cell says so |
 | Market | Qty × Price × multiplier |
 | P&L | Market − Book for longs, Book − Market for shorts, with the percentage over Book |
 | Hold | Quantity-weighted days since each lot was opened |
