@@ -97,6 +97,14 @@ class ModelTest(unittest.TestCase):
                          [("nasdaq:9", [("NVDA", False, True, None, None)]), ("tmx:1", [("SHOP", False, True, 3.28, None), ("HHIS", True, False, 0.6, "p1")])],
                          "newest first; an item two listings share is one row with both tags")
 
+    def test_the_books_form_and_the_bare_ticker_are_one_listing(self):
+        base = {"news": [{"id": "tmx:7", "symbol": "QNC.TO", "exchange": "TSX-V", "wire": "TMX Newsfile", "headline": "Seven", "url": "u7", "publishedAt": "2026-09-08T13:00:00Z"},
+                         {"id": "tmx:7", "symbol": "QNC", "exchange": "TSX-V", "wire": "TMX Newsfile", "headline": "Seven", "url": "u7", "publishedAt": "2026-09-08T13:00:00Z"}]}
+        positions = [{"id": "p2", "symbol": "QNC.TO", "exchange": "TSX-V", "percentChange": -1.67}]
+        watch = [{"symbol": "QNC", "exchange": "TSX-V", "percentChange": -1.67}]
+        rows = model.news_rows(base, positions, watch)
+        self.assertEqual([(t["symbol"], t["held"], t["watched"], t["percentChange"], t["positionId"]) for t in rows[0]["tags"]], [("QNC", True, True, -1.67, "p2")], "one tag, held and watched, the bare ticker")
+
 
 if __name__ == "__main__":
     unittest.main()

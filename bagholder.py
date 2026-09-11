@@ -5445,18 +5445,19 @@ def news_listings():
     """Every listing whose news is wanted: the shares and funds held, and the watched ones."""
     base = model.base_model()
     seen, out = set(), []
+    # one listing, one read, under its bare ticker: the book's QNC.TO and the watchlist's QNC are the same wire
     for p in base.get("positions") or []:
         if p.get("kind") != "Shares":
             continue
-        key = (p["symbol"], _s(p.get("exchange")).upper())
-        if key not in seen:
+        key = (market.tmx_symbol(p["symbol"]), _s(p.get("exchange")).upper())
+        if key[0] and key not in seen:
             seen.add(key)
-            out.append((p["symbol"], p.get("exchange") or "", p.get("currency") or ""))
+            out.append((key[0], p.get("exchange") or "", p.get("currency") or ""))
     for w in base.get("watchlist") or []:
-        key = (w["symbol"], _s(w.get("exchange")).upper())
-        if key not in seen and not instruments.find(w["symbol"], w.get("exchange")) and key[1] != "CRYPTO":
+        key = (market.tmx_symbol(w["symbol"]), _s(w.get("exchange")).upper())
+        if key[0] and key not in seen and not instruments.find(w["symbol"], w.get("exchange")) and key[1] != "CRYPTO":
             seen.add(key)
-            out.append((w["symbol"], w.get("exchange") or "", w.get("currency") or ""))
+            out.append((key[0], w.get("exchange") or "", w.get("currency") or ""))
     return out
 
 

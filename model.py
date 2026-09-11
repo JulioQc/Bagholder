@@ -2317,17 +2317,21 @@ def news_rows(base, positions, watch):
     """Every item kept, newest first, each tagged with the listings it was read for: the
     symbol, whether the book holds it or watches it, and its day change. An item two
     listings share (a wire's own id) is one row with two tags."""
-    held = {(p["symbol"], _s(p.get("exchange")).upper()): p for p in positions}
-    watched = {(w["symbol"], _s(w.get("exchange")).upper()): w for w in watch}
+    # a listing is one listing whether the book names it QNC.TO or the watchlist QNC: the bare ticker and the venue
+    lk = lambda symbol, exchange: (market.tmx_symbol(symbol), _s(exchange).upper())
+    held = {}
+    for p in positions:
+        held.setdefault(lk(p["symbol"], p.get("exchange")), p)
+    watched = {lk(w["symbol"], w.get("exchange")): w for w in watch}
     rows, by_id = [], {}
     for n in base.get("news") or []:
-        key = (n["symbol"], _s(n.get("exchange")).upper())
+        key = lk(n["symbol"], n.get("exchange"))
         p, w = held.get(key), watched.get(key)
-        tag = {"symbol": n["symbol"], "exchange": n.get("exchange") or "", "held": bool(p), "watched": bool(w),
+        tag = {"symbol": key[0], "exchange": n.get("exchange") or "", "held": bool(p), "watched": bool(w),
                "percentChange": p.get("percentChange") if p else (w.get("percentChange") if w else None), "positionId": p["id"] if p else None}
         row = by_id.get(n["id"])
         if row:
-            if not any(t["symbol"] == tag["symbol"] and t["exchange"] == tag["exchange"] for t in row["tags"]):
+            if not any(lk(t["symbol"], t["exchange"]) == key for t in row["tags"]):
                 row["tags"].append(tag)
             continue
         row = {"id": n["id"], "headline": n.get("headline") or "", "source": n.get("wire") or "", "url": n.get("url") or "", "publishedAt": n.get("publishedAt") or "", "tags": [tag]}
