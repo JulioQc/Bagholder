@@ -340,6 +340,7 @@ const state = {
   ticketDraft: null,   // a closed ticket's typed fields, until the same symbol and side open again
   watchMode: false,   // ⌘K opened from the Watchlist's plus: its rows add to the list instead of filtering
   newsSymbol: null,   // {symbol, exchange}: the one listing the News card is scoped to, from a click on its symbol
+  newsQuery: "",   // what is typed in the News card's box: a ticker or words, matched as it is typed
   newsScope: (function () { try { return localStorage.getItem("bh2.news") || "all"; } catch (e) { return "all"; } })(),
   heat: (function () { try { return Object.assign({ universe: "holdings", size: "value" }, JSON.parse(localStorage.getItem("bh2.heatmap") || "{}")); } catch (e) { return { universe: "holdings", size: "value" }; } })(),
   ordersTab: "pending",
@@ -2416,9 +2417,11 @@ function newsWhen(iso) {
 }
 const NEWS_COLS = [{ key: "when", label: "When" }, { key: "news", label: "News" }, { key: "symbol", label: "Symbol", align: "right" }, { key: "change", label: "Change", align: "right" }];
 function newsCardHtml(items) {
-  const scope = state.newsScope, s = state.sort.news, only = state.newsSymbol;
+  const scope = state.newsScope, s = state.sort.news, only = state.newsSymbol, q = state.newsQuery.trim().toUpperCase();
   const isOnly = (t) => only && bareSymbol(t.symbol) === only.symbol && String(t.exchange || "").toUpperCase() === only.exchange;
-  let rows = (items || []).filter((n) => only ? n.tags.some(isOnly) : scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
+  // the box: a ticker (a listing's symbol starting with the text) or words of the headline or publisher
+  const hit = (n) => !q || n.tags.some((t) => bareSymbol(t.symbol).startsWith(q)) || n.headline.toUpperCase().indexOf(q) >= 0 || n.source.toUpperCase().indexOf(q) >= 0;
+  let rows = (items || []).filter((n) => (only ? n.tags.some(isOnly) : scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched)) && hit(n));
   const first = (n) => n.tags[0] || {};
   rows = sortRows(rows, s.key, s.dir, (n, k) => k === "when" ? n.publishedAt : k === "news" ? n.headline.toLowerCase() : k === "symbol" ? bareSymbol(first(n).symbol || "").toLowerCase() : first(n).percentChange);
   const sym = (t) => '<button class="nw-sym go" data-act="newsSym" data-arg=\'' + attr({ symbol: bareSymbol(t.symbol), exchange: String(t.exchange || "").toUpperCase() }) + "'>" + esc(bareSymbol(t.symbol)) + "</button>";
@@ -2431,7 +2434,8 @@ function newsCardHtml(items) {
     '<div style="text-align:right">' + n.tags.map(chg).join(" ") + "</div></div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;min-height:28px;margin-bottom:8px"><h5>News</h5>' +
     msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) +
-    (only ? '<span class="chip"><span class="cf">Symbol</span><span class="cv" style="cursor:default">' + esc(only.symbol) + '</span><button class="cx" aria-label="Show every listing" data-act="newsSymClear">×</button></span>' : "") + "</div>" +
+    (only ? '<span class="chip"><span class="cf">Symbol</span><span class="cv" style="cursor:default">' + esc(only.symbol) + '</span><button class="cx" aria-label="Show every listing" data-act="newsSymClear">×</button></span>' : "") +
+    '<div style="margin-left:auto;display:flex;align-items:center;gap:7px;padding:4px 9px;width:200px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="newsQuery" value="' + esc(state.newsQuery) + '" placeholder="Search symbol or headline" aria-label="Search the news" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px var(--font);color:var(--ink)"></div></div>' +
     (rows.length ? '<div class="nw-head">' + gridTh("news", NEWS_COLS) + '</div><div class="scroll nw-list" style="max-height:436px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">No news.</div>') + "</div>";
 }
@@ -2666,7 +2670,7 @@ function render() {
   document.documentElement.classList.toggle("panel-open", !!(state.ticket || state.ordersOpen));   // the wheel over a panel must not move the page behind it
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
-  if (focusId === "valueQuery" || focusId === "searchInput") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
+  if (focusId === "valueQuery" || focusId === "searchInput" || focusId === "newsQuery") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
   else if (rowHadFocus) { const row = document.querySelector("#popMatches .pop-row.hi, #popValues .pop-row.hi"); if (row) row.focus(); }
   root.querySelectorAll(".scroll, .scroll-xy").forEach((el, i) => { const b = boxes[i]; if (b && !el.dataset.keepScroll) { el.scrollTop = b.top; el.scrollLeft = b.left; } });
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
@@ -3110,6 +3114,7 @@ function bind() {
   document.addEventListener("input", (e) => {
     const t = e.target;
     if (/^tk-/.test(t.id || "")) { tkInputEvent(t); return; }
+    if (t.id === "newsQuery") { state.newsQuery = t.value; render(); return; }
     if (t.id === "tagInput") { state.tagDraft = t.value; state.tagHi = 0; document.getElementById("tagMenu").innerHTML = tagMenuHtml(); return; }
     if (t.id === "thesis" || t.id === "posThesis") { clearTimeout(_thesisTimer); const id = t.dataset.id, v = t.value; _thesisTimer = setTimeout(() => { const o = tradeById(id) || positionById(id); if (o && o.thesis !== v) saveJournal(id, { thesis: v }, true); }, 600); return; }
     if (t.id === "rangeInput") { clearTimeout(_rangeTimer); const key = t.dataset.key, v = t.value.trim(); _rangeTimer = setTimeout(() => { state.filters.ranges[key].v = v === "" ? null : Number(v.replace(/[$,]/g, "")); if (v !== "" && isNaN(state.filters.ranges[key].v)) state.filters.ranges[key].v = null; loadModel(); }, 500); return; }
