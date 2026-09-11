@@ -26,7 +26,7 @@ A local-first trading journal for Wealthsimple users. It runs on your own comput
 | **Order ticket** | **Orders** |
 | ![Order ticket](docs/screenshots/desktop-ticket.png) | ![Orders](docs/screenshots/desktop-orders.png) |
 
-On iOS and Android, as native apps: SwiftUI on the iPhone, Jetpack Compose on Android, each with its own copy of the model, held to the desktop's figures by test cases all three share. Each keeps its book on the phone and syncs from Wealthsimple itself; nothing passes through the desktop or anywhere else. Dashboard, Trades, Portfolio and Cashflow; orders are placed from the desktop.
+Also on iPhone and Android, as native apps written in Swift and Kotlin rather than a cross-platform framework, so they feel at home on each phone. They show the same figures as the desktop and keep everything on the device.
 
 <table>
 <tr>
