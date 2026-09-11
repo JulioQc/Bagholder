@@ -368,7 +368,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-11.5"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-11.6"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -2466,12 +2466,12 @@ function newsCardHtml(items) {
   rows = sortRows(rows, s.key, s.dir, (n, k) => k === "when" ? n.publishedAt : k === "news" ? n.headline.toLowerCase() : k === "symbol" ? (first(n).symbol ? bareSymbol(first(n).symbol).toLowerCase() : null) : first(n).percentChange);
   const sym = (t) => '<button class="nw-sym go" data-act="newsSym" data-arg=\'' + attr({ symbol: bareSymbol(t.symbol), exchange: String(t.exchange || "").toUpperCase() }) + "'>" + esc(bareSymbol(t.symbol)) + "</button>";
   const chg = (t) => '<span class="tab" style="font-size:13px;color:' + (t.percentChange == null ? "var(--ink55)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(t.percentChange) + "</span>";
-  // one line per row: the headline cut with an ellipsis, a story two listings share naming both on the line
+  // one line per row: the headline cut with an ellipsis; a story read for several listings shows the first of them
   const row = (n) => '<div class="nw-row' + (bare ? " nw-bare" : "") + '" data-act="newsOpen" data-arg=\'' + attr({ url: n.url }) + "'>" +
     '<div class="tab" style="font-size:11px;color:var(--ink55)">' + esc(newsWhen(n.publishedAt)) + "</div>" +
     '<div><div style="font-size:13px;overflow:hidden;text-overflow:ellipsis">' + esc(n.headline) + '</div><div style="font-size:11px;color:var(--ink55);overflow:hidden;text-overflow:ellipsis">' + esc(n.source) + "</div></div>" +
-    (bare ? "" : '<div style="text-align:right">' + n.tags.map(sym).join(" ") + "</div>" +
-      '<div style="text-align:right">' + n.tags.map(chg).join(" ") + "</div>") + "</div>";
+    (bare ? "" : '<div style="text-align:right">' + (n.tags.length ? sym(first(n)) : "") + "</div>" +
+      '<div style="text-align:right">' + (n.tags.length ? chg(first(n)) : "") + "</div>") + "</div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;min-height:28px;margin-bottom:8px"><h5>News</h5>' +
     msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) +
     (only ? '<span class="chip"><span class="cf">Symbol</span><span class="cv" style="cursor:default">' + esc(only.symbol) + '</span><button class="cx" aria-label="Show every listing" data-act="newsSymClear">×</button></span>' : "") +
