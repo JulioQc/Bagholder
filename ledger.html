@@ -2419,9 +2419,14 @@ const NEWS_COLS = [{ key: "when", label: "When" }, { key: "news", label: "News" 
 function newsCardHtml(items) {
   const scope = state.newsScope, s = state.sort.news, only = state.newsSymbol, q = state.newsQuery.trim().toUpperCase();
   const isOnly = (t) => only && bareSymbol(t.symbol) === only.symbol && String(t.exchange || "").toUpperCase() === only.exchange;
-  // the box: a ticker (a listing's symbol starting with the text) or words of the headline or publisher
-  const hit = (n) => !q || n.tags.some((t) => bareSymbol(t.symbol).startsWith(q)) || n.headline.toUpperCase().indexOf(q) >= 0 || n.source.toUpperCase().indexOf(q) >= 0;
-  let rows = (items || []).filter((n) => (only ? n.tags.some(isOnly) : scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched)) && hit(n));
+  // the box: a ticker first (a listing's symbol starting with the text); only when no listing matches, a word of the
+  // headline or publisher starting with it, so `SH` is Shopify's news and not every headline with "shake" in it
+  let rows = (items || []).filter((n) => only ? n.tags.some(isOnly) : scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
+  if (q) {
+    const bySym = rows.filter((n) => n.tags.some((t) => bareSymbol(t.symbol).startsWith(q)));
+    const word = (text) => text.toUpperCase().split(/[^A-Z0-9]+/).some((w) => w.startsWith(q));
+    rows = bySym.length ? bySym : rows.filter((n) => word(n.headline) || word(n.source));
+  }
   const first = (n) => n.tags[0] || {};
   rows = sortRows(rows, s.key, s.dir, (n, k) => k === "when" ? n.publishedAt : k === "news" ? n.headline.toLowerCase() : k === "symbol" ? bareSymbol(first(n).symbol || "").toLowerCase() : first(n).percentChange);
   const sym = (t) => '<button class="nw-sym go" data-act="newsSym" data-arg=\'' + attr({ symbol: bareSymbol(t.symbol), exchange: String(t.exchange || "").toUpperCase() }) + "'>" + esc(bareSymbol(t.symbol)) + "</button>";
