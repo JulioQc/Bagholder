@@ -170,7 +170,7 @@ Cards:
 
 ### Trades
 
-Table columns in this order: Open · Close · Symbol · Exchange · Qty · Entry · Exit · FX · P&L · P&L % · Hold · Grade · Tags. Every column sorts. FX is centred; numbers are right-aligned. Column widths are fixed proportions of the table so they do not shift with content; the table scrolls sideways only when its card is narrower than 1150 px. Long symbols truncate with an ellipsis and show in full on hover. Newest close first by default.
+Table columns in this order: Open · Close · Symbol · Exchange · Qty · Entry · Exit · FX · P&L · P&L % · Hold · Grade · Tags. Every column sorts. Grade sorts A first on the first click, F first on the second, ungraded trades last either way. FX is centred; numbers are right-aligned. Column widths are fixed proportions of the table so they do not shift with content; the table scrolls sideways only when its card is narrower than 1150 px. Long symbols truncate with an ellipsis and show in full on hover. Newest close first by default.
 
 Trade detail: symbol, then name, exchange and listing ticker as `Name · EXCHANGE: TICKER` (the underlying's ticker for an option, listing suffixes such as .TO dropped); P&L and P&L % in the trade's currency; the trade chart; facts Open, Close, Entry, Exit, Hold, Account; an executions table with When · Side · Qty · FX · Price · Amount where Side reads `BUY` or `SELL` for shares and crypto and, for options, what the fill did in this trade (`BUY TO OPEN`, `SELL TO CLOSE`, …); a fill that closed one trade and opened the next says `(close + open)`; and the journal with thesis, grade and tags. The browser Back button returns to the list at the same scroll position.
 
