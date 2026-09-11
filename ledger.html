@@ -368,7 +368,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-11.6"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-11.7"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -1032,12 +1032,13 @@ function contractExpiry(sym) {
 function symbolRows(q) {
   const Q = (q || "").trim().toUpperCase();
   if (!Q) return [];
+  const B = bareSymbol(Q);   // `YES.V` as Yahoo writes it finds YES
   const opts = (state.model && state.model.options) || {};
   const listings = opts.listings || {};
   const rank = (sym, name) => {
     const S = String(sym).toUpperCase();
-    if (S === Q || bareSymbol(S) === Q) return 0;
-    if (S.startsWith(Q)) return 1;
+    if (S === Q || bareSymbol(S) === Q || bareSymbol(S) === B) return 0;
+    if (S.startsWith(Q) || S.startsWith(B)) return 1;
     return S.indexOf(Q) >= 0 || String(name || "").toUpperCase().indexOf(Q) >= 0 ? 2 : -1;
   };
   const out = [];

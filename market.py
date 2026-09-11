@@ -331,6 +331,18 @@ def _post_json(url, payload, ssl_context=None, headers=None):
 _TMX_HEADERS = {"locale": "en", "Origin": "https://money.tmx.com", "Referer": "https://money.tmx.com/"}
 
 
+YAHOO_VENUES = {".TO": ("TSX",), ".V": ("TSX-V", "TSXV"), ".CN": ("CSE",), ".NE": ("CBOE CANADA", "NEO")}
+
+
+def yahoo_split(text):
+    """`YES.V` as Yahoo writes it: the bare ticker and the venues the suffix names; (text, None) without one."""
+    s = str(text or "").strip().upper()
+    for suffix, venues in YAHOO_VENUES.items():
+        if s.endswith(suffix) and len(s) > len(suffix):
+            return s[: -len(suffix)], venues
+    return s, None
+
+
 def tmx_symbol(symbol):
     """Wealthsimple's Canadian tickers already match TMX Money's (no suffix)."""
     s = str(symbol or "").strip().upper()
