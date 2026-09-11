@@ -316,6 +316,18 @@ def _init_schema(conn):
         );
         CREATE INDEX IF NOT EXISTS news_published ON news (published_at);
 
+        CREATE TABLE IF NOT EXISTS universes (
+            key TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            name TEXT,
+            value REAL,
+            percent_change REAL,
+            sector TEXT,
+            country TEXT,
+            fetched_at TEXT,
+            PRIMARY KEY (key, symbol)
+        );
+
         CREATE TABLE IF NOT EXISTS orders (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
@@ -2072,6 +2084,7 @@ def data_version():
                 "SELECT COUNT(*), MAX(fetched_at) FROM exposures",
                 "SELECT COUNT(*), MAX(added_at) FROM watchlist",
                 "SELECT COUNT(*), MAX(fetched_at) FROM news",
+                "SELECT COUNT(*), MAX(fetched_at) FROM universes",
                 "SELECT COUNT(*), SUM(COALESCE(net_liquidation_value, 0)) FROM accounts",
             ):
                 row = conn.execute(sql).fetchone()
@@ -2275,6 +2288,7 @@ def snapshot():
             "exposures": {r["key"]: _exposure_from_row(r) for r in conn.execute("SELECT * FROM exposures").fetchall()},
                 "watchlist": [_watch_from_row(r) for r in conn.execute("SELECT * FROM watchlist ORDER BY added_at, symbol").fetchall()],
                 "news": [_news_from_row(r) for r in conn.execute("SELECT * FROM news ORDER BY published_at DESC, id").fetchall()],
+                "universes": _universes(conn),
                 "navHistory": nav,
                 "navByAccount": nav_by_account,
                 "syncedAt": synced,
@@ -2677,6 +2691,31 @@ def trim_news(keep):
         try:
             _init_schema(conn)
             conn.execute("DELETE FROM news WHERE rowid NOT IN (SELECT rowid FROM news ORDER BY published_at DESC, id LIMIT ?)", (int(keep),))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# universes: the market heatmaps' tiles, one set per key
+# ---------------------------------------------------------------------------
+def _universes(conn):
+    out = {}
+    for r in conn.execute("SELECT * FROM universes ORDER BY key, value DESC, symbol").fetchall():
+        out.setdefault(r["key"], []).append({"symbol": r["symbol"], "name": r["name"] or "", "value": r["value"], "percentChange": r["percent_change"],
+                                             "sector": r["sector"] or "", "country": r["country"] or "", "fetchedAt": r["fetched_at"] or ""})
+    return out
+
+
+def replace_universe(key, rows, now=None):
+    when = _s(now) or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute("DELETE FROM universes WHERE key = ?", (key,))
+            conn.executemany("INSERT OR REPLACE INTO universes (key, symbol, name, value, percent_change, sector, country, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                             [(key, _s(r.get("symbol")), _s(r.get("name")), r.get("value"), r.get("percentChange"), _s(r.get("sector")), _s(r.get("country")), when) for r in rows or [] if r.get("symbol")])
             conn.commit()
         finally:
             conn.close()

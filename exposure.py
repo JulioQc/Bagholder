@@ -91,7 +91,7 @@ _SECTOR_ALIAS = {
     "real estate": "Real Estate", "realestate": "Real Estate",
     "communication services": "Communication Services", "communications": "Communication Services", "communication": "Communication Services", "media": "Communication Services", "telecommunications services": "Communication Services", "telecommunications": "Communication Services", "telecommunication services": "Communication Services",
     "bitcoin holding": "Digital assets", "digital assets": "Digital assets", "cryptocurrency": "Digital assets", "crypto": "Digital assets",
-    "cash and/or derivatives": "", "cash": "", "other": "", "-": "", "n/a": "",
+    "cash and/or derivatives": "", "cash": "", "other": "", "miscellaneous": "", "-": "", "n/a": "",
 }
 
 

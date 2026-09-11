@@ -79,6 +79,7 @@ textarea.input{resize:none;line-height:1.5}
 .mseg-opt{padding:4px 10px;border-radius:5px;border:0;background:transparent;font:500 12px var(--font);color:var(--ink55);cursor:pointer;white-space:nowrap}
 .mseg-opt:hover{color:var(--ink)}
 .mseg-opt.on{color:var(--ink);background:var(--chip-bg)}
+.mseg-div{width:1px;height:16px;background:rgba(var(--ink-rgb),.14);margin:0 4px;align-self:center}
 .heat-blk{position:absolute;border-radius:5px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.07)}
 .heat-hd{position:absolute;top:0;left:0;right:0;height:19px;display:flex;align-items:center;padding:0 7px;font:500 11px var(--font);letter-spacing:.04em;color:var(--ink60);white-space:nowrap;overflow:hidden}
 .heat-tile{position:absolute;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;overflow:hidden;color:#f2f2f6}
@@ -354,7 +355,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-11.2"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-11.3"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -2312,8 +2313,14 @@ function squarify(items, rect) {
 }
 // the tiles for the universe chosen: holdings by market value, watched listings as equal tiles
 // (a watched listing has no market value; beside holdings it takes the smallest holding's tile)
+const HEAT_MARKETS = { ca: "Canada", us: "US", intl: "International" };
 function heatTiles(mk) {
   const h = state.heat, held = mk.holdings || [], watched = (mk.watchlist || []).filter((w) => !w.positionId);
+  if (HEAT_MARKETS[h.universe]) {
+    let tiles = ((mk.universes || {})[h.universe] || []).slice();
+    if (h.size === "equal") tiles = tiles.map((t) => Object.assign({}, t, { value: 1 }));
+    return tiles;
+  }
   const minHeld = held.length ? Math.min(...held.map((t) => t.value)) : 1;
   const w = watched.map((x) => ({ id: null, symbol: x.symbol, exchange: x.exchange, value: h.universe === "both" ? minHeld : 1, percentChange: x.percentChange, sector: x.sector }));
   let tiles = h.universe === "holdings" ? held.slice() : h.universe === "watchlist" ? w : held.concat(w);
@@ -2363,14 +2370,14 @@ function mountHeatmap() {
       (c.mid ? '<div class="heat-chg" style="font-size:' + (c.big ? 12 : 11) + 'px">' + signedPct(c.percentChange) + "</div>" : "") + "</div>").join("");
 }
 function msegHtml(act, key, opts, cur) {
-  return '<span class="mseg">' + opts.map((o) => '<button class="mseg-opt' + (o[0] === cur ? " on" : "") + '" data-act="' + act + '" data-arg=\'' + attr({ [key]: o[0] }) + "'>" + o[1] + "</button>").join("") + "</span>";
+  return '<span class="mseg">' + opts.map((o) => o === "|" ? '<span class="mseg-div"></span>' : '<button class="mseg-opt' + (o[0] === cur ? " on" : "") + '" data-act="' + act + '" data-arg=\'' + attr({ [key]: o[0] }) + "'>" + o[1] + "</button>").join("") + "</span>";
 }
 function heatmapCardHtml(mk) {
   const h = state.heat, tiles = heatTiles(mk);
-  const empty = h.universe === "watchlist" ? "Nothing watched." : "No open positions.";
+  const empty = h.universe === "watchlist" ? "Nothing watched." : HEAT_MARKETS[h.universe] ? "Not read yet." : "No open positions.";
   return '<div class="card elev-sm" style="padding:14px 16px 16px">' +
     '<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px"><h5>Heatmap</h5>' +
-    msegHtml("heatUniverse", "universe", [["holdings", "Holdings"], ["watchlist", "Watchlist"], ["both", "Both"]], h.universe) +
+    msegHtml("heatUniverse", "universe", [["holdings", "Holdings"], ["watchlist", "Watchlist"], ["both", "Both"], "|", ["ca", "Canada"], ["us", "US"], ["intl", "International"]], h.universe) +
     msegHtml("heatSize", "size", [["value", "Market value"], ["equal", "Equal"]], h.size) +
     '<span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink55)"><span>−3%</span>' +
     [-3, -2, -1, -0.2, 0.2, 1, 2, 3].map((c) => '<span style="width:16px;height:9px;border-radius:2px;background:' + heatColor(c) + '"></span>').join("") + "<span>+3%</span></span></div>" +

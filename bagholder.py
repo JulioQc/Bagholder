@@ -39,6 +39,7 @@ import csvimport
 import exposure
 import market
 import news
+import universes
 import model
 import store
 
@@ -711,7 +712,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-11.2"
+PROTOCOL = "2026-09-11.3"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -5475,6 +5476,28 @@ def news_loop():
             return
 
 
+def refresh_universes():
+    """The market heatmaps' tiles: the TSX 60 from TMX, the US market from Nasdaq's screener. Never raises."""
+    try:
+        done = universes.refresh(_ssl_context())
+        if done:
+            model.invalidate()
+        return done
+    except Exception as e:
+        sys.stderr.write("bagholder universes: refresh failed: %s\n" % e)
+        return []
+
+
+def universe_loop():
+    """Three quarters of a minute after start, then every thirty minutes."""
+    if _stop.wait(45):
+        return
+    while not _stop.is_set():
+        refresh_universes()
+        if _stop.wait(1800):
+            return
+
+
 def open_orders_count():
     """The Orders panel's Pending cards: every entry resting at Wealthsimple, and every live bracket once its entry has filled."""
     entries = sum(1 for o in store.list_orders() if o["status"] in LIVE_STATUSES and o.get("role", "entry") == "entry")
@@ -6462,6 +6485,7 @@ def main():
     threading.Thread(target=bracket_loop, name="bagholder-bracket-loop", daemon=True).start()
     threading.Thread(target=exposure_loop, name="bagholder-exposure-loop", daemon=True).start()
     threading.Thread(target=news_loop, name="bagholder-news-loop", daemon=True).start()
+    threading.Thread(target=universe_loop, name="bagholder-universe-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()

@@ -2057,6 +2057,7 @@ def build_base(snapshot, market, journal, today=None):
         "exposures": dict(snapshot.get("exposures") or {}),
         "watchlist": [dict(w) for w in (snapshot.get("watchlist") or []) if isinstance(w, dict)],
         "news": [dict(n) for n in (snapshot.get("news") or []) if isinstance(n, dict)],
+        "universes": {k: [dict(r) for r in v] for k, v in (snapshot.get("universes") or {}).items()},
         "cashCurrencies": securities.cash_currencies(),
         "activityCount": len(raw_acts),
     }
@@ -2329,7 +2330,9 @@ def markets_view(base, positions):
     today = base["today"]
     cad = lambda amount, currency: to_cad(fx, amount, currency, today)
     watch = watch_rows(base, positions)
-    return {"holdings": heatmap_items(positions, base.get("exposures") or {}, cad), "watchlist": watch, "news": news_rows(base, positions, watch)}
+    universes = {k: [{"id": None, "symbol": r["symbol"], "name": r.get("name") or "", "value": r.get("value") or 0.0, "percentChange": r.get("percentChange"), "sector": r.get("sector") or UNCLASSIFIED, "country": r.get("country") or ""}
+                     for r in rows] for k, rows in (base.get("universes") or {}).items()}
+    return {"holdings": heatmap_items(positions, base.get("exposures") or {}, cad), "watchlist": watch, "news": news_rows(base, positions, watch), "universes": universes}
 
 
 def portfolio_view(base, f, positions):
