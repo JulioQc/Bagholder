@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import gzip
 import json
+from urllib.parse import quote
 import os
 import re
 import ssl
@@ -559,6 +560,30 @@ def occ_root(code):
     return m.group(1) if m else ""
 
 
+def parse_yahoo_quote(text):
+    """Yahoo's chart meta into a quote: the last price, the change against the previous
+    close it states, the currency and the name."""
+    d = json.loads(text or "{}") or {}
+    results = ((d.get("chart") or {}).get("result") or [])
+    meta = (results[0] or {}).get("meta") if results else None
+    if not isinstance(meta, dict) or meta.get("regularMarketPrice") is None:
+        return None
+    last = _num(meta.get("regularMarketPrice"), None)
+    prev = _num(meta.get("chartPreviousClose"), None)
+    if prev is None:
+        prev = _num(meta.get("previousClose"), None)
+    change = (last - prev) if last is not None and prev else None
+    return {"price": last, "priceChange": change, "percentChange": (change / prev * 100.0) if change is not None and prev else None, "prevClose": prev,
+            "currency": str(meta.get("currency") or ""), "name": str(meta.get("shortName") or meta.get("longName") or ""), "exchange": str(meta.get("exchangeName") or "")}
+
+
+def fetch_yahoo_quote(code, ssl_context=None):
+    try:
+        return parse_yahoo_quote(_yahoo_get("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=5d&interval=1d" % quote(code, safe=""), ssl_context))
+    except Exception:
+        return None
+
+
 def quote_source(rec):
     """(source, key) for a held instrument, or None when no public source covers it.
     tmx: TMX Money symbol. cboe_ca: Cboe Canada symbol. coinbase: 'BTC-CAD' pair in
@@ -568,6 +593,8 @@ def quote_source(rec):
     ccy = str(rec.get("currency") or "CAD").strip().upper()
     if not sym:
         return None
+    if kind == "Instrument":
+        return ("yahoo_quote", str(rec.get("yahoo") or "")) if rec.get("yahoo") else None
     if kind == "Crypto":
         return ("coinbase", "%s-%s" % (sym, ccy))
     if kind == "Options":
@@ -679,6 +706,8 @@ def refresh_quotes(symbols, ssl_context=None, now=None):
             rec = fetch_cboe_ca_quote(key, ssl_context)
         elif source == "coinbase":
             rec = fetch_coinbase_spot(key, ssl_context)
+        elif source == "yahoo_quote":
+            rec = fetch_yahoo_quote(key, ssl_context)
         elif source == "cboe_options":
             root = occ_root(key)
             if root not in chains:

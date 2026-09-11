@@ -33,6 +33,7 @@ import threading
 from datetime import date, datetime, timedelta, timezone
 
 import exposure
+import instruments
 import market
 import store
 
@@ -2234,8 +2235,15 @@ def watch_quote_key(symbol, exchange):
 def watch_symbols(base=None):
     """Every watched listing, with what a quote source needs to price it."""
     base = base or base_model()
-    return [{"symbol": w["symbol"], "exchange": w.get("exchange") or "", "currency": w.get("currency") or "", "kind": "Shares",
-             "quoteKey": watch_quote_key(w["symbol"], w.get("exchange"))} for w in base.get("watchlist") or []]
+    out = []
+    for w in base.get("watchlist") or []:
+        inst = instruments.find(w["symbol"], w.get("exchange"))
+        rec = {"symbol": w["symbol"], "exchange": w.get("exchange") or "", "currency": w.get("currency") or "", "kind": "Instrument" if inst else "Shares",
+               "quoteKey": watch_quote_key(w["symbol"], w.get("exchange"))}
+        if inst:
+            rec["yahoo"] = inst["yahoo"]
+        out.append(rec)
+    return out
 
 
 def watch_exposure_key(symbol, exchange, currency):
@@ -2265,11 +2273,13 @@ def watch_rows(base, positions):
     for w in base.get("watchlist") or []:
         q = quotes.get(watch_quote_key(w["symbol"], w.get("exchange"))) or {}
         pos = held.get((w["symbol"], _s(w.get("exchange")).upper()))
-        rec = exposures.get(watch_exposure_key(w["symbol"], w.get("exchange"), w.get("currency")))
+        inst = instruments.find(w["symbol"], w.get("exchange"))
+        rec = None if inst else exposures.get(watch_exposure_key(w["symbol"], w.get("exchange"), w.get("currency")))
         out.append({
             "symbol": w["symbol"], "exchange": w.get("exchange") or "", "name": w.get("name") or "", "currency": w.get("currency") or "",
             "last": _num(q.get("price"), None), "priceChange": _num(q.get("priceChange"), None), "percentChange": _num(q.get("percentChange"), None),
-            "sector": dominant_sector(rec) if rec else UNCLASSIFIED, "positionId": pos["id"] if pos else None,
+            "sector": instruments.KIND_LABEL.get(inst["kind"], inst["kind"]) if inst else dominant_sector(rec) if rec else UNCLASSIFIED,
+            "kind": inst["kind"] if inst else "Shares", "positionId": pos["id"] if pos else None,
         })
     return out
 

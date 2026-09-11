@@ -37,6 +37,7 @@ from urllib.request import Request, urlopen
 
 import csvimport
 import exposure
+import instruments
 import market
 import news
 import universes
@@ -2348,7 +2349,7 @@ def refresh_exposures():
     unders = sorted({(_s(p.get("underlying")).upper(), _s(p.get("currency"))) for p in positions if p.get("kind") == "Options" and p.get("underlying")})
     unders = [(u, c) for u, c in unders if exposure.stale([exposure.SHARE_KEY + u + ":" + (market.tmx_form("", c) or "")])]
     # a watched listing is classified like an underlying: a share under its own key
-    watched = [(w["symbol"], w.get("exchange") or "", w.get("currency") or "") for w in model.base_model().get("watchlist") or []]
+    watched = [(w["symbol"], w.get("exchange") or "", w.get("currency") or "") for w in model.base_model().get("watchlist") or [] if not instruments.find(w["symbol"], w.get("exchange"))]
     watched = [(s, e, c) for s, e, c in watched if exposure.stale([model.watch_exposure_key(s, e, c)])]
 
     def one(job):
@@ -4037,7 +4038,7 @@ def symbol_search(text):
         t.join(timeout=market.TIMEOUT_SEC + 2)
     if not answers:
         return {"ok": False, "error": "Search failed: " + "; ".join(errors.values()), "matches": []}
-    rows = rank_search(text, [r for name, _, _ in jobs for r in answers.get(name, [])])
+    rows = rank_search(text, instruments.search(text) + [r for name, _, _ in jobs for r in answers.get(name, [])])
     if not errors:
         _search_cache[key] = rows
     return {"ok": True, "matches": rows}
@@ -5403,10 +5404,11 @@ def adjust_bracket(bracket_id, leg, price=None, trail=None, remove=False):
 # ---------------------------------------------------------------------------
 def watch_add(body):
     body = body if isinstance(body, dict) else {}
-    sym = _s(body.get("symbol")).strip().upper()
+    sym = market.tmx_symbol(body.get("symbol"))   # the bare ticker: Wealthsimple's `.TO` on a dual listing is not the app's convention
     if not sym:
         return {"ok": False, "error": "symbol required"}
-    row = store.add_watch(sym, body.get("exchange"), body.get("name"), body.get("currency"), body.get("securityId"))
+    inst = instruments.find(sym, body.get("exchange"))
+    row = store.add_watch(sym, body.get("exchange"), (inst or {}).get("name") or body.get("name"), (inst or {}).get("currency") or body.get("currency"), body.get("securityId"))
     model.invalidate()
     def fetch():
         # its quote and its sector, from the same public sources a holding uses; shown as they land
@@ -5415,6 +5417,8 @@ def watch_add(body):
             model.invalidate()
         except Exception as e:
             sys.stderr.write("bagholder watchlist: quote for %s failed: %s\n" % (sym, e))
+        if inst:
+            return   # an index or a future has no sector record to read
         try:
             exposure.share_exposure(row["symbol"], row.get("exchange") or "", row.get("currency") or "")
             model.invalidate()
@@ -5426,10 +5430,11 @@ def watch_add(body):
 
 def watch_remove(body):
     body = body if isinstance(body, dict) else {}
-    sym = _s(body.get("symbol")).strip().upper()
+    sym = market.tmx_symbol(body.get("symbol"))
     if not sym:
         return {"ok": False, "error": "symbol required"}
     store.remove_watch(sym, body.get("exchange"))
+    store.remove_watch(_s(body.get("symbol")).strip().upper(), body.get("exchange"))   # a row kept under Wealthsimple's form
     store.forget_news(sym, body.get("exchange"))
     model.invalidate()
     return {"ok": True, "watchlist": store.list_watchlist()}
@@ -5448,7 +5453,7 @@ def news_listings():
             out.append((p["symbol"], p.get("exchange") or "", p.get("currency") or ""))
     for w in base.get("watchlist") or []:
         key = (w["symbol"], _s(w.get("exchange")).upper())
-        if key not in seen:
+        if key not in seen and not instruments.find(w["symbol"], w.get("exchange")):
             seen.add(key)
             out.append((w["symbol"], w.get("exchange") or "", w.get("currency") or ""))
     return out
@@ -6494,6 +6499,12 @@ def main():
     threading.Thread(target=orders_loop, name="bagholder-orders-loop", daemon=True).start()
     threading.Thread(target=bracket_loop, name="bagholder-bracket-loop", daemon=True).start()
     threading.Thread(target=exposure_loop, name="bagholder-exposure-loop", daemon=True).start()
+    # rows added before the bare-ticker convention (Wealthsimple's `.TO` on a dual listing) take it now
+    for w in store.list_watchlist():
+        bare = market.tmx_symbol(w["symbol"])
+        if bare and bare != w["symbol"]:
+            store.remove_watch(w["symbol"], w.get("exchange"))
+            store.add_watch(bare, w.get("exchange"), w.get("name"), w.get("currency"), w.get("securityId"), now=w.get("addedAt"))
     threading.Thread(target=news_loop, name="bagholder-news-loop", daemon=True).start()
     threading.Thread(target=universe_loop, name="bagholder-universe-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()

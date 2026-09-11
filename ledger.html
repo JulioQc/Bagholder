@@ -970,6 +970,7 @@ function extSchedule(q) {
 }
 function extRowHtml(r, cls) {
   const sym = r.sym || r.symbol;
+  if (r.kind) return symbolRowHtml(sym, r.name, r.exchange, '<span class="tk-rowbtns">' + tkIcon("BUY", false) + tkIcon("SELL", false) + "</span>", cls, "noop", {});
   const icon = '<span class="tk-rowbtns"><span class="tk-rowbtn buy" aria-hidden="true">' + tkIconSvg(ICONS.plus) + "</span>" + tkIcon("SELL", false) + "</span>";
   return symbolRowHtml(sym, r.name, r.exchange, icon, cls, "tkOpenExt", { symbol: sym, exchange: r.exchange, currency: r.currency, name: r.name });
 }
@@ -1004,7 +1005,7 @@ function symbolRows(q) {
     const r = rank(sym, l.name);
     if (r >= 0) out.push({ book: true, sym, name: l.name || "", exchange: l.exchange || "", rank: r, sub: sym });
   });
-  extRows(q).forEach((r) => { const k = rank(r.symbol, r.name); out.push({ book: false, sym: r.symbol, name: r.name || "", exchange: r.exchange, currency: r.currency, rank: k < 0 ? 2 : k, sub: r.symbol }); });
+  extRows(q).forEach((r) => { const k = rank(r.symbol, r.name); out.push({ book: false, sym: r.symbol, name: r.name || "", exchange: r.exchange, currency: r.currency, kind: r.kind || "", rank: k < 0 ? 2 : k, sub: r.symbol }); });
   out.sort((a, b) => a.rank - b.rank || (a.book === b.book ? 0 : a.book ? -1 : 1) || (a.sub < b.sub ? -1 : a.sub > b.sub ? 1 : 0));
   return out;
 }
@@ -2370,7 +2371,7 @@ function mountHeatmap() {
   box.innerHTML = lay.blocks.map((g) => '<div class="heat-blk" style="left:' + g.x.toFixed(1) + 'px;top:' + g.y.toFixed(1) + 'px;width:' + g.w.toFixed(1) + 'px;height:' + g.h.toFixed(1) + 'px"><div class="heat-hd">' + esc(g.label) +
       '<span class="num" style="margin-left:auto;font-weight:400;color:' + (g.chg == null ? "var(--ink55)" : g.chg >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(g.chg) + "</span></div></div>").join("") +
     lay.cells.map((c) => '<div class="heat-tile' + (c.id ? " go" : "") + '"' + (c.id ? ' data-act="heatOpen" data-arg=\'' + attr({ id: c.id }) + "'" : "") + ' style="left:' + (c.x + 1).toFixed(1) + 'px;top:' + (c.y + 1).toFixed(1) + 'px;width:' + Math.max(0, c.w - 2).toFixed(1) + 'px;height:' + Math.max(0, c.h - 2).toFixed(1) + 'px;background:' + heatColor(c.percentChange) + '">' +
-      '<div class="heat-sym" style="font-size:' + (c.big ? 16 : c.mid ? 13 : 11) + 'px">' + esc(c.symbol) + "</div>" +
+      '<div class="heat-sym" style="font-size:' + (c.big ? 16 : c.mid ? 13 : 11) + 'px">' + esc(c.other ? c.symbol : bareSymbol(c.symbol)) + "</div>" +
       (c.mid ? '<div class="heat-chg" style="font-size:' + (c.big ? 12 : 11) + 'px">' + signedPct(c.percentChange) + "</div>" : "") + "</div>").join("");
 }
 function msegHtml(act, key, opts, cur) {
@@ -2396,7 +2397,7 @@ function newsWhen(iso) {
 function newsCardHtml(items) {
   const scope = state.newsScope;
   const rows = (items || []).filter((n) => scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
-  const chip = (t) => '<button class="nw-chip' + (t.positionId ? " go" : "") + '"' + (t.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: t.positionId }) + "'" : "") + ' style="color:' + (t.percentChange == null ? "var(--ink60)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + esc(t.symbol) + (t.percentChange == null ? "" : " " + signedPct(t.percentChange)) + "</button>";
+  const chip = (t) => '<button class="nw-chip' + (t.positionId ? " go" : "") + '"' + (t.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: t.positionId }) + "'" : "") + ' style="color:' + (t.percentChange == null ? "var(--ink60)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + esc(bareSymbol(t.symbol)) + (t.percentChange == null ? "" : " " + signedPct(t.percentChange)) + "</button>";
   const row = (n) => '<div class="nw-row" data-act="newsOpen" data-arg=\'' + attr({ url: n.url }) + "'>" +
     '<div class="tab" style="font-size:11px;color:var(--ink55);padding-top:1px">' + esc(newsWhen(n.publishedAt)) + "</div>" +
     '<div style="min-width:0;display:flex;flex-direction:column;gap:5px"><div style="font-size:13px;line-height:1.35">' + esc(n.headline) + "</div>" +
@@ -2407,7 +2408,7 @@ function newsCardHtml(items) {
 }
 function watchlistCardHtml(rows) {
   const row = (w) => '<div class="wl-row' + (w.positionId ? " go" : "") + '"' + (w.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: w.positionId }) + "'" : "") + ">" +
-    '<div style="min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(w.symbol) + '</div><div style="font-size:11px;color:var(--ink55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(w.name || w.exchange || "") + "</div></div>" +
+    '<div style="min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(bareSymbol(w.symbol)) + '</div><div style="font-size:11px;color:var(--ink55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc([w.name, w.exchange].filter(Boolean).join(" · ")) + "</div></div>" +
     '<div class="tab" style="text-align:right;font-size:13px">' + (w.last == null ? "—" : px(w.last)) + "</div>" +
     '<div class="tab" style="text-align:right;font-size:13px;color:' + (w.percentChange == null ? "var(--ink55)" : w.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(w.percentChange) + "</div>" +
     '<button class="tk-rowbtn sell" aria-label="Remove ' + esc(w.symbol) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.x) + "</button></div>";
@@ -2422,12 +2423,12 @@ function marketsHtml(m) {
   return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px">' + heatmapCardHtml(mk) +
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px;align-items:start">' + newsCardHtml(mk.news || []) + watchlistCardHtml(mk.watchlist || []) + "</div></div>";
 }
-function watchedKeys() { return new Set((((state.model || {}).markets || {}).watchlist || []).map((w) => w.symbol + "@" + String(w.exchange || "").toUpperCase())); }
+function watchedKeys() { return new Set((((state.model || {}).markets || {}).watchlist || []).map((w) => bareSymbol(w.symbol) + "@" + String(w.exchange || "").toUpperCase())); }
 // ⌘K in watch mode: every symbol row carries one icon, add to the watchlist, lit when it is on it
 function watchRowHtml(r, cls) {
-  const on = watchedKeys().has(r.sym + "@" + String(r.exchange || "").toUpperCase());
+  const on = watchedKeys().has(bareSymbol(r.sym) + "@" + String(r.exchange || "").toUpperCase());
   const icon = '<span class="tk-rowbtns"><span class="tk-rowbtn watch' + (on ? " on" : "") + '" aria-hidden="true">' + tkIconSvg(on ? ICONS.bookmarkFill : ICONS.bookmark) + "</span></span>";
-  return symbolRowHtml(r.sym, r.name, r.exchange, icon, cls, "watchToggle", { symbol: r.sym, exchange: r.exchange || "", name: r.name || "", currency: r.currency || "" });
+  return symbolRowHtml(bareSymbol(r.sym), r.name, r.exchange, icon, cls, "watchToggle", { symbol: bareSymbol(r.sym), exchange: r.exchange || "", name: r.name || "", currency: r.currency || "" });
 }
 function watchBodyHtml(q) {
   const syms = q ? symbolRows(q).filter((r) => !OPTION_RE.test(r.sym)) : (((state.model || {}).markets || {}).watchlist || []).map((w) => ({ sym: w.symbol, name: w.name, exchange: w.exchange, currency: w.currency }));
@@ -2820,7 +2821,7 @@ function act(name, arg, ev) {
     case "closeFilter": state.picker = null; render(); break;
     case "watchAdd": state.picker = "fields"; state.watchMode = true; state.fieldQuery = ""; state.valueHi = 0; state.menuOpen = false; render(); { const si = document.getElementById("searchInput"); if (si) si.focus(); } break;
     case "watchToggle": {
-      const on = watchedKeys().has(arg.symbol + "@" + String(arg.exchange || "").toUpperCase());
+      const on = watchedKeys().has(bareSymbol(arg.symbol) + "@" + String(arg.exchange || "").toUpperCase());
       api("POST", on ? "/api/watchlist/remove" : "/api/watchlist/add", arg).then(() => loadModel()).then(() => {
         const body = document.getElementById("popFieldsBody"); if (body && state.watchMode) body.innerHTML = popFieldsBodyHtml();
       });
@@ -2833,6 +2834,7 @@ function act(name, arg, ev) {
       if (HEAT_MARKETS[state.heat.universe] && !((((state.model || {}).markets || {}).universes || {})[state.heat.universe] || []).length) api("POST", "/api/markets/refresh", {});
       render(); break;
     }
+    case "noop": break;
     case "heatOpen": openHolding(arg.id); break;
     case "newsScope": state.newsScope = arg.scope; try { localStorage.setItem("bh2.news", arg.scope); } catch (e) {} render(); break;
     case "newsOpen": if (arg.url) window.open(arg.url, "_blank", "noopener"); break;
