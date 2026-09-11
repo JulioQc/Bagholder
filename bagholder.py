@@ -2349,7 +2349,7 @@ def refresh_exposures():
     unders = sorted({(_s(p.get("underlying")).upper(), _s(p.get("currency"))) for p in positions if p.get("kind") == "Options" and p.get("underlying")})
     unders = [(u, c) for u, c in unders if exposure.stale([exposure.SHARE_KEY + u + ":" + (market.tmx_form("", c) or "")])]
     # a watched listing is classified like an underlying: a share under its own key
-    watched = [(w["symbol"], w.get("exchange") or "", w.get("currency") or "") for w in model.base_model().get("watchlist") or [] if not instruments.find(w["symbol"], w.get("exchange"))]
+    watched = [(w["symbol"], w.get("exchange") or "", w.get("currency") or "") for w in model.base_model().get("watchlist") or [] if not instruments.find(w["symbol"], w.get("exchange")) and _s(w.get("exchange")).upper() != "CRYPTO"]
     watched = [(s, e, c) for s, e, c in watched if exposure.stale([model.watch_exposure_key(s, e, c)])]
 
     def one(job):
@@ -5418,8 +5418,8 @@ def watch_add(body):
             model.invalidate()
         except Exception as e:
             sys.stderr.write("bagholder watchlist: quote for %s failed: %s\n" % (sym, e))
-        if inst:
-            return   # an index or a future has no sector record to read
+        if inst or _s(body.get("exchange")).upper() == "CRYPTO":
+            return   # an index, a future or a coin has no sector record to read
         try:
             exposure.share_exposure(row["symbol"], row.get("exchange") or "", row.get("currency") or "")
             model.invalidate()
@@ -5454,7 +5454,7 @@ def news_listings():
             out.append((p["symbol"], p.get("exchange") or "", p.get("currency") or ""))
     for w in base.get("watchlist") or []:
         key = (w["symbol"], _s(w.get("exchange")).upper())
-        if key not in seen and not instruments.find(w["symbol"], w.get("exchange")):
+        if key not in seen and not instruments.find(w["symbol"], w.get("exchange")) and key[1] != "CRYPTO":
             seen.add(key)
             out.append((w["symbol"], w.get("exchange") or "", w.get("currency") or ""))
     return out

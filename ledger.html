@@ -94,12 +94,13 @@ html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
 .nw-chip{display:inline-flex;gap:5px;align-items:center;padding:2px 7px;border-radius:5px;background:var(--chip-bg);font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;border:0;cursor:default;font-family:var(--font)}
 .nw-chip.go{cursor:pointer}
 .nw-chip.go:hover{box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.2)}
-.wl-head,.wl-row{display:grid;grid-template-columns:1fr 78px 72px 22px;gap:12px;align-items:center;padding:0 16px;margin:0 -16px}
-.wl-head{padding-bottom:6px}
+.wl-head,.wl-row{display:grid;grid-template-columns:1fr 78px 72px 22px;gap:12px;align-items:center;padding:0 16px}
+.wl-head{padding-bottom:6px;margin:0 -16px}
+.wl-list{margin:0 -16px}
 .wl-row{padding:8px 16px}
 .wl-row.go{cursor:pointer}
 .wl-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
-.wl-row .tk-rowbtn{opacity:.35;align-self:start}
+.wl-row .tk-rowbtn{opacity:.35;align-self:start;margin-top:-2px}
 .wl-row:hover .tk-rowbtn{opacity:1}
 .wl-add{width:24px;height:24px;border-radius:6px;border:0;background:transparent;color:var(--ink60);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14)}
 .wl-add:hover{color:var(--accent-300);background:rgba(var(--ink-rgb),.06)}
@@ -2415,7 +2416,7 @@ function watchlistCardHtml(rows) {
   return '<div class="card elev-sm" style="padding:14px 16px 12px">' +
     '<div style="display:flex;align-items:center;margin-bottom:8px"><h5>Watchlist</h5><button class="wl-add" style="margin-left:auto" aria-label="Add to the watchlist" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button></div>" +
     (rows.length ? '<div class="wl-head lbl"><div>Symbol</div><div style="text-align:right">Last</div><div style="text-align:right">Chg</div><div></div></div>' +
-      '<div class="scroll" style="max-height:398px">' + rows.map(row).join("") + "</div>"
+      '<div class="scroll wl-list" style="max-height:398px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">Nothing watched.</div>') + "</div>";
 }
 function marketsHtml(m) {

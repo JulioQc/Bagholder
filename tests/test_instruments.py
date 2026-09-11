@@ -91,6 +91,16 @@ class ConventionTest(unittest.TestCase):
         self.assertEqual((rows[0]["sector"], rows[0]["kind"], rows[0]["last"]), ("Commodities", "Commodity", 99.4), "an instrument groups under its kind on the heatmap")
         self.assertEqual(bagholder.news_listings(), [], "no news wire for a future")
 
+    def test_a_coin_from_the_book_is_quoted_by_coinbase(self):
+        store.add_watch("BTC", "Crypto", "Bitcoin", "CAD")
+        model.invalidate()
+        base = model.base_model()
+        self.assertEqual(model.watch_symbols(base), [{"symbol": "BTC", "exchange": "CRYPTO", "currency": "CAD", "kind": "Crypto", "quoteKey": "BTC@CRYPTO"}])
+        self.assertEqual(market.quote_symbols_needing_refresh(model.watch_symbols(base)), [("BTC@CRYPTO", "coinbase", "BTC-CAD")])
+        row = model.watch_rows(dict(base, quotes={"BTC@CRYPTO": {"price": 150000.0}}), [])[0]
+        self.assertEqual((row["sector"], row["kind"], row["last"]), ("Digital assets", "Crypto", 150000.0))
+        self.assertEqual(bagholder.news_listings(), [], "no news wire for a coin")
+
 
 if __name__ == "__main__":
     unittest.main()
