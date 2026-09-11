@@ -451,7 +451,8 @@ function qty(v) {
 function px(v) {
   if (v == null || !isFinite(v)) return "—";
   const a = Math.abs(v);
-  const dp = a === 0 ? 2 : a < 0.01 ? 5 : a < 1 ? 4 : 2;
+  // under a dollar a third decimal only when it says something: 0.625, but 0.54
+  const dp = a === 0 ? 2 : a < 0.01 ? 5 : a < 1 ? (Math.round(a * 1000) % 10 === 0 ? 2 : 3) : 2;
   return n2(v, dp);
 }
 function hold(d) { return d == null ? "—" : Math.round(d).toLocaleString("en-US") + "d"; }

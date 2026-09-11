@@ -128,7 +128,7 @@ Every instrument Wealthsimple offers has a live price source. TMX Money carries 
 | Whole money | As money with no decimals | `$18,622` |
 | Percent | Signed for P&L, unsigned for rates. One decimal, except two for a position's P&L % and for yields | `+0.7%`, `−13.8%`, `+3.45%`, `28.81%` |
 | Quantity | Thousands separators; no decimals for whole numbers; two decimals under a whole, six when under one | `233,580`, `957.90`, `0.000123` |
-| Price | Two decimals; four under $1; five under $0.01 | `49.85`, `0.3675`, `0.00123` |
+| Price | Two decimals; under $1 a third only when it is not zero; five under $0.01 | `49.85`, `0.625`, `0.54`, `0.00123` |
 | Distribution per unit | `$` with four decimals under $1, else two | `$0.2000` |
 | Hold | Whole days with `d` | `207d` |
 | Dates | ISO `YYYY-MM-DD` in tables; `Jun '26` on chart axes; `18 Jun '26` in chart hovers | |
