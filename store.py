@@ -292,6 +292,16 @@ def _init_schema(conn):
             fetched_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS watchlist (
+            symbol TEXT NOT NULL,
+            exchange TEXT NOT NULL DEFAULT '',
+            name TEXT,
+            currency TEXT,
+            security_id TEXT,
+            added_at TEXT,
+            PRIMARY KEY (symbol, exchange)
+        );
+
         CREATE TABLE IF NOT EXISTS orders (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
@@ -2046,6 +2056,7 @@ def data_version():
                 "SELECT COUNT(*), MAX(id) FROM accounts",
                 "SELECT COUNT(*), MAX(fetched_at) FROM margin",
                 "SELECT COUNT(*), MAX(fetched_at) FROM exposures",
+                "SELECT COUNT(*), MAX(added_at) FROM watchlist",
                 "SELECT COUNT(*), SUM(COALESCE(net_liquidation_value, 0)) FROM accounts",
             ):
                 row = conn.execute(sql).fetchone()
@@ -2247,6 +2258,7 @@ def snapshot():
                 "balances": balances,
             "margin": margin,
             "exposures": {r["key"]: _exposure_from_row(r) for r in conn.execute("SELECT * FROM exposures").fetchall()},
+                "watchlist": [_watch_from_row(r) for r in conn.execute("SELECT * FROM watchlist ORDER BY added_at, symbol").fetchall()],
                 "navHistory": nav,
                 "navByAccount": nav_by_account,
                 "syncedAt": synced,
@@ -2533,6 +2545,59 @@ def exposure_record(key):
             _init_schema(conn)
             r = conn.execute("SELECT * FROM exposures WHERE key = ?", (_s(key),)).fetchone()
             return _exposure_from_row(r) if r else None
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# watchlist: listings the user follows without holding them
+# ---------------------------------------------------------------------------
+def _watch_from_row(r):
+    return {"symbol": r["symbol"], "exchange": r["exchange"] or "", "name": r["name"] or "", "currency": r["currency"] or "",
+            "securityId": r["security_id"] or "", "addedAt": r["added_at"] or ""}
+
+
+def list_watchlist():
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            return [_watch_from_row(r) for r in conn.execute("SELECT * FROM watchlist ORDER BY added_at, symbol").fetchall()]
+        finally:
+            conn.close()
+
+
+def add_watch(symbol, exchange="", name="", currency="", security_id="", now=None):
+    """Follow a listing; adding one already followed keeps its place and fills in what was blank."""
+    sym = _s(symbol).strip().upper()
+    ex = _s(exchange).strip().upper()
+    if not sym:
+        return None
+    when = _s(now) or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute("INSERT OR IGNORE INTO watchlist (symbol, exchange, name, currency, security_id, added_at) VALUES (?, ?, ?, ?, ?, ?)",
+                         (sym, ex, _s(name), _s(currency).upper(), _s(security_id), when))
+            conn.execute("UPDATE watchlist SET name = CASE WHEN COALESCE(name, '') = '' THEN ? ELSE name END, "
+                         "currency = CASE WHEN COALESCE(currency, '') = '' THEN ? ELSE currency END, "
+                         "security_id = CASE WHEN COALESCE(security_id, '') = '' THEN ? ELSE security_id END WHERE symbol = ? AND exchange = ?",
+                         (_s(name), _s(currency).upper(), _s(security_id), sym, ex))
+            conn.commit()
+            return _watch_from_row(conn.execute("SELECT * FROM watchlist WHERE symbol = ? AND exchange = ?", (sym, ex)).fetchone())
+        finally:
+            conn.close()
+
+
+def remove_watch(symbol, exchange=""):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            cur = conn.execute("DELETE FROM watchlist WHERE symbol = ? AND exchange = ?", (_s(symbol).strip().upper(), _s(exchange).strip().upper()))
+            conn.commit()
+            return cur.rowcount > 0
         finally:
             conn.close()
 

@@ -650,7 +650,7 @@ def quote_symbols_needing_refresh(symbols, now=None, max_age_minutes=QUOTE_REFRE
     out = []
     seen = set()
     for rec in symbols or []:
-        sym = tmx_symbol(rec.get("symbol"))
+        sym = rec.get("quoteKey") or tmx_symbol(rec.get("symbol"))   # a watched listing is keyed by symbol and venue
         src = quote_source(rec)
         if not sym or not src or sym in seen:
             continue

@@ -19,8 +19,11 @@ from zoneinfo import ZoneInfo
 from unittest import mock
 
 import bagholder
+import exposure
 import market
+import model
 import store
+import time
 
 # Fake Wealthsimple production clientId for scrape tests. Not a real id.
 FAKE_CLIENT_ID = "ab" * 32
@@ -3351,3 +3354,54 @@ class StopExpiryTest(_EngineBase):
         store.update_order(b["slOrderId"], {"status": "cancelled"})
         self._tick()
         self.assertEqual(store.get_bracket(b["id"])["status"], "done")
+
+
+class WatchlistTest(unittest.TestCase):
+    """Listings followed without being held: kept in the store, quoted under their own key, classified like a share."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["BAGHOLDER_HOME"] = self.tmp.name
+        store.set_home(self.tmp.name)
+        bagholder.set_home(self.tmp.name)
+        store.ensure()
+        model.invalidate()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_add_list_remove(self):
+        before = store.data_version()
+        row = store.add_watch("shop", "tsx", "Shopify Inc.", "cad", now="2026-09-11T14:00:00Z")
+        self.assertEqual((row["symbol"], row["exchange"], row["name"], row["currency"], row["addedAt"]), ("SHOP", "TSX", "Shopify Inc.", "CAD", "2026-09-11T14:00:00Z"))
+        store.add_watch("NVDA", "NASDAQ", "", "USD", now="2026-09-11T14:01:00Z")
+        self.assertEqual([w["symbol"] for w in store.list_watchlist()], ["SHOP", "NVDA"], "in the order they were added")
+        again = store.add_watch("SHOP", "TSX", "", "", now="2026-09-12T00:00:00Z")
+        self.assertEqual((again["addedAt"], again["name"]), ("2026-09-11T14:00:00Z", "Shopify Inc."), "adding a followed listing again keeps its place and its name")
+        self.assertEqual(store.add_watch("NVDA", "NASDAQ", "NVIDIA Corp")["name"], "NVIDIA Corp", "a blank name is filled in")
+        self.assertNotEqual(store.data_version(), before, "the model's fingerprint follows the list")
+        self.assertTrue(store.remove_watch("shop", "tsx"))
+        self.assertFalse(store.remove_watch("SHOP", "TSX"))
+        self.assertEqual([w["symbol"] for w in store.list_watchlist()], ["NVDA"])
+        self.assertEqual(store.snapshot()["watchlist"][0]["symbol"], "NVDA", "the snapshot carries it to the model")
+
+    def test_add_endpoint_fetches_quote_and_sector_in_the_background(self):
+        with mock.patch.object(market, "refresh_quotes", return_value=1) as rq, mock.patch.object(exposure, "share_exposure", return_value={}) as se:
+            r = bagholder.watch_add({"symbol": "shop", "exchange": "TSX", "name": "Shopify Inc.", "currency": "CAD"})
+            self.assertTrue(r["ok"])
+            self.assertEqual([w["symbol"] for w in r["watchlist"]], ["SHOP"])
+            for _ in range(50):
+                if se.called:
+                    break
+                time.sleep(0.05)
+            recs = rq.call_args[0][0]
+            self.assertEqual([(x["symbol"], x["exchange"], x["quoteKey"]) for x in recs], [("SHOP", "TSX", "SHOP@TSX")], "quoted under symbol@venue")
+            self.assertEqual(se.call_args[0], ("SHOP", "TSX", "CAD"))
+        self.assertEqual(bagholder.watch_add({})["ok"], False)
+        r = bagholder.watch_remove({"symbol": "SHOP", "exchange": "TSX"})
+        self.assertEqual((r["ok"], r["watchlist"]), (True, []))
+
+    def test_quote_refresh_keys_a_watched_listing_by_venue(self):
+        needing = market.quote_symbols_needing_refresh([{"symbol": "AAPL", "exchange": "NEO", "currency": "CAD", "kind": "Shares"},
+                                                        {"symbol": "AAPL", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares", "quoteKey": "AAPL@NASDAQ"}])
+        self.assertEqual([(k, src) for k, src, _ in needing], [("AAPL", "cboe_ca"), ("AAPL@NASDAQ", "tmx")], "the held CDR and the watched US listing keep separate quotes")

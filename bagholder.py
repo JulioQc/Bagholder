@@ -710,7 +710,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-10.9"
+PROTOCOL = "2026-09-11.1"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -2345,6 +2345,9 @@ def refresh_exposures():
     # a contract's exposure is its underlying's: the share is classified under its own key
     unders = sorted({(_s(p.get("underlying")).upper(), _s(p.get("currency"))) for p in positions if p.get("kind") == "Options" and p.get("underlying")})
     unders = [(u, c) for u, c in unders if exposure.stale([exposure.SHARE_KEY + u + ":" + (market.tmx_form("", c) or "")])]
+    # a watched listing is classified like an underlying: a share under its own key
+    watched = [(w["symbol"], w.get("exchange") or "", w.get("currency") or "") for w in model.base_model().get("watchlist") or []]
+    watched = [(s, e, c) for s, e, c in watched if exposure.stale([model.watch_exposure_key(s, e, c)])]
 
     def one(job):
         if _stop.is_set():
@@ -2355,6 +2358,13 @@ def refresh_exposures():
             cov = rec.get("coverage") or 0.0
             return "bagholder exposure: %s %s: %s (%d%% covered)%s" % (sec.get("symbol"), "fund" if exposure.is_fund(sec.get("name"), sec.get("symbol")) else "share",
                                                                       rec.get("source") or "no source", int(round(cov * 100)), (": " + rec["error"]) if rec.get("error") else "")
+        if job[0] == "watch":
+            sym, ex, ccy = job[1], job[2], job[3]
+            try:
+                exposure.share_exposure(sym, ex, ccy)
+                return "bagholder exposure: %s (watched) classified" % sym
+            except Exception as e:
+                return "bagholder exposure: %s (watched): %s" % (sym, e)
         under, ccy = job[1], job[2]
         try:
             exposure.share_exposure(under, "", ccy)
@@ -2362,7 +2372,7 @@ def refresh_exposures():
         except Exception as e:
             return "bagholder exposure: %s (an option's underlying): %s" % (under, str(e) or e.__class__.__name__)
 
-    jobs = [("sec", secs[sid]) for sid in todo] + [("under", u, c) for u, c in unders]
+    jobs = [("sec", secs[sid]) for sid in todo] + [("under", u, c) for u, c in unders] + [("watch", s, e, c) for s, e, c in watched]
     done = 0
     if jobs:
         with ThreadPoolExecutor(max_workers=EXPOSURE_WORKERS, thread_name_prefix="bagholder-exposure") as pool:
@@ -5386,6 +5396,42 @@ def adjust_bracket(bracket_id, leg, price=None, trail=None, remove=False):
     return {"ok": True, "id": b["id"]}
 
 
+# ---------------------------------------------------------------------------
+# watchlist: listings followed without being held; quoted and classified like a holding
+# ---------------------------------------------------------------------------
+def watch_add(body):
+    body = body if isinstance(body, dict) else {}
+    sym = _s(body.get("symbol")).strip().upper()
+    if not sym:
+        return {"ok": False, "error": "symbol required"}
+    row = store.add_watch(sym, body.get("exchange"), body.get("name"), body.get("currency"), body.get("securityId"))
+    model.invalidate()
+    def fetch():
+        # its quote and its sector, from the same public sources a holding uses; shown as they land
+        try:
+            market.refresh_quotes(model.watch_symbols(), _ssl_context())
+            model.invalidate()
+        except Exception as e:
+            sys.stderr.write("bagholder watchlist: quote for %s failed: %s\n" % (sym, e))
+        try:
+            exposure.share_exposure(row["symbol"], row.get("exchange") or "", row.get("currency") or "")
+            model.invalidate()
+        except Exception as e:
+            sys.stderr.write("bagholder watchlist: sector for %s failed: %s\n" % (sym, e))
+    threading.Thread(target=fetch, name="watch-fetch", daemon=True).start()
+    return {"ok": True, "watchlist": store.list_watchlist()}
+
+
+def watch_remove(body):
+    body = body if isinstance(body, dict) else {}
+    sym = _s(body.get("symbol")).strip().upper()
+    if not sym:
+        return {"ok": False, "error": "symbol required"}
+    store.remove_watch(sym, body.get("exchange"))
+    model.invalidate()
+    return {"ok": True, "watchlist": store.list_watchlist()}
+
+
 def open_orders_count():
     """The Orders panel's Pending cards: every entry resting at Wealthsimple, and every live bracket once its entry has filled."""
     entries = sum(1 for o in store.list_orders() if o["status"] in LIVE_STATUSES and o.get("role", "entry") == "entry")
@@ -5455,9 +5501,10 @@ def refresh_market_data():
 
 
 def refresh_quotes():
-    """Prices for held positions, at most every QUOTE_REFRESH_MINUTES. Never raises."""
+    """Prices for held positions and watched listings, at most every QUOTE_REFRESH_MINUTES. Never raises."""
     try:
-        n = market.refresh_quotes(model.held_symbols(), _ssl_context())
+        base = model.base_model()
+        n = market.refresh_quotes(model.held_symbols(base) + model.watch_symbols(base), _ssl_context())
         if n:
             model.invalidate()
         return n
@@ -6205,6 +6252,12 @@ class Handler(BaseHTTPRequestHandler):
             r = refresh_orders()
             r.update(orders_payload())
             self._send(200, r)
+            return
+        if path == "/api/watchlist/add":
+            self._send(200, watch_add(self._read_json()))
+            return
+        if path == "/api/watchlist/remove":
+            self._send(200, watch_remove(self._read_json()))
             return
         if path == "/api/journal":
             body = self._read_json()

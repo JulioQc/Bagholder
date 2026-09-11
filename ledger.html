@@ -18,6 +18,7 @@ html{color-scheme:dark}
   --shadow-sm:0 1px 2px rgba(0,0,0,.28);--shadow-md:0 10px 28px rgba(0,0,0,.45),0 0 0 1px rgba(233,233,237,.06);
   --font:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--font-num:var(--font);--brand-color:var(--ink);--brand-transform:none;--brand-spacing:.02em;--outline:.1;--field:rgba(22,24,38,.55);
   --chip-bg:var(--accent-900);--chip-fg:var(--accent-300);--chip-hi:rgba(145,132,217,.18);
+  --heat-p1:#2b3a36;--heat-p2:#2c6b51;--heat-p3:#2f9e6b;--heat-p4:#4fc98d;--heat-n1:#3a2b31;--heat-n2:#6e2f3d;--heat-n3:#a8455a;--heat-n4:#d4586f;
   --pie-1:#9184d9;--pie-2:#6fd39b;--pie-3:#5fb0e6;--pie-4:#e8b36a;--pie-5:#e0778a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;--pie-9:#e59a6a;--pie-10:#8fb87a;--pie-11:#a0a8b8;
   --pos-rgb:111,211,155;--neg-rgb:224,119,138;--accent-rgb:145,132,217;--accent-bar:var(--accent);--hover:.08;--area:.22;--well:var(--n900);--well-line:.12;
 }
@@ -29,6 +30,7 @@ html[data-theme="midnight"]{
   --font-num:ui-monospace,"JetBrains Mono","SF Mono",Menlo,monospace;--outline:.14;--field:rgba(4,5,9,.6);
   --chip-bg:rgba(230,232,238,.1);--chip-fg:rgba(230,232,238,.82);--chip-hi:rgba(230,232,238,.12);
   --pos-rgb:63,214,138;--neg-rgb:255,107,122;--accent-rgb:63,214,138;
+  --heat-p1:#16302a;--heat-p2:#1f5a44;--heat-p3:#2a9464;--heat-p4:#3fd68a;--heat-n1:#33202a;--heat-n2:#63303c;--heat-n3:#a34556;--heat-n4:#ff6b7a;
   --pie-1:#3fd68a;--pie-2:#5fb0e6;--pie-3:#9184d9;--pie-4:#e8b36a;--pie-5:#ff6b7a;--pie-6:#7fd3c9;--pie-7:#c48fdc;--pie-8:#d7c46a;--pie-9:#f0955f;--pie-10:#a3c96f;--pie-11:#9aa4b5;
 }
 html[data-theme="light"]{color-scheme:light;
@@ -37,6 +39,7 @@ html[data-theme="light"]{color-scheme:light;
   --hair:rgba(27,29,39,.12);--grid:rgba(27,29,39,.06);--pos:#2e8a62;--neg:#c0505f;--mixed:#9a95c4;--pos-rgb:46,138,98;--neg-rgb:192,80,95;--accent-rgb:107,92,214;
   --shadow-sm:0 1px 2px rgba(20,22,40,.06);--shadow-md:0 10px 28px rgba(20,22,40,.14),0 0 0 1px rgba(27,29,39,.08);
   --outline:.08;--field:rgba(27,29,39,.04);--hover:.045;--area:.16;--well:transparent;--well-line:.09;
+  --heat-p1:#e2efe8;--heat-p2:#b7dfc9;--heat-p3:#7cc4a0;--heat-p4:#3fa376;--heat-n1:#f3e3e6;--heat-n2:#ebc0c8;--heat-n3:#dc8f9c;--heat-n4:#c9606f;
   --pie-1:#a89ee6;--pie-2:#8fd4b4;--pie-3:#93c4ec;--pie-4:#f0c98c;--pie-5:#eea3ae;--pie-6:#9adbd4;--pie-7:#cfaee6;--pie-8:#e0d48c;--pie-9:#f2b592;--pie-10:#b9d69c;--pie-11:#b6bec9;
 }
 *{box-sizing:border-box}
@@ -72,6 +75,30 @@ textarea.input{resize:none;line-height:1.5}
 .pos{color:var(--pos)}
 .neg{color:var(--neg)}
 .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55)}
+.mseg{display:inline-flex;gap:2px;padding:2px;border-radius:7px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.08)}
+.mseg-opt{padding:4px 10px;border-radius:5px;border:0;background:transparent;font:500 12px var(--font);color:var(--ink55);cursor:pointer;white-space:nowrap}
+.mseg-opt:hover{color:var(--ink)}
+.mseg-opt.on{color:var(--ink);background:var(--chip-bg)}
+.heat-blk{position:absolute;border-radius:5px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.07)}
+.heat-hd{position:absolute;top:0;left:0;right:0;height:19px;display:flex;align-items:center;padding:0 7px;font:500 11px var(--font);letter-spacing:.04em;color:var(--ink60);white-space:nowrap;overflow:hidden}
+.heat-tile{position:absolute;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;overflow:hidden;color:#f2f2f6}
+.heat-tile.go{cursor:pointer}
+.heat-tile:hover{outline:1px solid rgba(233,233,237,.55);outline-offset:-1px;z-index:2}
+.heat-sym{font-weight:500;letter-spacing:.02em;white-space:nowrap;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis}
+.heat-chg{color:rgba(255,255,255,.82);font-variant-numeric:tabular-nums}
+html[data-theme="light"] .heat-tile{color:#1b1d27}
+html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
+.wl-head,.wl-row{display:grid;grid-template-columns:1fr 78px 72px 22px;gap:12px;align-items:center;padding:0 16px;margin:0 -16px}
+.wl-head{padding-bottom:6px}
+.wl-row{padding:8px 16px}
+.wl-row.go{cursor:pointer}
+.wl-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
+.wl-row .tk-rowbtn{opacity:.35;align-self:start}
+.wl-row:hover .tk-rowbtn{opacity:1}
+.wl-add{width:24px;height:24px;border-radius:6px;border:0;background:transparent;color:var(--ink60);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14)}
+.wl-add:hover{color:var(--accent-300);background:rgba(var(--ink-rgb),.06)}
+.tk-rowbtn.watch:hover{background:rgba(var(--accent-rgb),.16);color:var(--accent-300)}
+.tk-rowbtn.watch.on{color:var(--accent)}
 .seg{display:flex;gap:0;padding:0;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);overflow:hidden}
 .seg-opt{flex:1;display:flex;align-items:center;justify-content:center;padding:12px 0;cursor:pointer;font-size:13px;color:var(--ink);border-left:1px solid rgba(var(--ink-rgb),.14)}
 .seg-opt:first-child{border-left:0}
@@ -295,6 +322,8 @@ const state = {
   ordersError: "",
   ordersOpen: false,
   ticketDraft: null,   // a closed ticket's typed fields, until the same symbol and side open again
+  watchMode: false,   // ⌘K opened from the Watchlist's plus: its rows add to the list instead of filtering
+  heat: (function () { try { return Object.assign({ universe: "holdings", size: "value" }, JSON.parse(localStorage.getItem("bh2.heatmap") || "{}")); } catch (e) { return { universe: "holdings", size: "value" }; } })(),
   ordersTab: "pending",
   orderEdit: null,
   bracketEdit: null,
@@ -319,7 +348,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-10.9"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-11.1"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -603,6 +632,8 @@ function headerHtml() {
 const ICONS = {
   plus: "M224 128a8 8 0 0 1-8 8h-80v80a8 8 0 0 1-16 0v-80H40a8 8 0 0 1 0-16h80V40a8 8 0 0 1 16 0v80h80a8 8 0 0 1 8 8Z",
   minus: "M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8Z",
+  bookmark: "M184 32H72a16 16 0 0 0-16 16v176a8 8 0 0 0 12.24 6.78L128 193.43l59.77 37.35A8 8 0 0 0 200 224V48a16 16 0 0 0-16-16Zm0 177.57-51.77-32.35a8 8 0 0 0-8.48 0L72 209.57V48h112Z",
+  bookmarkFill: "M184 32H72a16 16 0 0 0-16 16v176a8 8 0 0 0 12.24 6.78L128 193.43l59.77 37.35A8 8 0 0 0 200 224V48a16 16 0 0 0-16-16Z",
   x: "M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z",
   caretDown: "M213.66 101.66l-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32Z",
   receipt: "M72 104a8 8 0 0 1 8-8h96a8 8 0 0 1 0 16H80a8 8 0 0 1-8-8Zm8 40h96a8 8 0 0 0 0-16H80a8 8 0 0 0 0 16ZM232 56v152a8 8 0 0 1-11.58 7.15L192 200.94l-28.42 14.21a8 8 0 0 1-7.16 0L128 200.94l-28.42 14.21a8 8 0 0 1-7.16 0L64 200.94l-28.42 14.21A8 8 0 0 1 24 208V56a16 16 0 0 1 16-16h176a16 16 0 0 1 16 16Zm-16 0H40v139.06l20.42-10.22a8 8 0 0 1 7.16 0L96 199.06l28.42-14.22a8 8 0 0 1 7.16 0L160 199.06l28.42-14.22a8 8 0 0 1 7.16 0L216 195.06Z",
@@ -849,7 +880,7 @@ function tabsHtml() {
   const t = (id, label) => '<button class="tabbtn' + (state.page === id && !((id === "trades" || id === "portfolio") && state.sel) ? " on" : "") + '" data-act="page" data-arg=\'' + attr({ page: id }) + "'>" + label + "</button>";
   const sel = (state.page === "trades" || state.page === "portfolio") && state.sel ? selById(state.sel) : null;
   return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
-    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("cashflow", "Cashflow") +
+    t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("markets", "Markets") + t("cashflow", "Cashflow") +
     (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(sel.symbol) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(sel.symbol) + "</span></div>" : "") +
     '<div style="margin-left:auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 0"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;overflow-x:auto;padding-bottom:1px">' +
     chips().map((c) => '<span class="chip"><span class="cf">' + esc(c.field) + '</span><button class="cv" data-act="chipEdit" data-arg=\'' + attr({ key: c.key }) + "'>" + esc(c.value) + '</button><button class="cx" aria-label="Remove filter" data-act="chipRemove" data-arg=\'' + attr({ key: c.key }) + "'>×</button></span>").join("") +
@@ -973,6 +1004,7 @@ function symbolRows(q) {
 function popFieldsBodyHtml() {
   const f = state.filters;
   const q = state.fieldQuery == null ? f.search : state.fieldQuery;
+  if (state.watchMode) return watchBodyHtml(q);
   const syms = q ? symbolRows(q) : [];
   const others = fieldMatches(q).filter((m) => m.key !== "symbol");
   if (q && (syms.length || others.length)) {
@@ -1019,7 +1051,7 @@ function filterPopHtml() {
     }
   }
   return '<div class="pop elev-md">' + body +
-    '<div class="rule-t" style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px"><button class="btn btn-secondary" data-act="clearAll" style="font-size:12px;padding:4px 10px">Clear all</button><button class="btn btn-primary" data-act="closeFilter" style="font-size:12px;padding:4px 10px;margin-left:auto">Done</button></div></div>';
+    '<div class="rule-t" style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px">' + (state.watchMode ? "" : '<button class="btn btn-secondary" data-act="clearAll" style="font-size:12px;padding:4px 10px">Clear all</button>') + '<button class="btn btn-primary" data-act="closeFilter" style="font-size:12px;padding:4px 10px;margin-left:auto">Done</button></div></div>';
 }
 
 // ---------------------------------------------------------------------------
@@ -1841,6 +1873,7 @@ function spaceAxisLabels() {
   });
 }
 window.addEventListener("resize", spaceAxisLabels);
+window.addEventListener("resize", mountHeatmap);
 function moHover(e) {
   const m = state.model; if (!m) return;
   const col = e.target.closest(".bar-col"); if (!col) return;
@@ -2240,6 +2273,138 @@ function donutHover(e, key) {
 }
 function ppieHover(e) { donutHover(e, "ppie"); }
 function ppieLeave() { ppieHover({ target: document.body }); }
+// ---------------------------------------------------------------------------
+// Markets: the heatmap, the news (a source to come), the watchlist
+// ---------------------------------------------------------------------------
+function heatColor(chg) {
+  if (chg == null || !isFinite(chg)) return "rgba(var(--ink-rgb),.10)";
+  const a = Math.abs(chg), step = a < 0.35 ? 1 : a < 1 ? 2 : a < 2.5 ? 3 : 4;
+  return "var(--heat-" + (chg >= 0 ? "p" : "n") + step + ")";
+}
+function signedPct(v) { return v == null || !isFinite(v) ? "—" : (v < 0 ? "−" : "+") + Math.abs(v).toFixed(2) + "%"; }
+// Bruls, Huizing and van Wijk's squarified treemap: largest first, rows laid along the short side
+function squarify(items, rect) {
+  const total = items.reduce((s, i) => s + i.v, 0);
+  if (!total || rect.w <= 0 || rect.h <= 0) return [];
+  const scale = rect.w * rect.h / total;
+  const list = items.map((i) => Object.assign({}, i, { a: i.v * scale })).sort((a, b) => b.a - a.a);
+  const r = Object.assign({}, rect); let res = [], row = [];
+  const worst = (rw, len) => { const s = rw.reduce((a, b) => a + b.a, 0); const mx = Math.max(...rw.map((b) => b.a)), mn = Math.min(...rw.map((b) => b.a)); return Math.max(len * len * mx / (s * s), s * s / (len * len * mn)); };
+  const layoutRow = (rw) => {
+    const s = rw.reduce((a, b) => a + b.a, 0), out = [];
+    if (r.w >= r.h) { const thick = s / r.h; let y = r.y; rw.forEach((it) => { const hh = it.a / thick; out.push(Object.assign({}, it, { x: r.x, y, w: thick, h: hh })); y += hh; }); r.x += thick; r.w -= thick; }
+    else { const thick = s / r.w; let x = r.x; rw.forEach((it) => { const ww = it.a / thick; out.push(Object.assign({}, it, { x, y: r.y, w: ww, h: thick })); x += ww; }); r.y += thick; r.h -= thick; }
+    return out;
+  };
+  while (list.length) {
+    const len = Math.min(r.w, r.h), next = list[0];
+    if (!row.length || worst(row.concat([next]), len) <= worst(row, len)) row.push(list.shift());
+    else { res = res.concat(layoutRow(row)); row = []; }
+  }
+  if (row.length) res = res.concat(layoutRow(row));
+  return res;
+}
+// the tiles for the universe chosen: holdings by market value, watched listings as equal tiles
+// (a watched listing has no market value; beside holdings it takes the smallest holding's tile)
+function heatTiles(mk) {
+  const h = state.heat, held = mk.holdings || [], watched = (mk.watchlist || []).filter((w) => !w.positionId);
+  const minHeld = held.length ? Math.min(...held.map((t) => t.value)) : 1;
+  const w = watched.map((x) => ({ id: null, symbol: x.symbol, exchange: x.exchange, value: h.universe === "both" ? minHeld : 1, percentChange: x.percentChange, sector: x.sector }));
+  let tiles = h.universe === "holdings" ? held.slice() : h.universe === "watchlist" ? w : held.concat(w);
+  if (h.size === "equal") tiles = tiles.map((t) => Object.assign({}, t, { value: 1 }));
+  return tiles;
+}
+function heatmapLayout(tiles, W, H) {
+  const GAP = 6, HEAD = 19;
+  const bySector = {};
+  tiles.forEach((t) => { (bySector[t.sector] = bySector[t.sector] || []).push(t); });
+  const wmean = (xs) => { const q = xs.filter((x) => x.percentChange != null); const v = q.reduce((s, x) => s + x.value, 0); return v ? q.reduce((s, x) => s + x.value * x.percentChange, 0) / v : null; };
+  const groups = Object.keys(bySector).map((label) => ({ label, v: bySector[label].reduce((s, x) => s + x.value, 0), chg: wmean(bySector[label]), syms: bySector[label] }));
+  const cells = [];
+  const blocks = squarify(groups, { x: 0, y: 0, w: W, h: H }).map((g) => {
+    const inner = { x: g.x + GAP / 2, y: g.y + GAP / 2 + HEAD, w: Math.max(1, g.w - GAP), h: Math.max(1, g.h - GAP - HEAD) };
+    let syms = g.syms.map((t) => Object.assign({}, t, { v: t.value }));
+    // fold: every position under 1.5% of its sector into one tile (one alone keeps its name)
+    const floor = g.v * 0.015, small = syms.filter((x) => x.v < floor);
+    if (small.length > 1) {
+      syms = syms.filter((x) => x.v >= floor);
+      const sv = small.reduce((a, b) => a + b.v, 0);
+      syms.push({ id: null, symbol: "Other (" + small.length + ")", value: sv, v: sv, percentChange: wmean(small), sector: g.label, other: true });
+    }
+    // floor: no tile thinner than about 52 px on its short side, from the block's own geometry
+    const tv = syms.reduce((a, b) => a + b.v, 0), area = inner.w * inner.h;
+    const minArea = Math.min(52 * Math.min(inner.w, inner.h), area * 0.22);
+    const minV = Math.min(tv / syms.length, tv * minArea / area);
+    syms = syms.map((x) => Object.assign({}, x, { v: Math.max(x.v, minV) }));
+    squarify(syms, inner).forEach((c) => {
+      const big = c.w > 128 && c.h > 62, mid = c.w > 78 && c.h > 40;
+      cells.push(Object.assign({}, c, { big, mid }));
+    });
+    return g;
+  });
+  return { blocks, cells };
+}
+function mountHeatmap() {
+  const box = document.getElementById("heatBox"); if (!box || !state.model) return;
+  const tiles = heatTiles(state.model.markets || {});
+  const W = box.clientWidth, H = box.clientHeight;
+  if (!tiles.length || !W) { box.innerHTML = ""; return; }
+  const lay = heatmapLayout(tiles, W, H);
+  box.innerHTML = lay.blocks.map((g) => '<div class="heat-blk" style="left:' + g.x.toFixed(1) + 'px;top:' + g.y.toFixed(1) + 'px;width:' + g.w.toFixed(1) + 'px;height:' + g.h.toFixed(1) + 'px"><div class="heat-hd">' + esc(g.label) +
+      '<span class="num" style="margin-left:auto;font-weight:400;color:' + (g.chg == null ? "var(--ink55)" : g.chg >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(g.chg) + "</span></div></div>").join("") +
+    lay.cells.map((c) => '<div class="heat-tile' + (c.id ? " go" : "") + '"' + (c.id ? ' data-act="heatOpen" data-arg=\'' + attr({ id: c.id }) + "'" : "") + ' style="left:' + (c.x + 1).toFixed(1) + 'px;top:' + (c.y + 1).toFixed(1) + 'px;width:' + Math.max(0, c.w - 2).toFixed(1) + 'px;height:' + Math.max(0, c.h - 2).toFixed(1) + 'px;background:' + heatColor(c.percentChange) + '">' +
+      '<div class="heat-sym" style="font-size:' + (c.big ? 16 : c.mid ? 13 : 11) + 'px">' + esc(c.symbol) + "</div>" +
+      (c.mid ? '<div class="heat-chg" style="font-size:' + (c.big ? 12 : 11) + 'px">' + signedPct(c.percentChange) + "</div>" : "") + "</div>").join("");
+}
+function msegHtml(act, key, opts, cur) {
+  return '<span class="mseg">' + opts.map((o) => '<button class="mseg-opt' + (o[0] === cur ? " on" : "") + '" data-act="' + act + '" data-arg=\'' + attr({ [key]: o[0] }) + "'>" + o[1] + "</button>").join("") + "</span>";
+}
+function heatmapCardHtml(mk) {
+  const h = state.heat, tiles = heatTiles(mk);
+  const empty = h.universe === "watchlist" ? "Nothing watched." : "No open positions.";
+  return '<div class="card elev-sm" style="padding:14px 16px 16px">' +
+    '<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px"><h5>Heatmap</h5>' +
+    msegHtml("heatUniverse", "universe", [["holdings", "Holdings"], ["watchlist", "Watchlist"], ["both", "Both"]], h.universe) +
+    msegHtml("heatSize", "size", [["value", "Market value"], ["equal", "Equal"]], h.size) +
+    '<span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink55)"><span>−3%</span>' +
+    [-3, -2, -1, -0.2, 0.2, 1, 2, 3].map((c) => '<span style="width:16px;height:9px;border-radius:2px;background:' + heatColor(c) + '"></span>').join("") + "<span>+3%</span></span></div>" +
+    (tiles.length ? '<div id="heatBox" style="position:relative;width:100%;height:430px"></div>' : '<div class="muted empty" style="font-size:12px">' + empty + "</div>") + "</div>";
+}
+function newsCardHtml() {
+  return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;margin-bottom:6px"><h5>News</h5></div>' +
+    '<div class="muted" style="font-size:12px">No news.</div></div>';
+}
+function watchlistCardHtml(rows) {
+  const row = (w) => '<div class="wl-row' + (w.positionId ? " go" : "") + '"' + (w.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: w.positionId }) + "'" : "") + ">" +
+    '<div style="min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(w.symbol) + '</div><div style="font-size:11px;color:var(--ink55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(w.name || w.exchange || "") + "</div></div>" +
+    '<div class="tab" style="text-align:right;font-size:13px">' + (w.last == null ? "—" : px(w.last)) + "</div>" +
+    '<div class="tab" style="text-align:right;font-size:13px;color:' + (w.percentChange == null ? "var(--ink55)" : w.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(w.percentChange) + "</div>" +
+    '<button class="tk-rowbtn sell" aria-label="Remove ' + esc(w.symbol) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.x) + "</button></div>";
+  return '<div class="card elev-sm" style="padding:14px 16px 12px">' +
+    '<div style="display:flex;align-items:center;margin-bottom:8px"><h5>Watchlist</h5><button class="wl-add" style="margin-left:auto" aria-label="Add to the watchlist" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button></div>" +
+    (rows.length ? '<div class="wl-head lbl"><div>Symbol</div><div style="text-align:right">Last</div><div style="text-align:right">Chg</div><div></div></div>' +
+      '<div class="scroll" style="max-height:398px">' + rows.map(row).join("") + "</div>"
+      : '<div class="muted" style="font-size:12px">Nothing watched.</div>') + "</div>";
+}
+function marketsHtml(m) {
+  const mk = m.markets || { holdings: [], watchlist: [] };
+  return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px">' + heatmapCardHtml(mk) +
+    '<div style="display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px;align-items:start">' + newsCardHtml() + watchlistCardHtml(mk.watchlist || []) + "</div></div>";
+}
+function watchedKeys() { return new Set((((state.model || {}).markets || {}).watchlist || []).map((w) => w.symbol + "@" + String(w.exchange || "").toUpperCase())); }
+// ⌘K in watch mode: every symbol row carries one icon, add to the watchlist, lit when it is on it
+function watchRowHtml(r, cls) {
+  const on = watchedKeys().has(r.sym + "@" + String(r.exchange || "").toUpperCase());
+  const icon = '<span class="tk-rowbtns"><span class="tk-rowbtn watch' + (on ? " on" : "") + '" aria-hidden="true">' + tkIconSvg(on ? ICONS.bookmarkFill : ICONS.bookmark) + "</span></span>";
+  return symbolRowHtml(r.sym, r.name, r.exchange, icon, cls, "watchToggle", { symbol: r.sym, exchange: r.exchange || "", name: r.name || "", currency: r.currency || "" });
+}
+function watchBodyHtml(q) {
+  const syms = q ? symbolRows(q).filter((r) => !OPTION_RE.test(r.sym)) : (((state.model || {}).markets || {}).watchlist || []).map((w) => ({ sym: w.symbol, name: w.name, exchange: w.exchange, currency: w.currency }));
+  const hi = Math.min(state.valueHi || 0, Math.max(0, syms.length - 1));
+  if (!syms.length) return q ? '<div class="muted" style="padding:2px 7px 8px;font-size:12px">No match.</div>' : '<div class="muted" style="padding:2px 7px 8px;font-size:12px">Nothing watched.</div>';
+  return (q ? "" : '<div class="lbl" style="padding:2px 7px 7px">Watchlist</div>') +
+    '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' + syms.map((r, i) => watchRowHtml(r, i === hi ? " hi" : "")).join("") + "</div>";
+}
 function portfolioHtml(m) {
   const p = state.sel ? positionById(state.sel) : null;
   if (p) return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + tradeDetailHtml(holdingAsTrade(p), m) + "</div>";
@@ -2416,12 +2581,14 @@ function pageHtml() {
   if (state.page === "trades") return tradesHtml(m);
   if (state.page === "portfolio") return portfolioHtml(m);
   if (state.page === "cashflow") return cashflowHtml(m);
+  if (state.page === "markets") return marketsHtml(m);
   return dashboardHtml(m);
 }
 const _keptScroll = {};
 function render() {
   const root = document.getElementById("app");
   const scrollY = window.scrollY;
+  if (state.picker !== "fields") state.watchMode = false;
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { _keptScroll[el.dataset.keepScroll] = { top: el.scrollTop, left: el.scrollLeft }; });
   // Every other scrolling box (tables, lists, the filter popover) keeps its place
   // across a redraw too, matched by position in the page.
@@ -2441,6 +2608,7 @@ function render() {
   const menu = document.getElementById("tagMenu");
   if (menu) menu.innerHTML = tagMenuHtml();
   mountTradeChart();
+  mountHeatmap();
   spaceAxisLabels();
 }
 function renderHeaderOnly() {
@@ -2450,7 +2618,7 @@ function renderHeaderOnly() {
   tmp.innerHTML = headerHtml();
   hdr.replaceWith(tmp.firstElementChild);
 }
-const PAGES = ["dashboard", "trades", "portfolio", "cashflow"];
+const PAGES = ["dashboard", "trades", "portfolio", "markets", "cashflow"];
 function hashState() {
   const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
   const parts = raw.split("/");
@@ -2619,6 +2787,17 @@ function act(name, arg, ev) {
     case "openFields": state.picker = state.picker === "fields" ? null : "fields"; state.fieldQuery = null; state.valueHi = 0; state.menuOpen = false; render(); if (state.picker) { const si = document.getElementById("searchInput"); if (si) si.focus(); } break;
     case "pickField": state.picker = arg.key; state.valueQuery = ""; state.valueHi = 0; render(); { const vq = document.getElementById("valueQuery"); if (vq) vq.focus(); } break;
     case "closeFilter": state.picker = null; render(); break;
+    case "watchAdd": state.picker = "fields"; state.watchMode = true; state.fieldQuery = ""; state.valueHi = 0; state.menuOpen = false; render(); { const si = document.getElementById("searchInput"); if (si) si.focus(); } break;
+    case "watchToggle": {
+      const on = watchedKeys().has(arg.symbol + "@" + String(arg.exchange || "").toUpperCase());
+      api("POST", on ? "/api/watchlist/remove" : "/api/watchlist/add", arg).then(() => loadModel()).then(() => {
+        const body = document.getElementById("popFieldsBody"); if (body && state.watchMode) body.innerHTML = popFieldsBodyHtml();
+      });
+      break;
+    }
+    case "watchRemove": api("POST", "/api/watchlist/remove", arg).then(() => loadModel()); break;
+    case "heatUniverse": case "heatSize": Object.assign(state.heat, arg); try { localStorage.setItem("bh2.heatmap", JSON.stringify(state.heat)); } catch (e) {} render(); break;
+    case "heatOpen": openHolding(arg.id); break;
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
     case "chartTf": setChartTf(arg.tf); render(); break;
@@ -2813,7 +2992,7 @@ function bind() {
       return;
     }
     if (e.target && e.target.id === "searchInput") {
-      const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList], #popMatches [data-act=tkOpenExt]")];
+      const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList], #popMatches [data-act=tkOpenExt], #popMatches [data-act=watchToggle]")];
       if (popoverBoxKeys(e, rows)) return;
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && rows.length) {
         e.preventDefault();
@@ -2829,7 +3008,7 @@ function bind() {
           // a value: toggled in its field, the box cleared for the next one
           let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {}
           clearTimeout(_rangeTimer);
-          act(row.dataset.act === "tkOpenExt" ? "tkOpenExt" : "toggleList", arg);
+          act(row.dataset.act === "tkOpenExt" || row.dataset.act === "watchToggle" ? row.dataset.act : "toggleList", arg);
         } else {
           // no value matches: the text is the free-text search, applied now
           clearTimeout(_rangeTimer); state.filters.search = e.target.value.trim(); state.fieldQuery = null; state.sel = null; loadModel();
