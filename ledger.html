@@ -75,12 +75,12 @@ textarea.input{resize:none;line-height:1.5}
 .pos{color:var(--pos)}
 .neg{color:var(--neg)}
 .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink55)}
-.mseg{display:inline-flex;gap:2px;padding:2px;border-radius:7px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.08)}
+.mseg{display:inline-flex;gap:2px;padding:2px;border-radius:7px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)}
 .mseg-opt{padding:4px 10px;border-radius:5px;border:0;background:transparent;font:500 12px var(--font);color:var(--ink55);cursor:pointer;white-space:nowrap}
 .mseg-opt:hover{color:var(--ink)}
 .mseg-opt.on{color:var(--ink);background:var(--chip-bg)}
 .mseg-div{width:1px;height:16px;background:rgba(var(--ink-rgb),.14);margin:0 4px;align-self:center}
-.heat-blk{position:absolute;border-radius:5px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.07)}
+.heat-blk{position:absolute;border-radius:5px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.07)}
 .heat-hd{position:absolute;top:0;left:0;right:0;height:19px;display:flex;align-items:center;padding:0 7px;font:500 11px var(--font);letter-spacing:.04em;color:var(--ink60);white-space:nowrap;overflow:hidden}
 .heat-tile{position:absolute;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;overflow:hidden;color:#f2f2f6}
 .heat-tile.go{cursor:pointer}
@@ -2440,7 +2440,7 @@ function newsCardHtml(items) {
   return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;min-height:28px;margin-bottom:8px"><h5>News</h5>' +
     msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) +
     (only ? '<span class="chip"><span class="cf">Symbol</span><span class="cv" style="cursor:default">' + esc(only.symbol) + '</span><button class="cx" aria-label="Show every listing" data-act="newsSymClear">×</button></span>' : "") +
-    '<div style="margin-left:auto;display:flex;align-items:center;gap:7px;padding:4px 9px;width:200px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="newsQuery" value="' + esc(state.newsQuery) + '" placeholder="Search symbol or headline" aria-label="Search the news" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px var(--font);color:var(--ink)"></div></div>' +
+    '<div style="margin-left:auto;display:flex;align-items:center;gap:7px;padding:4px 9px;width:200px;border-radius:6px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="newsQuery" value="' + esc(state.newsQuery) + '" placeholder="Search symbol or headline" aria-label="Search the news" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px var(--font);color:var(--ink)"></div></div>' +
     (rows.length ? '<div class="nw-head">' + gridTh("news", NEWS_COLS) + '</div><div class="scroll nw-list" style="max-height:436px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">No news.</div>') + "</div>";
 }
