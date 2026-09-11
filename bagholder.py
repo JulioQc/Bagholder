@@ -5467,9 +5467,7 @@ def refresh_news():
 
 
 def news_loop():
-    """Half a minute after start, then every five minutes, each listing read once per fifteen."""
-    if _stop.wait(30):
-        return
+    """At start, then every five minutes, each listing read once per fifteen."""
     while not _stop.is_set():
         refresh_news()
         if _stop.wait(300):
@@ -5488,14 +5486,23 @@ def refresh_universes():
         return []
 
 
+_universe_kick = threading.Event()
+
+
 def universe_loop():
-    """Three quarters of a minute after start, then every thirty minutes."""
-    if _stop.wait(45):
-        return
+    """At start, then every thirty minutes, or sooner when the page asks for a universe it has never seen."""
     while not _stop.is_set():
+        _universe_kick.clear()
         refresh_universes()
-        if _stop.wait(1800):
+        _universe_kick.wait(1800)
+        if _stop.is_set():
             return
+
+
+def kick_universes():
+    """The page shows a universe with no rows yet: read now rather than at the next half hour."""
+    _universe_kick.set()
+    return {"ok": True}
 
 
 def open_orders_count():
@@ -6318,6 +6325,9 @@ class Handler(BaseHTTPRequestHandler):
             r = refresh_orders()
             r.update(orders_payload())
             self._send(200, r)
+            return
+        if path == "/api/markets/refresh":
+            self._send(200, kick_universes())
             return
         if path == "/api/watchlist/add":
             self._send(200, watch_add(self._read_json()))

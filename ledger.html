@@ -2827,7 +2827,12 @@ function act(name, arg, ev) {
       break;
     }
     case "watchRemove": api("POST", "/api/watchlist/remove", arg).then(() => loadModel()); break;
-    case "heatUniverse": case "heatSize": Object.assign(state.heat, arg); try { localStorage.setItem("bh2.heatmap", JSON.stringify(state.heat)); } catch (e) {} render(); break;
+    case "heatUniverse": case "heatSize": {
+      Object.assign(state.heat, arg); try { localStorage.setItem("bh2.heatmap", JSON.stringify(state.heat)); } catch (e) {}
+      // a market universe never read: ask for it now rather than at the next half hour
+      if (HEAT_MARKETS[state.heat.universe] && !((((state.model || {}).markets || {}).universes || {})[state.heat.universe] || []).length) api("POST", "/api/markets/refresh", {});
+      render(); break;
+    }
     case "heatOpen": openHolding(arg.id); break;
     case "newsScope": state.newsScope = arg.scope; try { localStorage.setItem("bh2.news", arg.scope); } catch (e) {} render(); break;
     case "newsOpen": if (arg.url) window.open(arg.url, "_blank", "noopener"); break;
