@@ -3045,7 +3045,11 @@ class OrdersPanelTest(_EngineBase):
         self.assertEqual(bagholder.open_orders_count(), 1)
         self.assertEqual(bagholder.status_payload()["openOrders"], 1)
         store.update_order(oid, {"status": "filled", "filledQty": 25})
-        self._tick()   # the stop is placed: an exit row, not counted
+        self._tick()   # the stop is placed: it rests at Wealthsimple and counts, as Wealthsimple's own Pending orders counts it
+        self.assertEqual(bagholder.open_orders_count(), 1)
+        for o in store.list_orders():
+            if o.get("role") == "stop":
+                store.update_order(o["id"], {"status": "cancelled"})
         self.assertEqual(bagholder.open_orders_count(), 0)
 
     def test_edit_sends_wealthsimples_modify_with_the_new_price_and_quantity(self):

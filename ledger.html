@@ -1556,7 +1556,7 @@ function renderOrders() {
   if (!state.ordersOpen) { if (old) old.remove(); return; }
   replacePanel("odWrap", ordersPanelHtml());
 }
-function openOrdersCount() { return ((state.orders && state.orders.orders) || []).filter((o) => o.role !== "stop" && o.role !== "target" && ORDER_LIVE[o.status]).length; }
+function openOrdersCount() { return ((state.orders && state.orders.orders) || []).filter((o) => ORDER_LIVE[o.status]).length; }
 function orderEditSave(id) {
   const o = orderById(id), e = state.orderEdit; if (!o || !e) return;
   const q = document.getElementById("od-qty"), l = document.getElementById("od-limit");
