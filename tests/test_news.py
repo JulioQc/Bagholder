@@ -24,15 +24,17 @@ class ParseTest(unittest.TestCase):
 
     def test_nasdaq_items_take_their_time_from_the_age_given(self):
         now = datetime(2026, 9, 11, 15, 30, tzinfo=timezone.utc)
-        data = {"data": {"rows": [{"id": 28351741, "title": "Forget AMD. Here&#39;s Who Nvidia Really Needs to Be Worried About.", "publisher": "The Motley Fool", "created": "Sep 11, 2026", "ago": "17 minutes ago", "url": "/articles/forget-amd"},
-                                  {"id": 2, "title": "Two hours", "publisher": "Zacks", "created": "Sep 11, 2026", "ago": "2 hours ago", "url": "https://www.nasdaq.com/articles/two"},
-                                  {"id": 3, "title": "Old", "publisher": "Barchart", "created": "Sep 3, 2026", "ago": "", "url": "/articles/old"},
-                                  {"id": 4, "publisher": "no title"}]}}
-        rows = news.parse_nasdaq_news(data, now)
+        data = {"data": {"rows": [{"id": 28351741, "title": "Forget AMD. Here&#39;s Who Nvidia Really Needs to Be Worried About.", "publisher": "The Motley Fool", "created": "Sep 11, 2026", "ago": "17 minutes ago", "url": "/articles/forget-amd", "primarysymbol": "avgo", "related_symbols": ["avgo|stocks", "nvda|stocks"]},
+                                  {"id": 2, "title": "Two hours", "publisher": "Zacks", "created": "Sep 11, 2026", "ago": "2 hours ago", "url": "https://www.nasdaq.com/articles/two", "related_symbols": ["NVDA|stocks"]},
+                                  {"id": 3, "title": "Old", "publisher": "Barchart", "created": "Sep 3, 2026", "ago": "", "url": "/articles/old", "primarysymbol": "nvda"},
+                                  {"id": 4, "publisher": "no title", "related_symbols": ["nvda|stocks"]},
+                                  {"id": 5, "title": "Market wrap that never names it", "publisher": "Barchart", "created": "Sep 11, 2026", "ago": "3 minutes ago", "url": "/articles/wrap", "related_symbols": ["spy|etf", "aapl|stocks"]}]}}
+        rows = news.parse_nasdaq_news(data, now, "NVDA")
         self.assertEqual([(r["id"], r["headline"], r["source"], r["url"], r["publishedAt"]) for r in rows],
                          [("nasdaq:28351741", "Forget AMD. Here's Who Nvidia Really Needs to Be Worried About.", "The Motley Fool", "https://www.nasdaq.com/articles/forget-amd", "2026-09-11T15:13:00Z"),
                           ("nasdaq:2", "Two hours", "Zacks", "https://www.nasdaq.com/articles/two", "2026-09-11T13:30:00Z"),
-                          ("nasdaq:3", "Old", "Barchart", "https://www.nasdaq.com/articles/old", "2026-09-03T00:00:00Z")])
+                          ("nasdaq:3", "Old", "Barchart", "https://www.nasdaq.com/articles/old", "2026-09-03T00:00:00Z")],
+                         "an item Nasdaq does not tag with the symbol is left out")
 
     def test_the_wire_follows_the_venue(self):
         self.assertEqual(news.source_for("SHOP", "TSX", "CAD"), "tmx")

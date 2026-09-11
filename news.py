@@ -75,12 +75,19 @@ def nasdaq_when(row, now):
         return ""
 
 
-def parse_nasdaq_news(data, now=None):
+def parse_nasdaq_news(data, now=None, symbol=""):
+    """Nasdaq pads a symbol's feed with market-wide pieces; an item is kept only when the
+    symbol is among the ones Nasdaq itself lists for it (a feed asked without a symbol keeps all)."""
     now = now or datetime.now(timezone.utc)
+    want = _s(symbol).strip().lower()
     rows = []
     for it in ((data or {}).get("data") or {}).get("rows") or []:
         if not isinstance(it, dict) or not it.get("id") or not it.get("title"):
             continue
+        if want:
+            named = {_s(x).split("|")[0].strip().lower() for x in (it.get("related_symbols") or [])} | {_s(it.get("primarysymbol")).strip().lower()}
+            if want not in named:
+                continue
         when = nasdaq_when(it, now)
         if not when:
             continue
@@ -115,7 +122,7 @@ def fetch_symbol(symbol, exchange, currency, ssl_context=None, now=None):
             return src, parse_tmx_news(data, sym)
         _pace("api.nasdaq.com")
         text = market._get_text(NASDAQ_NEWS_URL % (sym, PER_SYMBOL), ssl_context, headers=NASDAQ_HEADERS)
-        return src, parse_nasdaq_news(json.loads(text), now)
+        return src, parse_nasdaq_news(json.loads(text), now, sym)
     except Exception as e:
         sys.stderr.write("bagholder news: %s from %s failed: %s\n" % (sym, src, e))
         return src, None
