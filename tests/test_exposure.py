@@ -233,3 +233,30 @@ class PortfolioSlicesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarketsTest(unittest.TestCase):
+    def test_heatmap_tiles_take_the_dominant_sector(self):
+        positions = [{"id": "p1", "mv": 1000.0, "currency": "CAD", "securityId": "a", "short": False, "kind": "Shares", "symbol": "XEQT", "exchange": "TSX", "percentChange": 0.4},
+                     {"id": "p2", "mv": 500.0, "currency": "USD", "securityId": "b", "short": False, "kind": "Shares", "symbol": "NVDA", "exchange": "NASDAQ", "percentChange": -1.2},
+                     {"id": "p3", "mv": 200.0, "currency": "CAD", "securityId": "btc", "short": False, "kind": "Crypto", "symbol": "BTC", "exchange": "Crypto", "percentChange": None},
+                     {"id": "p4", "mv": 50.0, "currency": "USD", "securityId": "opt", "short": False, "kind": "Options", "symbol": "AAPL 20DEC26 200.00 CALL", "underlying": "AAPL", "exchange": "", "percentChange": 3.0},
+                     {"id": "p5", "mv": 0.0, "currency": "CAD", "securityId": "z", "short": False, "kind": "Shares", "symbol": "ZERO", "exchange": "TSX", "percentChange": None},
+                     {"id": "p6", "mv": 250.0, "currency": "USD", "securityId": "b", "short": False, "kind": "Shares", "symbol": "NVDA", "exchange": "NASDAQ", "percentChange": -1.2}]
+        exposures = {"a": {"sectors": {"Financials": 0.3, "Information Technology": 0.45, "Energy": 0.25}},
+                     "b": {"sectors": {"Information Technology": 1.0}},
+                     "share:AAPL::US": {"sectors": {"Information Technology": 1.0}}}
+        tiles = model.heatmap_items(positions, exposures, lambda v, c: v * (2.0 if c == "USD" else 1.0))
+        self.assertEqual([(t["symbol"], t["value"], t["sector"], t["percentChange"]) for t in tiles],
+                         [("XEQT", 1000.0, "Information Technology", 0.4), ("NVDA", 1500.0, "Information Technology", -1.2), ("BTC", 200.0, "Digital assets", None), ("AAPL 20DEC26 200.00 CALL", 100.0, "Information Technology", 3.0)],
+                         "a fund sits under the sector it weights most, a coin under Digital assets, a contract under its underlying; nothing worth nothing; a symbol held in two accounts is one tile")
+
+    def test_watch_rows_carry_the_quote_the_sector_and_the_holding(self):
+        base = {"quotes": {"SHOP@TSX": {"price": 212.06, "priceChange": 1.56, "percentChange": 0.74}},
+                "exposures": {"share:SHOP:": {"sectors": {"Information Technology": 1.0}}},
+                "watchlist": [{"symbol": "SHOP", "exchange": "TSX", "name": "Shopify Inc.", "currency": "CAD"}, {"symbol": "RKLB", "exchange": "NASDAQ", "name": "Rocket Lab", "currency": "USD"}]}
+        positions = [{"id": "p9", "symbol": "SHOP", "exchange": "TSX"}]
+        rows = model.watch_rows(base, positions)
+        self.assertEqual([(r["symbol"], r["last"], r["percentChange"], r["sector"], r["positionId"]) for r in rows],
+                         [("SHOP", 212.06, 0.74, "Information Technology", "p9"), ("RKLB", None, None, "Not classified", None)],
+                         "a quote and a record when the app has them, dashes otherwise; the held one names its holding")

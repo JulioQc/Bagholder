@@ -26,6 +26,8 @@ A local-first trading journal for Wealthsimple users. It runs on your own comput
 | **Order ticket** | **Orders** |
 | ![Order ticket](docs/screenshots/desktop-ticket.png) | ![Orders](docs/screenshots/desktop-orders.png) |
 
+![Markets](docs/screenshots/desktop-markets.png)
+
 Also on iPhone and Android, as native apps written in Swift and Kotlin rather than a cross-platform framework, so they feel at home on each phone. They show the same figures as the desktop and keep everything on the device.
 
 <table>
@@ -115,6 +117,7 @@ Trades can also be imported from Wealthsimple's CSV exports, or entered by hand.
 - **Dashboard**: realized P&L, win rate, profit factor, expectancy, max drawdown net of deposits and withdrawals, annualized returns vs the S&P 500 or the S&P/TSX Composite, equity curve, monthly P&L, P&L by grade, P&L by symbol, and a review queue of ungraded trades.
 - **Trades**: every closed trade with its executions, a price path across the fills, and a journal with a thesis, a grade and tags. Shares, options and crypto are all matched FIFO per account; covered calls, rolls, expiries and assignments are handled.
 - **Portfolio**: market value, net asset value, cost basis, margin used, available margin and unrealized P&L across the accounts you choose; allocation; sector and region exposure, every ETF looked through to its holdings from the issuer's own record; every open holding with the day's change, each opening on its own page with the chart, the fills and the journal that becomes the trade's when it closes.
+- **Markets**: a sector heatmap of your holdings, your watchlist, the S&P/TSX 60, the hundred largest US companies or the largest foreign companies listed in the US, sized by value and coloured by the day's change; a watchlist of listings, indices, futures, rates and currency pairs with live prices and day changes, added from the same search as everything else; and the news on every symbol you hold or watch, from TMX Money and Nasdaq, searchable and scoped to a symbol with a click.
 - **Cashflow**: distributions by month and by holding, with yield on cost and current yield from each fund's declared distributions.
 - **Orders**: an order ticket for shares and ETFs, opened from any symbol in the search list, the book's own or one found by typing (the search asks the exchanges' directories, never Wealthsimple), with a stop loss and a take profit alongside. After a buy fills, the stop loss goes to Wealthsimple as its own stop order, good till cancelled and placed again before Wealthsimple's ninety days end; the take profit is watched and placed as a limit sell when the price reaches it, with the stop level still watched meanwhile. Wealthsimple holds one order on a position's shares at a time, and Bagholder manages that single order so nothing of a bracket's ever outlives the position. An Orders panel from the header lists every order placed here or pending at Wealthsimple with its status read back, its brackets and their state, and lets you adjust a bracket, edit or cancel an open order.
 

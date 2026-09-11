@@ -33,6 +33,8 @@ import threading
 from datetime import date, datetime, timedelta, timezone
 
 import exposure
+import instruments
+import market
 import store
 
 EPS = 1e-10
@@ -2054,6 +2056,9 @@ def build_base(snapshot, market, journal, today=None):
         "balances": [dict(b) for b in (snapshot.get("balances") or []) if isinstance(b, dict)],
         "margin": [dict(m) for m in (snapshot.get("margin") or []) if isinstance(m, dict)],
         "exposures": dict(snapshot.get("exposures") or {}),
+        "watchlist": [dict(w) for w in (snapshot.get("watchlist") or []) if isinstance(w, dict)],
+        "news": [dict(n) for n in (snapshot.get("news") or []) if isinstance(n, dict)],
+        "universes": {k: [dict(r) for r in v] for k, v in (snapshot.get("universes") or {}).items()},
         "cashCurrencies": securities.cash_currencies(),
         "activityCount": len(raw_acts),
     }
@@ -2216,6 +2221,134 @@ def exposure_slices(positions, exposures, cad):
             x["share"] = (x["value"] / total) if total else 0.0
         return out
     return rows(sec_tot, sec_unc), rows(cty_tot, cty_unc)
+
+
+# ---------------------------------------------------------------------------
+# Markets: the watchlist with its quotes, and the heatmap's tiles
+# ---------------------------------------------------------------------------
+def watch_quote_key(symbol, exchange):
+    """Where a watched listing's quote is kept: its symbol and venue, so a listing the
+    book also holds on another venue keeps its own quote."""
+    return _s(symbol).strip().upper() + "@" + _s(exchange).strip().upper()
+
+
+def watch_symbols(base=None):
+    """Every watched listing, with what a quote source needs to price it."""
+    base = base or base_model()
+    out = []
+    for w in base.get("watchlist") or []:
+        inst = instruments.find(w["symbol"], w.get("exchange"))
+        crypto = _s(w.get("exchange")).upper() == "CRYPTO"   # a watched coin is the USD pair, whatever currency the book holds it in
+        rec = {"symbol": w["symbol"], "exchange": w.get("exchange") or "", "currency": "USD" if crypto else (w.get("currency") or ""), "kind": "Instrument" if inst else "Crypto" if crypto else "Shares",
+               "quoteKey": watch_quote_key(w["symbol"], w.get("exchange"))}
+        if inst:
+            rec["yahoo"] = inst["yahoo"]
+        out.append(rec)
+    return out
+
+
+def watch_exposure_key(symbol, exchange, currency):
+    return exposure.SHARE_KEY + market.tmx_symbol(symbol) + ":" + (market.tmx_form(exchange, currency) or "")
+
+
+def dominant_sector(rec):
+    """The sector a record gives most weight to, or Not classified."""
+    sectors = (rec or {}).get("sectors") or {}
+    best, w = "", 0.0
+    for name, weight in sectors.items():
+        name = exposure.norm_sector(name) or name
+        if _num(weight, 0.0) > w:
+            best, w = name, _num(weight, 0.0)
+    return best or UNCLASSIFIED
+
+
+def watch_rows(base, positions):
+    """The watchlist as rows: the listing, its last price and day change from the
+    quote the app keeps for it, and the holding it is when the book holds it too."""
+    quotes = base.get("quotes") or {}
+    exposures = base.get("exposures") or {}
+    held = {}
+    for p in positions:
+        held.setdefault((p["symbol"], _s(p.get("exchange")).upper()), p)
+    out = []
+    for w in base.get("watchlist") or []:
+        q = quotes.get(watch_quote_key(w["symbol"], w.get("exchange"))) or {}
+        pos = held.get((w["symbol"], _s(w.get("exchange")).upper()))
+        inst = instruments.find(w["symbol"], w.get("exchange"))
+        crypto = _s(w.get("exchange")).upper() == "CRYPTO"
+        rec = None if inst or crypto else exposures.get(watch_exposure_key(w["symbol"], w.get("exchange"), w.get("currency")))
+        out.append({
+            "symbol": w["symbol"], "exchange": inst["exchange"] if inst else "Crypto" if crypto else (w.get("exchange") or ""), "name": w.get("name") or "", "currency": "USD" if crypto else (w.get("currency") or ""),
+            "last": _num(q.get("price"), None), "priceChange": _num(q.get("priceChange"), None), "percentChange": _num(q.get("percentChange"), None),
+            "sector": instruments.KIND_LABEL.get(inst["kind"], inst["kind"]) if inst else "Digital assets" if crypto else dominant_sector(rec) if rec else UNCLASSIFIED,
+            "kind": inst["kind"] if inst else "Crypto" if crypto else "Shares", "positionId": pos["id"] if pos else None,
+        })
+    return out
+
+
+def heatmap_items(positions, exposures, cad):
+    """One tile per symbol held: its market value in CAD summed over the accounts holding
+    it, the quote's day change, and the sector its record gives most weight to (a coin is
+    Digital assets, a contract counts under its underlying's record)."""
+    out, by_key = [], {}
+    for p in positions:
+        v = cad(p["mv"], p["currency"])
+        if not (v > 0):
+            continue
+        if p.get("kind") == "Crypto":
+            sector = "Digital assets"
+        elif p.get("kind") == "Options":
+            under = _s(p.get("underlying") or "").upper()
+            us, ca = exposure.SHARE_KEY + under + "::US", exposure.SHARE_KEY + under + ":"
+            first, second = (us, ca) if _s(p.get("currency")).upper() == "USD" else (ca, us)
+            sector = dominant_sector(exposures.get(first) or exposures.get(second))
+        else:
+            sector = dominant_sector(exposures.get(p.get("securityId")))
+        key = (p["symbol"], _s(p.get("exchange")).upper())
+        if key in by_key:
+            by_key[key]["value"] += v
+            continue
+        by_key[key] = {"id": p["id"], "symbol": p["symbol"], "exchange": p.get("exchange") or "", "value": v, "percentChange": p.get("percentChange"), "sector": sector}
+        out.append(by_key[key])
+    return out
+
+
+def news_rows(base, positions, watch):
+    """Every item kept, newest first, each tagged with the listings it was read for: the
+    symbol, whether the book holds it or watches it, and its day change. An item two
+    listings share (a wire's own id) is one row with two tags."""
+    # a listing is one listing whether the book names it QNC.TO or the watchlist QNC: the bare ticker and the venue
+    lk = lambda symbol, exchange: (market.tmx_symbol(symbol), _s(exchange).upper())
+    held = {}
+    for p in positions:
+        held.setdefault(lk(p["symbol"], p.get("exchange")), p)
+    watched = {lk(w["symbol"], w.get("exchange")): w for w in watch}
+    rows, by_id = [], {}
+    for n in base.get("news") or []:
+        key = lk(n["symbol"], n.get("exchange"))
+        p, w = held.get(key), watched.get(key)
+        tag = {"symbol": key[0], "exchange": n.get("exchange") or "", "held": bool(p), "watched": bool(w),
+               "percentChange": p.get("percentChange") if p else (w.get("percentChange") if w else None), "positionId": p["id"] if p else None}
+        row = by_id.get(n["id"])
+        if row:
+            if not any(lk(t["symbol"], t["exchange"]) == key for t in row["tags"]):
+                row["tags"].append(tag)
+            continue
+        row = {"id": n["id"], "headline": n.get("headline") or "", "source": n.get("wire") or "", "url": n.get("url") or "", "publishedAt": n.get("publishedAt") or "", "tags": [tag]}
+        by_id[n["id"]] = row
+        rows.append(row)
+    rows.sort(key=lambda r: r["publishedAt"], reverse=True)
+    return rows
+
+
+def markets_view(base, positions):
+    fx = base["fx"]
+    today = base["today"]
+    cad = lambda amount, currency: to_cad(fx, amount, currency, today)
+    watch = watch_rows(base, positions)
+    universes = {k: [{"id": None, "symbol": r["symbol"], "name": r.get("name") or "", "value": r.get("value") or 0.0, "percentChange": r.get("percentChange"), "sector": r.get("sector") or UNCLASSIFIED, "country": r.get("country") or ""}
+                     for r in rows] for k, rows in (base.get("universes") or {}).items()}
+    return {"holdings": heatmap_items(positions, base.get("exposures") or {}, cad), "watchlist": watch, "news": news_rows(base, positions, watch), "universes": universes}
 
 
 def portfolio_view(base, f, positions):
@@ -2752,6 +2885,7 @@ def build_view(base, filters=None):
         "positions": positions,
         "positionsSummary": {"count": len(positions), "book": book, "mv": mv, "unreal": unreal},
         "portfolio": portfolio,
+        "markets": markets_view(base, positions),
         "cashflow": cashflow_view(base, f, positions_all, portfolio["marginUsed"], portfolio["hasMargin"]),
         "unmatched": base["unmatched"],
         "accounts": base["accounts"],

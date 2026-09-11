@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import gzip
 import json
+from urllib.parse import quote
 import os
 import re
 import ssl
@@ -559,6 +560,31 @@ def occ_root(code):
     return m.group(1) if m else ""
 
 
+def parse_yahoo_quote(text):
+    """Yahoo's chart meta into a quote: the last price, the change against the previous
+    close it states, the currency and the name."""
+    d = json.loads(text or "{}") or {}
+    results = ((d.get("chart") or {}).get("result") or [])
+    meta = (results[0] or {}).get("meta") if results else None
+    if not isinstance(meta, dict) or meta.get("regularMarketPrice") is None:
+        return None
+    last = _num(meta.get("regularMarketPrice"), None)
+    prev = _num(meta.get("chartPreviousClose"), None)
+    if prev is None:
+        prev = _num(meta.get("previousClose"), None)
+    change = (last - prev) if last is not None and prev else None
+    return {"price": last, "priceChange": change, "percentChange": (change / prev * 100.0) if change is not None and prev else None, "prevClose": prev,
+            "currency": str(meta.get("currency") or ""), "name": str(meta.get("shortName") or meta.get("longName") or ""), "exchange": str(meta.get("exchangeName") or "")}
+
+
+def fetch_yahoo_quote(code, ssl_context=None):
+    try:
+        # a one-day chart: its stated previous close is yesterday's, where a longer range states the close before the range
+        return parse_yahoo_quote(_yahoo_get("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=1d" % quote(code, safe=""), ssl_context))
+    except Exception:
+        return None
+
+
 def quote_source(rec):
     """(source, key) for a held instrument, or None when no public source covers it.
     tmx: TMX Money symbol. cboe_ca: Cboe Canada symbol. coinbase: 'BTC-CAD' pair in
@@ -568,6 +594,8 @@ def quote_source(rec):
     ccy = str(rec.get("currency") or "CAD").strip().upper()
     if not sym:
         return None
+    if kind == "Instrument":
+        return ("yahoo_quote", str(rec.get("yahoo") or "")) if rec.get("yahoo") else None
     if kind == "Crypto":
         return ("coinbase", "%s-%s" % (sym, ccy))
     if kind == "Options":
@@ -622,11 +650,55 @@ def option_mark(row):
     return {"price": px, "prevClose": prev, "priceChange": (px - prev) if prev else None, "percentChange": ((px / prev - 1) * 100) if prev else None, "currency": "USD"}
 
 
-def fetch_coinbase_spot(pair, ssl_context=None):
+def coinbase_prev_close(pair, ssl_context=None, now=None):
+    """The close of the last completed UTC day on the pair's Coinbase market, in the pair's
+    currency: the pair's own market when Coinbase has one, else the USD market converted at
+    the day's Bank of Canada rate. Remembered per day, so the quote loop asks once a day."""
+    pair = str(pair or "").strip().upper()
+    now = now or datetime.now(timezone.utc)
+    today = now.date().isoformat()
+    meta_key = "coinbase_prev:" + pair
+    v = store.get_meta(meta_key)
+    if v.startswith(today + "@"):
+        try:
+            return float(v.split("@", 1)[1])
+        except ValueError:
+            return None
+    base, _, ccy = pair.partition("-")
+    prev = None
+    for product in ([pair] if ccy == "USD" else [pair, base + "-USD"]):
+        if not coinbase_market(product, ssl_context, now):
+            continue
+        start = int((now - timedelta(days=4)).timestamp())
+        bars = fetch_coinbase_candles(product, 86400, start, int(now.timestamp()), ssl_context)
+        bars = in_position_currency(bars, product.split("-")[-1], ccy)
+        done = [b for b in bars if datetime.fromtimestamp(b["time"], tz=timezone.utc).date().isoformat() < today]
+        if done:
+            prev = done[-1]["close"]
+            break
+    if prev:
+        store.set_meta(meta_key, "%s@%r" % (today, prev))
+    return prev
+
+
+def fetch_coinbase_spot(pair, ssl_context=None, now=None):
+    """The spot price, with the day's change against the previous UTC day's close when
+    Coinbase has a market to take it from."""
     try:
-        return parse_coinbase(_get_text(COINBASE_URL % pair, ssl_context), pair)
+        rec = parse_coinbase(_get_text(COINBASE_URL % pair, ssl_context), pair)
     except Exception:
         return None
+    if not rec:
+        return None
+    try:
+        prev = coinbase_prev_close(pair, ssl_context, now)
+    except Exception:
+        prev = None
+    if prev:
+        rec["prevClose"] = prev
+        rec["priceChange"] = rec["price"] - prev
+        rec["percentChange"] = (rec["price"] - prev) / prev * 100.0
+    return rec
 
 
 def fetch_cboe_ca_quote(sym, ssl_context=None):
@@ -650,7 +722,7 @@ def quote_symbols_needing_refresh(symbols, now=None, max_age_minutes=QUOTE_REFRE
     out = []
     seen = set()
     for rec in symbols or []:
-        sym = tmx_symbol(rec.get("symbol"))
+        sym = rec.get("quoteKey") or tmx_symbol(rec.get("symbol"))   # a watched listing is keyed by symbol and venue
         src = quote_source(rec)
         if not sym or not src or sym in seen:
             continue
@@ -678,7 +750,9 @@ def refresh_quotes(symbols, ssl_context=None, now=None):
         elif source == "cboe_ca":
             rec = fetch_cboe_ca_quote(key, ssl_context)
         elif source == "coinbase":
-            rec = fetch_coinbase_spot(key, ssl_context)
+            rec = fetch_coinbase_spot(key, ssl_context, now)
+        elif source == "yahoo_quote":
+            rec = fetch_yahoo_quote(key, ssl_context)
         elif source == "cboe_options":
             root = occ_root(key)
             if root not in chains:
