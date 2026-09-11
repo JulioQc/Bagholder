@@ -239,6 +239,7 @@ def normalize_activity(activity):
         a["flags"].append("transfer")
         if "OUT" in sub or cash < 0:
             a["activitySubType"] = "SELL"
+            a["flags"].append("transfer-out")
             a["quantity"] = -qty
             a["netCashAmount"] = abs(cash)
         else:
@@ -913,6 +914,21 @@ def match_fifo(activities):
                 if not book or not rt_open.get(key):
                     rt_open[key] = "rt:" + _s(a.get("id"))
                 book.append({"qty": remaining, "price": per, "date": _s(a.get("transactionDate")), "when": _s(a.get("occurredAt")), "commission": 0.0, "direction": opening, "accountId": _s(a.get("accountId")), "accountType": fifo_account(a), "symbol": _s(a.get("symbol")), "name": _s(a.get("name")), "currency": _s(a.get("currency")), "kind": "Options", "activityId": _s(a.get("id")), "securityId": _s(a.get("securityId")), "rt": rt_open[key], "flags": list(a.get("flags") or [])})
+            continue
+        if "transfer-out" in (a.get("flags") or []):
+            # coins sent out of the account leave at cost: off the open lots
+            # first-in first-out, no slice, no P&L, not a fill of the trade
+            remaining = fill["qty"]
+            while remaining > EPS and book and book[0]["direction"] == "LONG":
+                lot = book[0]
+                matched = min(lot["qty"], remaining)
+                lot["commission"] *= (lot["qty"] - matched) / lot["qty"] if lot["qty"] > 0 else 0.0
+                lot["qty"] -= matched
+                remaining -= matched
+                if lot["qty"] <= EPS:
+                    book.pop(0)
+            if not book:
+                rt_open[key] = None
             continue
         fill["rtBefore"] = rt_open.get(key) if book else None
         remaining = close_against(book, key, fill, a, fill["qty"])

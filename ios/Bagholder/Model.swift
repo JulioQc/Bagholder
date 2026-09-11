@@ -580,6 +580,7 @@ enum BHModel {
             a.flags.append("transfer")
             if sub.contains("OUT") || cash < 0 {
                 a.activitySubType = "SELL"
+                a.flags.append("transfer-out")
                 a.quantity = -qty
                 a.netCashAmount = abs(cash)
             } else {
@@ -1268,6 +1269,27 @@ enum BHModel {
                         qty: remaining, price: per, date: a.transactionDate, when: a.occurredAt, commission: 0, direction: opening,
                         accountId: a.accountId, accountType: fifoAccount(a), symbol: a.symbol, name: a.name, currency: a.currency,
                         kind: "Options", activityId: a.id, securityId: a.securityId, rt: openRt(key), flags: a.flags))
+                }
+                continue
+            }
+            if a.flags.contains("transfer-out") {
+                // coins sent out of the account leave at cost: off the open lots
+                // first-in first-out, no slice, no P&L, not a fill of the trade
+                var remaining = fill.qty
+                while remaining > eps && !(books[key] ?? []).isEmpty && books[key]![0].direction == "LONG" {
+                    var lot = books[key]![0]
+                    let matched = min(lot.qty, remaining)
+                    lot.commission *= lot.qty > 0 ? (lot.qty - matched) / lot.qty : 0
+                    lot.qty -= matched
+                    remaining -= matched
+                    if lot.qty <= eps {
+                        books[key]!.removeFirst()
+                    } else {
+                        books[key]![0] = lot
+                    }
+                }
+                if (books[key] ?? []).isEmpty {
+                    rtOpen[key] = .some(nil)
                 }
                 continue
             }

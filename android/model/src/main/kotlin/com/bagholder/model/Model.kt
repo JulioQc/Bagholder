@@ -416,6 +416,7 @@ object Model {
             a.flags.add("transfer")
             if (sub.contains("OUT") || cash < 0) {
                 a.activitySubType = "SELL"
+                a.flags.add("transfer-out")
                 a.quantity = -qty
                 a.netCashAmount = abs(cash)
             } else {
@@ -1016,6 +1017,21 @@ object Model {
                         remaining, per, a.transactionDate, a.occurredAt, 0.0, opening,
                         a.accountId, fifoAccount(a), a.symbol, a.name, a.currency, "Options", a.id, a.securityId, rtOpen[key], a.flags.toMutableList()))
                 }
+                continue
+            }
+            if (a.flags.contains("transfer-out")) {
+                // coins sent out of the account leave at cost: off the open lots
+                // first-in first-out, no slice, no P&L, not a fill of the trade
+                var remaining = fill.qty
+                while (remaining > EPS && book.isNotEmpty() && book[0].direction == "LONG") {
+                    val lot = book[0]
+                    val matched = min(lot.qty, remaining)
+                    lot.commission *= if (lot.qty > 0) (lot.qty - matched) / lot.qty else 0.0
+                    lot.qty -= matched
+                    remaining -= matched
+                    if (lot.qty <= EPS) book.removeAt(0)
+                }
+                if (book.isEmpty()) rtOpen[key] = null
                 continue
             }
             fill.rtBefore = if (book.isNotEmpty()) rtOpen[key] else null

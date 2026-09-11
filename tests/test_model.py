@@ -561,6 +561,31 @@ class AssignmentTest(unittest.TestCase):
 
 
 class CryptoTest(unittest.TestCase):
+    def test_a_transfer_out_leaves_at_cost_with_no_pnl(self):
+        transfer = lambda id, qty, value, day, out: act(id=id, activityType="CRYPTO_TRANSFER", activitySubType="TRANSFER_OUT" if out else "TRANSFER_IN",
+                                                          rawType="CRYPTO_TRANSFER", direction="DEBIT" if out else "CREDIT", quantity=qty, unitPrice=value / qty,
+                                                          netCashAmount=-value if out else value, transactionDate=day, symbol="ETH", currency="CAD", accountType="Ponzi")
+        acts = [
+            act(id="cb", activityType="CRYPTO_BUY", activitySubType="MARKET_ORDER", rawType="CRYPTO_BUY",
+                quantity=2, unitPrice=100, netCashAmount=200, transactionDate="2026-01-01", symbol="ETH", currency="CAD", accountType="Ponzi"),
+            transfer("ti", 1, 120, "2026-01-05", False),
+            transfer("to", 1, 200, "2026-01-10", True),   # would be +100 as a sale
+            act(id="cs", activityType="CRYPTO_SELL", activitySubType="MARKET_ORDER", rawType="CRYPTO_SELL",
+                quantity=2, unitPrice=150, netCashAmount=300, transactionDate="2026-02-01", symbol="ETH", currency="CAD", accountType="Ponzi"),
+        ]
+        fifo = model.match_fifo(acts)
+        self.assertEqual(fifo["unmatched"], [])
+        self.assertEqual(fifo["open"], [])
+        self.assertEqual([(round(s["pnl"], 6), s["quantity"], s["entryPrice"]) for s in fifo["closed"]], [(50.0, 1.0, 100.0), (30.0, 1.0, 120.0)],
+                         "the coin sent out came off the first lot at cost; the sale closed one at 100 and one at 120")
+        trades = model.build_trades(fifo["closed"], fifo["open"], [], {a["id"]: model.normalize_activity(a) for a in acts}, model.Securities([]), {})
+        self.assertEqual(len(trades), 1)
+        self.assertEqual((round(trades[0]["pnl"], 6), trades[0]["qty"]), (80.0, 2.0))
+        self.assertNotIn("to", {f["id"] for f in trades[0]["fills"]}, "the transfer out is not a fill of the trade")
+        # nothing held: nothing to take off, nothing unmatched, no trade
+        fifo = model.match_fifo([transfer("to2", 1, 200, "2026-01-10", True)])
+        self.assertEqual((fifo["closed"], fifo["open"], fifo["unmatched"]), ([], [], []))
+
     def test_crypto_buy_sell_and_reward(self):
         acts = [
             act(id="cb", activityType="CRYPTO_BUY", activitySubType="MARKET_ORDER", rawType="CRYPTO_BUY",
