@@ -133,6 +133,7 @@ Every instrument Wealthsimple offers has a live price source. TMX Money carries 
 | Hold | Whole days with `d` | `207d` |
 | Dates | ISO `YYYY-MM-DD` in tables; `Jun '26` on chart axes; `18 Jun '26` in chart hovers | |
 | Missing | Em dash | `—` |
+| Symbol | The bare ticker wherever a symbol is shown: a listing's `.TO`, `.V`, `.CN` or `.NE` dropped, a contract's underlying too; the book's own form stays in filter values and ids | `QNC`, `QNC 20NOV26 3.00 CALL` |
 | Subtitles and other secondary lines | Sentence case: a capital first letter unless the line starts with a figure or a symbol | `Total book value`, `Buying power`, `16 accounts, 12 positions`, `+1.1% today` |
 
 Positive amounts use the theme's green, negative its red, both on the P&L figure and its percentage.

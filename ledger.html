@@ -730,7 +730,7 @@ function confirmDialogHtml() {
   if (/^bracket:/.test(state.confirmOpen)) {
     const id = state.confirmOpen.slice(8), b = (state.orders && state.orders.brackets || []).find((x) => x.id === id), busy = state.busy === "cancel";
     return '<div id="confirmDlg" style="position:fixed;inset:0;z-index:20;background:rgba(8,9,16,.55);display:flex;align-items:center;justify-content:center;padding:20px" data-pop="confirm"><div class="card elev-md" style="width:380px;max-width:100%;padding:18px 20px"><h5>Cancel bracket</h5>' +
-      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (b ? esc(b.symbol) + " · " + bracketLegs(b).map((l) => esc(l.text)).join(" · ") : "") + "</div>" +
+      '<div class="dim" style="font-size:12.5px;margin:8px 0 16px;line-height:1.5">' + (b ? esc(symText(b.symbol)) + " · " + bracketLegs(b).map((l) => esc(l.text)).join(" · ") : "") + "</div>" +
       '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-secondary" data-act="closeConfirm">Keep bracket</button><button class="btn" data-act="cancelBracketNow" data-arg=\'' + attr({ id }) + '\' style="background:rgba(224,119,138,.18);color:var(--neg)" ' + (busy ? "disabled" : "") + ">" + (busy ? "Cancelling…" : "Cancel bracket") + "</button></div></div></div>";
   }
   if (/^cancel:/.test(state.confirmOpen)) {
@@ -783,7 +783,7 @@ function tradeModalHtml() {
   const body = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
     fieldHtml("Date", '<input class="input" type="date" id="tf-date" value="' + esc(f.date) + '">') +
     fieldHtml("Account", '<select class="input" id="tf-account">' + '<option value=""' + (f.account ? "" : " selected") + ">Manual</option>" + accounts.filter((a) => a.name).map((a) => '<option value="' + esc(a.id) + '"' + (f.account === a.id ? " selected" : "") + ">" + esc(a.name) + "</option>").join("") + "</select>") +
-    fieldHtml("Symbol", '<input class="input" id="tf-symbol" value="' + esc(f.symbol) + '" placeholder="e.g. LUNR or LUNR 15JAN27 12.00 CALL" autocapitalize="characters">') +
+    fieldHtml("Symbol", '<input class="input" id="tf-symbol" value="' + esc(symText(f.symbol)) + '" placeholder="e.g. LUNR or LUNR 15JAN27 12.00 CALL" autocapitalize="characters">') +
     fieldHtml("Side", seg("side", ["BUY", "SELL"])) +
     fieldHtml("Quantity", '<input class="input" id="tf-qty" inputmode="decimal" value="' + esc(f.qty) + '">') +
     fieldHtml("Price", '<input class="input" id="tf-price" inputmode="decimal" value="' + esc(f.price) + '">') +
@@ -912,7 +912,7 @@ function dateLabel() {
   const p = PRESETS.find((p) => p[0] === f.preset);
   return p ? p[1] : "All time";
 }
-function listSummary(key) { const on = state.filters.lists[key]; if (!on.length) return ""; return on.length === 1 ? on[0] : on[0] + " +" + (on.length - 1); }
+function listSummary(key) { const on = state.filters.lists[key]; if (!on.length) return ""; const first = key === "symbol" ? symText(on[0]) : on[0]; return on.length === 1 ? first : first + " +" + (on.length - 1); }
 function rangeSummary(key) {
   const r = state.filters.ranges[key];
   if (r.v == null || r.v === "") return "";
@@ -935,7 +935,7 @@ function tabsHtml() {
   const sel = (state.page === "trades" || state.page === "portfolio") && state.sel ? selById(state.sel) : null;
   return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
     t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("markets", "Markets") + t("cashflow", "Cashflow") +
-    (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(sel.symbol) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(sel.symbol) + "</span></div>" : "") +
+    (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(symText(sel.symbol)) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(symText(sel.symbol)) + "</span></div>" : "") +
     '<div style="margin-left:auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 0"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;overflow-x:auto;padding-bottom:1px">' +
     chips().map((c) => '<span class="chip"><span class="cf">' + esc(c.field) + '</span><button class="cv" data-act="chipEdit" data-arg=\'' + attr({ key: c.key }) + "'>" + esc(c.value) + '</button><button class="cx" aria-label="Remove filter" data-act="chipRemove" data-arg=\'' + attr({ key: c.key }) + "'>×</button></span>").join("") +
     "</div></div></div>";
@@ -993,6 +993,8 @@ function fieldMatches(q) {
 const _extCache = {};
 let _extTimer = 0;
 const bareSymbol = (s) => String(s || "").toUpperCase().replace(/\.(TO|V|CN|NE)$/, "");
+// a symbol as the app shows it everywhere: the bare ticker, a contract's underlying bared too (QNC.TO 20NOV26 3.00 CALL reads QNC 20NOV26 3.00 CALL)
+const symText = (s) => { s = String(s || ""); const m = s.match(/^(\S+)(.*)$/s); return m ? bareSymbol(m[1]) + m[2] : s; };
 function extRows(q) {
   q = (q || "").trim().toUpperCase();
   if (!q) return [];
@@ -1130,7 +1132,7 @@ function tkTradable(symbol) { return tkLookup(symbol).kind === "Shares"; }
 const tkIconSvg = (path) => '<svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + path + '"/></svg>';
 function tkIcon(side, on, symbol, act, arg) {
   const label = side === "BUY" ? "Buy" : "Sell", path = side === "BUY" ? ICONS.plus : ICONS.minus;
-  return on ? '<button class="tk-rowbtn ' + side.toLowerCase() + '" aria-label="' + label + " " + esc(symbol) + '" data-act="' + act + '" data-arg=\'' + attr(arg) + "'>" + tkIconSvg(path) + "</button>"
+  return on ? '<button class="tk-rowbtn ' + side.toLowerCase() + '" aria-label="' + label + " " + esc(symText(symbol)) + '" data-act="' + act + '" data-arg=\'' + attr(arg) + "'>" + tkIconSvg(path) + "</button>"
     : '<span class="tk-rowbtn off" aria-hidden="true">' + tkIconSvg(path) + "</span>";
 }
 function tkRowButtons(symbol) {
@@ -1258,7 +1260,7 @@ function tkQuoteHtml(v) {
   const q = v.q, t = state.ticket;
   const chg = q.change == null ? "—" : (q.change < 0 ? "−" : "+") + px(Math.abs(q.change)) + " (" + pct(q.changePct, 2) + ")";
   const size = (n) => n == null ? "" : " × " + n2(n, 0);
-  return '<div style="display:flex;justify-content:space-between;gap:12px"><div style="min-width:0"><div style="font-size:20px;line-height:1.2;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(q.symbol || t.symbol) + '</div><div style="font-size:12px;color:var(--ink55);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(q.name || "") + (q.exchange ? " · " + esc(q.exchange) : "") + "</div></div>" +
+  return '<div style="display:flex;justify-content:space-between;gap:12px"><div style="min-width:0"><div style="font-size:20px;line-height:1.2;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(symText(q.symbol || t.symbol)) + '</div><div style="font-size:12px;color:var(--ink55);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(q.name || "") + (q.exchange ? " · " + esc(q.exchange) : "") + "</div></div>" +
     '<div style="text-align:right;flex:none"><div class="num" style="font-size:20px;line-height:1.2;font-weight:500">' + (q.last == null ? "—" : px(q.last)) + '</div><div class="num" style="font-size:12px;margin-top:2px;color:' + (q.change < 0 ? "var(--neg)" : "var(--pos)") + '">' + chg + "</div></div></div>" +
     '<div class="num" style="display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;font-size:12px;padding-top:10px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10)">' +
     '<div><span style="color:var(--ink55)">Bid</span> ' + (q.bid == null ? "—" : px(q.bid) + size(q.bidSize)) + "</div>" +
@@ -1334,7 +1336,7 @@ function tkReviewHtml(v) {
   const slLine = !v.slOn ? "None" : v.isTrail ? "Trails " + v.trailWord + (v.buy ? " under the high" : " over the low") + " · starts at " + px(v.slPrice) : "Market at " + px(v.slPrice);
   const rrStr = v.rr == null ? "—" : "1:" + tkPlain(+v.rr.toFixed(1));
   return '<div class="tk-body" data-keep-scroll="ticket-review">' +
-    '<div style="padding-bottom:14px;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.10)"><div style="font-size:20px;line-height:1.2;font-weight:500"><span style="color:' + (v.buy ? "var(--pos)" : "var(--neg)") + '">' + (v.buy ? "Buy" : "Sell") + "</span> " + esc(qty(v.qtyN)) + " " + esc(q.symbol || t.symbol) + '</div><div style="font-size:12px;color:var(--ink55);margin-top:2px">' + line + "</div></div>" +
+    '<div style="padding-bottom:14px;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.10)"><div style="font-size:20px;line-height:1.2;font-weight:500"><span style="color:' + (v.buy ? "var(--pos)" : "var(--neg)") + '">' + (v.buy ? "Buy" : "Sell") + "</span> " + esc(qty(v.qtyN)) + " " + esc(symText(q.symbol || t.symbol)) + '</div><div style="font-size:12px;color:var(--ink55);margin-top:2px">' + line + "</div></div>" +
     (v.buy ? '<div style="display:flex;flex-direction:column;gap:10px">' + row("Stop loss", slLine) + row("Take profit", v.tpOn ? "Limit at " + px(v.tpPrice) : "None") + "</div>" : "") +
     '<div style="display:flex;flex-direction:column;gap:10px;padding-top:16px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.10)">' +
     (v.buy ? row("At risk", v.slOn && v.risk != null ? tkSAmt(-v.risk) + " (" + pct(v.slPct) + ")" : "—", "var(--neg)", 500) + row("Target", v.tpOn && v.gain != null ? tkSAmt(v.gain) + " (" + pct(v.tpPct) + ")" : "—", "var(--pos)", 500) + row("Risk / reward", rrStr) : "") +
@@ -1499,7 +1501,7 @@ function orderPrice(o) {
 function orderTypeWord(t) { return { MARKET: "Market", LIMIT: "Limit", STOP: "Stop", STOP_LIMIT: "Stop limit" }[t] || (t ? t.charAt(0) + t.slice(1).toLowerCase().replace(/_/g, " ") : "—"); }
 function bracketOf(o) { return (state.orders && state.orders.brackets || []).find((b) => b.orderId === o.id) || null; }
 function orderById(id) { return (state.orders && state.orders.orders || []).find((x) => x.id === id) || null; }
-function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.quantity) + " " + o.symbol + " at " + (o.type === "MARKET" ? "market" : orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase()); }
+function orderLine(o) { return (o.side === "SELL" ? "Sell " : "Buy ") + qty(o.quantity) + " " + symText(o.symbol) + " at " + (o.type === "MARKET" ? "market" : orderPrice(o) + " " + orderTypeWord(o.type).toLowerCase()); }
 // `Limit 165.40 · Day · Trading (Margin)`; a filled order names its fill instead of its type
 // `Limit 165.40 · Day`; a filled order names its fill instead. The account is the panel's heading, not the card's.
 function orderDetailLine(o) {
@@ -1509,7 +1511,7 @@ function orderDetailLine(o) {
   return qty(o.quantity) + " " + how + (tif ? " · " + tif : "");
 }
 // the card's title: the side, then the listing as exchange and symbol, the quantity being the second line's
-function orderTitle(o) { return (o.exchange ? esc(o.exchange) + ": " : "") + esc(o.symbol); }
+function orderTitle(o) { return (o.exchange ? esc(o.exchange) + ": " : "") + esc(symText(o.symbol)); }
 function orderFillLine(o) {
   const filled = o.filledQty || 0;
   // a third line only for what the second cannot say: a partial fill on a pending order, or why it was refused
@@ -1621,7 +1623,7 @@ function draftCardHtml(d) {
     const tp = d.tp;
     if (tp.unit === "pct" ? tp.pct != null && entry != null : tp.price != null) legs += leg("Take profit", "pos", tp.unit === "pct" ? +(entry * (1 + tp.pct / 100)).toFixed(2) : tp.price);
   }
-  return '<div class="od-card draft"><div class="od-row1"><span class="od-title"><span class="od-draft">Draft</span> ' + (d.exchange ? esc(d.exchange) + ": " : "") + esc(d.symbol) + '</span><span class="od-value num">' + (entry != null ? esc(money(qtyN * entry, "", 2)) : "") + "</span></div>" +
+  return '<div class="od-card draft"><div class="od-row1"><span class="od-title"><span class="od-draft">Draft</span> ' + (d.exchange ? esc(d.exchange) + ": " : "") + esc(symText(d.symbol)) + '</span><span class="od-value num">' + (entry != null ? esc(money(qtyN * entry, "", 2)) : "") + "</span></div>" +
     '<div class="od-row2"><span class="od-line">' + esc(line) + "</span></div>" + legs +
     '<div class="od-foot"><span class="od-when">' + esc(orderWhenWord(d.at)) + '</span><span class="od-foot-acts"><button class="od-link draft" data-act="tkResume">Resume</button><button class="od-link neg" data-act="tkDiscardDraft">Discard</button></span></div></div>';
 }
@@ -1639,7 +1641,7 @@ function ordersScopeLabel() { const s = ordersScope(); return s.length ? s.join(
 // an armed bracket is a card of its own under Pending: the position it protects, its legs, the same foot as every card
 function bracketCardHtml(b) {
   const entry = orderById(b.orderId);
-  const title = "Bracket " + ((entry && entry.exchange) ? esc(entry.exchange) + ": " : "") + esc(b.symbol);
+  const title = "Bracket " + ((entry && entry.exchange) ? esc(entry.exchange) + ": " : "") + esc(symText(b.symbol));
   // no second row: the legs say it all, each with its amount under the position's cost at the right
   const value = entry && entry.avgFill ? money(b.quantity * entry.avgFill * orderMultiplier(entry), "", 2) : "";
   const editing = state.bracketEdit && state.bracketEdit.id === b.id;
@@ -1968,14 +1970,14 @@ function bySymbolCardHtml(m) {
   const rows = sortRows(m.bySymbol || [], s.key, s.dir, (r, k) => r[k]);
   return '<div class="card elev-sm" style="padding:16px 18px 12px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px"><h5>By symbol</h5></div>' +
     '<div class="scroll" style="flex:1;min-height:0"><table class="table"><thead><tr>' + th("bySymbol", cols) + "</tr></thead><tbody>" +
-    rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="symbolOpen" data-arg=\'' + attr({ symbol: r.symbol }) + "'><td style=\"font-weight:500;font-variant-numeric:normal\">" + esc(r.symbol) + '</td><td style="text-align:right" class="' + cls(r.pnl) + '">' + money(r.pnl) + '</td><td style="text-align:right">' + r.n + '</td><td style="text-align:right">' + pctPlain(r.winRate) + '</td><td style="text-align:right" class="dim">' + hold(r.avgHold) + "</td></tr>").join("") +
+    rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="symbolOpen" data-arg=\'' + attr({ symbol: r.symbol }) + "'><td style=\"font-weight:500;font-variant-numeric:normal\">" + esc(symText(r.symbol)) + '</td><td style="text-align:right" class="' + cls(r.pnl) + '">' + money(r.pnl) + '</td><td style="text-align:right">' + r.n + '</td><td style="text-align:right">' + pctPlain(r.winRate) + '</td><td style="text-align:right" class="dim">' + hold(r.avgHold) + "</td></tr>").join("") +
     "</tbody></table></div></div>";
 }
 function queueCardHtml(m) {
   const q = m.queue || [];
   return '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline"><h5>Review queue</h5></div><div class="muted" style="font-size:11px;margin-bottom:12px">Closed trades with no grade or thesis</div>' +
     '<div class="scroll" style="flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding-right:2px">' +
-    (q.length ? q.map((r) => '<div class="queue-row" data-act="selectTrade" data-arg=\'' + attr({ id: r.id }) + "'><div style=\"min-width:0\"><div style=\"font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px\">" + esc(r.symbol) + '</div><div class="muted" style="font-size:11px">' + esc(r.date) + " · " + esc(r.missing) + '</div></div><span class="tab" style="margin-left:auto;font-size:12px;color:' + color(r.pnl) + '">' + money(r.pnl) + "</span></div>").join("")
+    (q.length ? q.map((r) => '<div class="queue-row" data-act="selectTrade" data-arg=\'' + attr({ id: r.id }) + "'><div style=\"min-width:0\"><div style=\"font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px\">" + esc(symText(r.symbol)) + '</div><div class="muted" style="font-size:11px">' + esc(r.date) + " · " + esc(r.missing) + '</div></div><span class="tab" style="margin-left:auto;font-size:12px;color:' + color(r.pnl) + '">' + money(r.pnl) + "</span></div>").join("")
       : '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;padding:8px 0"><svg width="20" height="20" viewBox="0 0 256 256" style="fill:var(--pos)"><path d="M232.5 82.5l-128 128a12 12 0 0 1-17 0l-56-56a12 12 0 0 1 17-17L96 185l119.5-119.5a12 12 0 0 1 17 17Z"/></svg><div style="font-size:13px">Nothing left to review</div><div class="dim" style="font-size:11px">Every closed trade has a grade and a thesis</div></div>') +
     "</div></div>";
 }
@@ -2013,7 +2015,7 @@ function tradesTableHtml(m) {
     '<div class="scroll-xy" data-keep-scroll="trades" style="flex:1;min-height:0"><table class="table" style="min-width:1150px;table-layout:fixed"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
     rows.map((t) => '<tr class="tab" style="cursor:pointer" data-act="selectTrade" data-arg=\'' + attr({ id: t.id }) + "'>" +
       '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + "</td>" +
-      '<td title="' + esc(t.symbol) + '" style="font-weight:500;font-variant-numeric:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(t.symbol) + "</td>" +
+      '<td title="' + esc(symText(t.symbol)) + '" style="font-weight:500;font-variant-numeric:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(symText(t.symbol)) + "</td>" +
       '<td class="dim" style="font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(t.exchange || "—") + "</td>" +
       '<td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center">' + esc(t.currency) + "</td>" +
       '<td style="text-align:right;font-weight:500;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</td><td style="text-align:right;color:' + color(t.pnl) + '">' + pct(t.pnlPct) + "</td>" +
@@ -2168,7 +2170,7 @@ function tradeDetailHtml(t, m) {
   const ecols = [{ key: "when", label: "When", padLeft: "0" }, { key: "side", label: "Side" }, { key: "qty", label: "Qty", align: "right" }, { key: "currency", label: "FX", align: "center", padLeft: "18px", padRight: "18px" }, { key: "price", label: "Price", align: "right" }, { key: "amount", label: "Amount", align: "right", padRight: "0" }];
   const known = ((m.options && m.options.tags) || []).filter((x) => (t.tags || []).indexOf(x) < 0);
   return '<div style="display:flex;flex-direction:column;gap:14px">' +
-    '<div class="card elev-sm" style="padding:16px 18px 12px"><div style="display:flex;align-items:flex-start;gap:14px;margin:0 0 14px"><div style="min-width:0"><h4>' + esc(t.symbol) + '</h4><div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(t.name || t.symbol) + (t.exchange ? " · " + esc(t.exchange) + ": " + esc(listingTicker(t)) : "") + "</div>" +
+    '<div class="card elev-sm" style="padding:16px 18px 12px"><div style="display:flex;align-items:flex-start;gap:14px;margin:0 0 14px"><div style="min-width:0"><h4>' + esc(symText(t.symbol)) + '</h4><div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(t.name || t.symbol) + (t.exchange ? " · " + esc(t.exchange) + ": " + esc(listingTicker(t)) : "") + "</div>" +
 "</div>" +
     '<div style="margin-left:auto;text-align:right"><div class="tab" style="font-size:24px;font-weight:500;line-height:1.1;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</div><div class="tab" style="font-size:12px;color:' + color(t.pnl) + ';margin-top:2px">' + pct(t.pnlPct) + "</div></div></div>" +
     '<div id="chartTf" style="display:flex;gap:4px;justify-content:flex-end;margin:0 0 8px"></div><div id="tradeChart" style="position:relative;height:300px"></div></div>' +
@@ -2476,7 +2478,7 @@ function newsCardHtml(items) {
       '<div style="text-align:right">' + (n.tags.length ? chg(first(n)) : "") + "</div>") + "</div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;min-height:28px;margin-bottom:8px"><h5>News</h5>' +
     msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) +
-    (only ? '<span class="chip"><span class="cf">Symbol</span><span class="cv" style="cursor:default">' + esc(only.symbol) + '</span><button class="cx" aria-label="Show every listing" data-act="newsSymClear">×</button></span>' : "") +
+    (only ? '<span class="chip"><span class="cf">Symbol</span><span class="cv" style="cursor:default">' + esc(symText(only.symbol)) + '</span><button class="cx" aria-label="Show every listing" data-act="newsSymClear">×</button></span>' : "") +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:7px;padding:4px 9px;width:200px;border-radius:6px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="newsQuery" value="' + esc(state.newsQuery) + '" placeholder="Search symbol or headline" aria-label="Search the news" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px var(--font);color:var(--ink)"></div></div>' +
     (rows.length ? '<div class="nw-head' + (bare ? " nw-bare" : "") + '">' + gridTh("news", bare ? NEWS_COLS.slice(0, 2) : NEWS_COLS) + '</div><div class="scroll nw-list" style="max-height:436px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">No news.</div>') + "</div>";
@@ -2490,7 +2492,7 @@ function watchlistCardHtml(rows) {
     '<div style="font-size:12px;color:var(--ink55);text-align:right">' + esc(w.exchange || "") + "</div>" +
     '<div class="tab" style="text-align:right;font-size:13px">' + (w.last == null ? "—" : px(w.last)) + "</div>" +
     '<div class="tab" style="text-align:right;font-size:13px;color:' + (w.percentChange == null ? "var(--ink55)" : w.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(w.percentChange) + "</div>" +
-    '<button class="tk-rowbtn sell" aria-label="Remove ' + esc(w.symbol) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.x) + "</button></div>";
+    '<button class="tk-rowbtn sell" aria-label="Remove ' + esc(symText(w.symbol)) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.x) + "</button></div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px">' +
     '<div style="display:flex;align-items:center;min-height:28px;margin-bottom:8px;position:relative"><h5>Watchlist</h5><button class="wl-add" style="margin-left:auto" aria-label="Add to the watchlist" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button>" +
     (state.picker && state.watchMode ? filterPopHtml().replace('class="pop elev-md"', 'class="pop elev-md pop-wl"') : "") + "</div>" +
@@ -2529,7 +2531,7 @@ function portfolioHtml(m) {
     '<div class="card elev-sm" style="padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Holdings</h5></div>' +
     '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0;max-height:362px"><table class="table" style="min-width:640px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="openHolding" data-arg=\'' + attr({ id: r.id }) + "'>" +
-      '<td title="' + esc(r.symbol) + ' · ' + esc(r.account) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">' + esc(r.symbol) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
+      '<td title="' + esc(symText(r.symbol)) + ' · ' + esc(r.account) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">' + esc(symText(r.symbol)) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
       '<td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right">' + px(r.last) + "</td>" +
       '<td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
       '<td style="text-align:right;white-space:nowrap;color:' + (r.dayChange == null ? "var(--ink55)" : color(r.dayChange)) + '">' + (r.dayChange == null ? "—" : signedMoney(r.dayChange, r.currency)) + "</td>" +
@@ -2590,11 +2592,11 @@ function cashflowHtml(m) {
     '</div></div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink60);padding-left:68px;margin-top:6px">' + [...new Set(axis)].map((a) => "<span>" + esc(a) + "</span>").join("") + "</div>" +
     (otherLine ? '<div class="muted" style="font-size:10px;margin-top:8px;padding-left:68px">' + esc(otherLine) + "</div>" : "") + "</div>" +
     '<div class="card elev-sm" style="padding:16px 18px"><h5 style="margin-bottom:4px">Cashflow Positions</h5><div class="scroll" style="max-height:344px"><table class="table" style="font-size:12px;table-layout:fixed"><thead><tr>' + th("yoc", ycols) + "</tr></thead><tbody>" +
-    (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(h.symbol) + '</td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + px(h.avg) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.mv == null ? "—" : money0(h.mv)) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2)) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right;color:' + (h.exPast ? "var(--ink55)" : "var(--ink)") + '">' + esc(h.nextExDate || "—") + '</td><td style="text-align:right;color:' + (h.payPast ? "var(--ink55)" : "var(--ink)") + '">' + esc(h.nextPayDate || "—") + '</td><td style="text-align:right">' + (h.annual == null ? "—" : money0(h.annual / 12)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="13" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
+    (holdings.length ? holdings.map((h) => '<tr class="tab"><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(symText(h.symbol)) + '</td><td style="text-align:right;color:var(--ink75)">' + qty(h.qty) + '</td><td style="text-align:right;color:var(--ink75)">' + px(h.avg) + '</td><td style="text-align:right;color:var(--ink75)">' + money0(h.cost) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.mv == null ? "—" : money0(h.mv)) + '</td><td style="text-align:right;color:var(--ink75)">' + (h.per == null ? "—" : "$" + h.per.toFixed(h.per < 1 ? 4 : 2)) + '</td><td style="text-align:right">' + money0(h.ytd) + '</td><td style="text-align:right">' + money0(h.all) + '</td><td style="text-align:right;color:' + (h.exPast ? "var(--ink55)" : "var(--ink)") + '">' + esc(h.nextExDate || "—") + '</td><td style="text-align:right;color:' + (h.payPast ? "var(--ink55)" : "var(--ink)") + '">' + esc(h.nextPayDate || "—") + '</td><td style="text-align:right">' + (h.annual == null ? "—" : money0(h.annual / 12)) + '</td><td style="text-align:right;font-weight:500;color:var(--accent-300)">' + (h.yoc == null ? "—" : pctPlain(h.yoc, 2)) + '</td><td style="text-align:right;padding-right:0;color:var(--ink75)">' + (h.currentYield == null ? "—" : pctPlain(h.currentYield, 2)) + "</td></tr>").join("") : '<tr><td colspan="13" class="muted" style="padding:22px 0">No income holdings in scope.</td></tr>') +
     "</tbody></table></div></div>" +
     '<div style="display:grid;grid-template-columns:calc((100% - 70px) / 6 * 3 + 28px) minmax(0,1fr);gap:14px;height:380px">' + pieCardHtml(holdingRows) +
     '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><h5 style="margin-bottom:4px">Distribution history</h5><div class="scroll-xy" style="flex:1;min-height:0"><table class="table" style="min-width:560px;width:100%;table-layout:fixed;font-size:12px"><thead><tr>' + th("cash", dcols) + "</tr></thead><tbody>" +
-    (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(r.symbol) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="6" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
+    (rows.length ? rows.map((r) => '<tr class="tab"><td style="color:var(--ink75);white-space:nowrap">' + esc(r.date) + '</td><td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap">' + esc(symText(r.symbol)) + '</td><td style="font-variant-numeric:normal;color:var(--ink75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.account) + '</td><td style="text-align:right;color:var(--ink75)">' + (r.qty ? qty(r.qty) : "—") + '</td><td style="text-align:right;color:var(--ink75)">' + (r.per ? "$" + r.per.toFixed(4) : "—") + '</td><td style="text-align:right;font-weight:500">' + money(r.amount, r.currency) + "</td></tr>").join("") : '<tr><td colspan="6" class="dim" style="padding:22px 0;font-variant-numeric:normal">No distributions match these filters.</td></tr>') +
     "</tbody></table></div></div></div></div>";
 }
 // The pie: each income holding's share of the whole by projected monthly income.
@@ -2624,7 +2626,7 @@ function pieCardHtml(rows) {
       '<div style="position:relative;flex:none;width:max(200px, min(' + SIZE + 'px, 100% - 198px));aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
       '<div id="pieCentre" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">Projected</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(p.total) + "</div></div></div>" +
       '<div id="pieLegend" class="scroll" style="flex:1 1 auto;min-width:0;min-height:0;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;column-gap:12px;row-gap:12px;align-content:center;align-items:center;font-size:12.5px">' +
-      p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.symbol) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + fmt(x.v) + '</span><span class="tab muted" style="text-align:right;white-space:nowrap;min-width:44px">' + pctPlain(x.share) + "</span></span>").join("") +
+      p.items.map((x, i) => '<span data-slice="' + i + '" style="display:contents"><span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span><span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(symText(x.symbol)) + '</span><span class="tab" style="text-align:right;white-space:nowrap">' + fmt(x.v) + '</span><span class="tab muted" style="text-align:right;white-space:nowrap;min-width:44px">' + pctPlain(x.share) + "</span></span>").join("") +
       "</div></div>" : '<div class="muted empty" style="flex:1;font-size:12px">No income holdings in scope.</div>') + "</div>";
 }
 function pieHover(e) {
@@ -2636,7 +2638,7 @@ function pieHover(e) {
   const p = pieSlices(cashflowHoldingRows());
   const x = i >= 0 ? p.items[i] : null;
   const fmt = (v) => money0(v) + "/mo";
-  centre.innerHTML = x ? '<div class="lbl">' + esc(x.symbol) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(x.v) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + pctPlain(x.share) + "</div>"
+  centre.innerHTML = x ? '<div class="lbl">' + esc(symText(x.symbol)) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(x.v) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + pctPlain(x.share) + "</div>"
     : '<div class="lbl">Projected</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + fmt(p.total) + "</div>";
 }
 function pieLeave() { pieHover({ target: document.body }); }
