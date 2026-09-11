@@ -162,10 +162,15 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .tk-rule{height:1px;flex:none;background:linear-gradient(90deg,transparent,rgba(var(--ink-rgb),.14) 48px,rgba(var(--ink-rgb),.14) calc(100% - 48px),transparent)}
 .tk-sec{display:flex;flex-direction:column;gap:12px}
 .tk-sech{display:flex;align-items:center;min-height:20px;font-size:13px;font-weight:500}
-.tk-add{margin-left:auto;border:0;background:transparent;cursor:pointer;font:500 12.5px var(--font);color:var(--accent);padding:0}
-.tk-add:hover{color:var(--accent-300)}
-.tk-rm{margin-left:auto;border:0;background:transparent;cursor:pointer;font:400 12px var(--font);color:rgba(var(--ink-rgb),.45);padding:0}
-.tk-rm:hover{color:var(--accent-300)}
+.tk-wrap{position:relative;display:block}
+.tk-in.has-max{padding-right:54px}
+.tk-max{position:absolute;right:4px;top:4px;bottom:4px;padding:0 9px;border-radius:5px;border:0;background:rgba(var(--ink-rgb),.08);color:var(--ink60);font:500 11.5px var(--font);cursor:pointer}
+.tk-max:hover{background:rgba(var(--ink-rgb),.14);color:var(--ink)}
+.tk-max.off{opacity:.35;pointer-events:none}
+.tk-in.has-unit{padding-right:68px}
+.tk-unit{position:absolute;right:4px;top:4px;bottom:4px;display:flex;padding:2px;border-radius:5px;background:rgba(var(--ink-rgb),.08)}
+.tk-unitopt{padding:0 7px;border-radius:4px;border:0;background:transparent;font:500 11px/20px var(--font);color:var(--ink55);cursor:pointer}
+.tk-unitopt.on{background:var(--surface);color:var(--ink)}
 .tk-read{display:flex;justify-content:space-between;gap:12px;font-size:12px}
 .tk-read .l{color:var(--ink55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-read .r{white-space:nowrap}
@@ -1064,8 +1069,8 @@ function openTicket(symbol, side, listing) {
   state.ticket = {
     step: "form", symbol, securityId: info.securityId, exchange: listing ? listing.exchange || "" : "", side: side === "SELL" ? "SELL" : "BUY", accountId,
     type: "LIMIT", tif: "DAY", qty: held && side === "SELL" ? held.qty : 1, limit: null, stop: null,
-    sl: { on: true, kind: "stop", price: null, trail: null, unit: "pct" }, tp: { on: true, price: null },
-    text: {}, data: null, error: "", busy: false, submitError: "",
+    sl: { on: true, kind: "stop", price: null, pct: null, priceUnit: "amt", trail: null, unit: "pct" }, tp: { on: true, price: null },   // a fixed stop opens as a price, a trail as a percent
+    heldQty: held ? held.qty : null, text: {}, data: null, error: "", busy: false, submitError: "",
   };
   render();
   tkFetch();
@@ -1109,7 +1114,10 @@ function tkVals() {
   const isTrail = t.sl.kind === "trail";
   const trail = t.sl.trail != null ? t.sl.trail : (t.sl.unit === "pct" ? 5 : (entry != null ? +(entry * 0.05).toFixed(2) : null));
   const trailDist = entry == null || trail == null ? null : (t.sl.unit === "pct" ? entry * trail / 100 : trail);
-  const slPrice = isTrail ? (entry != null && trailDist != null ? +(entry - dir * trailDist).toFixed(2) : null) : (t.sl.price != null ? t.sl.price : (entry != null ? +(entry * (1 - dir * 0.05)).toFixed(2) : null));
+  const slPctIn = t.sl.pct != null ? t.sl.pct : 5;   // a fixed stop typed as a percent below the working price
+  const slPrice = isTrail ? (entry != null && trailDist != null ? +(entry - dir * trailDist).toFixed(2) : null)
+    : t.sl.priceUnit === "pct" ? (entry != null ? +(entry * (1 - dir * slPctIn / 100)).toFixed(2) : null)
+    : (t.sl.price != null ? t.sl.price : (entry != null ? +(entry * (1 - dir * 0.05)).toFixed(2) : null));
   const tpPrice = t.tp.price != null ? t.tp.price : (entry != null ? +(entry * (1 + dir * 0.10)).toFixed(2) : null);
   const risk = entry != null && slPrice != null ? dir * (entry - slPrice) * qtyN * mult : null;
   const gain = entry != null && tpPrice != null ? dir * (tpPrice - entry) * qtyN * mult : null;
@@ -1127,7 +1135,7 @@ function tkVals() {
   const typeWord = { MARKET: "Market", LIMIT: "Limit", STOP: "Stop", STOP_LIMIT: "Stop limit" }[t.type];
   const tifWord = t.tif === "DAY" ? "Day" : "GTC";
   const trailWord = t.sl.unit === "pct" ? tkPlain(trail) + "%" : px(trail);
-  return { buy, dir, last, mult, qtyN, limit, stop, entry, notional, slOn, tpOn, isTrail, trail, slPrice, tpPrice, risk, gain, slPct, tpPct, rr, cad, nav, acct, isMargin, linkedMargin, marginAfter, after, typeWord, tifWord, trailWord, q, d };
+  return { buy, dir, last, mult, qtyN, limit, stop, entry, notional, slOn, tpOn, isTrail, trail, slPctIn, slPrice, tpPrice, risk, gain, slPct, tpPct, rr, cad, nav, acct, isMargin, linkedMargin, marginAfter, after, typeWord, tifWord, trailWord, q, d };
 }
 function tkPlain(n) { return n == null ? "—" : Number.isInteger(n) ? String(n) : String(+n.toFixed(2)); }
 // a price an order may carry: two decimals from $1, four below it
@@ -1147,7 +1155,26 @@ function tkQuoteHtml(v) {
     '<div><span style="color:var(--ink55)">Ask</span> ' + (q.ask == null ? "—" : px(q.ask) + size(q.askSize)) + "</div></div>";
 }
 function tkField(label, inner) { return '<label class="tk-f"><span class="tk-l">' + label + "</span>" + inner + "</label>"; }
-function tkInput(id, value) { return '<input class="tk-in num" id="' + id + '" inputmode="decimal" autocomplete="off" value="' + esc(value) + '">'; }
+function tkInput(id, value, cls, inner) {
+  const input = '<input class="tk-in num' + (cls ? " " + cls : "") + '" id="' + id + '" inputmode="decimal" autocomplete="off" value="' + esc(value) + '">';
+  return inner ? '<span class="tk-wrap">' + input + inner + "</span>" : input;
+}
+// the stop field reads the trail or the stop in the unit chosen: a price or amount per share under `$`, a percent under `%`
+function tkSlText(v) {
+  const t = state.ticket;
+  if (v.isTrail) return t.sl.unit === "pct" ? tkPlain(v.trail) : px(v.trail);
+  return t.sl.priceUnit === "pct" ? tkPlain(v.slPctIn) : px(v.slPrice);
+}
+// Max: on a Buy the whole shares the account's buying power covers at the working price, on a Sell the position's shares
+function tkMaxQty(v) {
+  const t = state.ticket, d = t.data || {};
+  if (!v.buy) return t.heldQty != null && t.heldQty > 0 ? t.heldQty : null;
+  return d.buyingPower != null && v.entry > 0 ? Math.max(0, Math.floor(d.buyingPower / (v.entry * v.mult))) : null;
+}
+function tkMaxBtn(v) { return '<button type="button" class="tk-max' + (tkMaxQty(v) == null ? " off" : "") + '" data-act="tkMax">Max</button>'; }
+function tkUnitSwitch(unit) {
+  return '<span class="tk-unit">' + [["amt", "$"], ["pct", "%"]].map((u) => '<button type="button" class="tk-unitopt' + (unit === u[0] ? " on" : "") + '" data-act="tkSlUnit" data-arg=\'{"unit":"' + u[0] + '"}\'>' + u[1] + "</button>").join("") + "</span>";
+}
 function tkSelect(id, opts, cur) {
   return '<span class="tk-sel"><select class="tk-in" id="' + id + '">' + opts.map((o) => '<option value="' + esc(o[0]) + '"' + (o[0] === cur ? " selected" : "") + ">" + esc(o[1]) + "</option>").join("") + '</select><svg width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="' + ICONS.caretDown + '"/></svg></span>';
 }
@@ -1163,17 +1190,19 @@ function tkFormHtml(v) {
   const showTif = t.type !== "MARKET";   // the order's own; the brackets always go out good till cancelled
   const val = (key, fmt) => tx[key] != null ? tx[key] : fmt;
   let grid = tkField("Account", tkSelect("tk-account", tkAccounts().map((a) => [a.id, a.name]), t.accountId)) +
-    tkField("Shares", tkInput("tk-qty", val("qty", qty(v.qtyN)))) +
+    tkField("Shares", tkInput("tk-qty", val("qty", qty(v.qtyN)), "has-max", tkMaxBtn(v))) +
     tkField("Order type", tkSelect("tk-type", TK_TYPES.filter((x) => types.indexOf(x[0]) >= 0), t.type)) +
     (showLimit ? tkField("Limit price", tkInput("tk-limit", val("limit", px(v.limit)))) : "") +
     (showStop ? tkField("Stop price", tkInput("tk-stop", val("stop", px(v.stop)))) : "") +
     (showTif ? tkField("Time in force", tkSelect("tk-tif", TK_TIFS, t.tif)) : "") +
-    tkField("Amount", tkInput("tk-amt", val("amt", tkAmt(v.notional))));
-  const sec = (title, on, act, body) => '<div class="tk-sec"><div class="tk-sech">' + title + (on ? '<button class="tk-rm" data-act="' + act + '">Remove</button>' : '<button class="tk-add" data-act="' + act + '">Add</button>') + "</div>" + (on ? body : "") + "</div>";
+    tkField("Amount", tkInput("tk-amt", val("amt", tkAmt(v.notional)), "has-max", tkMaxBtn(v)));
+  // a section's Add and Remove are the ⌘K rows' plus and cross
+  const sec = (title, on, act, body) => '<div class="tk-sec"><div class="tk-sech">' + title +
+    (on ? '<button class="tk-rowbtn sell" style="margin-left:auto" aria-label="Remove ' + title.toLowerCase() + '" data-act="' + act + '">' + tkIconSvg(ICONS.x) + "</button>"
+      : '<button class="tk-rowbtn buy" style="margin-left:auto" aria-label="Add ' + title.toLowerCase() + '" data-act="' + act + '">' + tkIconSvg(ICONS.plus) + "</button>") + "</div>" + (on ? body : "") + "</div>";
   const slRead = tkSlRead(v), tpRead = tkTpRead(v);
   const slBody = '<div class="tk-grid">' + tkField("Type", tkSelect("tk-slkind", [["stop", "Stop"], ["trail", "Trailing stop"]], t.sl.kind)) +
-    (v.isTrail ? tkField("Trail", tkInput("tk-sltrail", val("sltrail", t.sl.unit === "pct" ? tkPlain(v.trail) : px(v.trail)))) + tkField("Trail by", tkSelect("tk-slunit", [["pct", "Percent of price"], ["amt", "Amount per share"]], t.sl.unit))
-      : tkField("Stop price", tkInput("tk-slprice", val("slprice", px(v.slPrice))))) + "</div>" +
+    tkField(v.isTrail ? "Trail" : "Stop", tkInput(v.isTrail ? "tk-sltrail" : "tk-slprice", val(v.isTrail ? "sltrail" : "slprice", tkSlText(v)), "has-unit", tkUnitSwitch(v.isTrail ? t.sl.unit : t.sl.priceUnit))) + "</div>" +
     '<div class="tk-read"><span class="l" id="tk-sl-l">' + esc(slRead[0]) + '</span><span class="r num" id="tk-sl-r" style="color:var(--neg)">' + esc(slRead[1]) + "</span></div>";
   const tpBody = '<div class="tk-grid">' + tkField("Limit price", tkInput("tk-tp", val("tp", px(v.tpPrice)))) + "<div></div></div>" +
     '<div class="tk-read"><span class="l" id="tk-tp-l">' + esc(tpRead[0]) + '</span><span class="r num" id="tk-tp-r" style="color:var(--pos)">' + esc(tpRead[1]) + "</span></div>";
@@ -1234,12 +1263,13 @@ function tkPatch() {
   const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
   const setVal = (id, text) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = text; };
   const qc = document.getElementById("tkQuote"); if (qc) qc.innerHTML = tkQuoteHtml(v);
+  const maxOff = tkMaxQty(v) == null; document.querySelectorAll(".tk-max").forEach((b) => b.classList.toggle("off", maxOff));
   if (t.text.qty == null) setVal("tk-qty", qty(v.qtyN));
   if (t.text.amt == null) setVal("tk-amt", tkAmt(v.notional));
   if (t.text.limit == null) setVal("tk-limit", px(v.limit));
   if (t.text.stop == null) setVal("tk-stop", px(v.stop));
-  if (t.text.slprice == null) setVal("tk-slprice", px(v.slPrice));
-  if (t.text.sltrail == null) setVal("tk-sltrail", t.sl.unit === "pct" ? tkPlain(v.trail) : px(v.trail));
+  if (t.text.slprice == null) setVal("tk-slprice", tkSlText(v));
+  if (t.text.sltrail == null) setVal("tk-sltrail", tkSlText(v));
   if (t.text.tp == null) setVal("tk-tp", px(v.tpPrice));
   const sl = tkSlRead(v), tp = tkTpRead(v);
   set("tk-sl-l", sl[0]); set("tk-sl-r", sl[1]); set("tk-tp-l", tp[0]); set("tk-tp-r", tp[1]);
@@ -1254,7 +1284,7 @@ function tkInputEvent(el) {
     case "tk-amt": { t.text.amt = el.value; const v = tkVals(); const raw = n != null && v.entry > 0 ? n / (v.entry * v.mult) : 0; t.qty = Math.floor(raw); t.text.qty = null; break; }
     case "tk-limit": t.text.limit = el.value; t.limit = n; break;
     case "tk-stop": t.text.stop = el.value; t.stop = n; break;
-    case "tk-slprice": t.text.slprice = el.value; t.sl.price = n; break;
+    case "tk-slprice": t.text.slprice = el.value; if (t.sl.priceUnit === "pct") t.sl.pct = n; else t.sl.price = n; break;
     case "tk-sltrail": t.text.sltrail = el.value; t.sl.trail = n; break;
     case "tk-tp": t.text.tp = el.value; t.tp.price = n; break;
     default: return;
@@ -1269,11 +1299,11 @@ function tkBlur(el) {
   if (key === "qty" && !(t.qty > 0)) t.qty = 1;
   if (key === "limit" && !(t.limit > 0)) t.limit = null;
   if (key === "stop" && !(t.stop > 0)) t.stop = null;
-  if (key === "slprice" && !(t.sl.price > 0)) t.sl.price = null;
+  if (key === "slprice") { if (!(t.sl.price > 0)) t.sl.price = null; if (!(t.sl.pct > 0)) t.sl.pct = null; }
   if (key === "sltrail" && !(t.sl.trail > 0)) t.sl.trail = null;
   if (key === "tp" && !(t.tp.price > 0)) t.tp.price = null;
   const v = tkVals();
-  el.value = { qty: qty(v.qtyN), amt: tkAmt(v.notional), limit: px(v.limit), stop: px(v.stop), slprice: px(v.slPrice), sltrail: t.sl.unit === "pct" ? tkPlain(v.trail) : px(v.trail), tp: px(v.tpPrice) }[key];
+  el.value = { qty: qty(v.qtyN), amt: tkAmt(v.notional), limit: px(v.limit), stop: px(v.stop), slprice: tkSlText(v), sltrail: tkSlText(v), tp: px(v.tpPrice) }[key];
   tkPatch();
 }
 function tkChange(el) {
@@ -1283,7 +1313,6 @@ function tkChange(el) {
     case "tk-type": t.type = el.value; break;
     case "tk-tif": t.tif = el.value; break;
     case "tk-slkind": t.sl.kind = el.value; break;
-    case "tk-slunit": t.sl.unit = el.value; t.sl.trail = null; break;
     default: return;
   }
   renderTicket();
@@ -2589,8 +2618,10 @@ function act(name, arg, ev) {
     case "bracketEditSave": bracketEditSave(arg.id); break;
     case "bracketRemove": bracketRemove(arg.id, arg.leg); break;
     case "tkClose": closeTicket(); break;
-    case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.trail = null; t.tp.price = null; t.limit = null; t.stop = null; renderTicket(); } break;
+    case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.pct = null; t.sl.trail = null; t.tp.price = null; t.limit = null; t.stop = null; renderTicket(); } break;
     case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
+    case "tkSlUnit": if (state.ticket) { const t = state.ticket, u = arg.unit === "amt" ? "amt" : "pct"; if (t.sl.kind === "trail") { t.sl.unit = u; t.sl.trail = null; t.text.sltrail = null; } else { t.sl.priceUnit = u; t.sl.price = null; t.sl.pct = null; t.text.slprice = null; } renderTicket(); } break;
+    case "tkMax": if (state.ticket) { const t = state.ticket, m = tkMaxQty(tkVals()); if (m != null) { t.qty = m; t.text.qty = null; t.text.amt = null; renderTicket(); } } break;
     case "tkTpOn": case "tkTpOff": if (state.ticket) { state.ticket.tp.on = name === "tkTpOn"; renderTicket(); } break;
     case "tkReview": if (state.ticket) { if (!(tkVals().qtyN > 0)) { state.ticket.qty = 1; } state.ticket.step = "review"; state.ticket.submitError = ""; renderTicket(); } break;
     case "tkBack": if (state.ticket) { state.ticket.step = "form"; state.ticket.submitError = ""; renderTicket(); } break;
