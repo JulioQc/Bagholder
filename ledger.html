@@ -88,6 +88,11 @@ textarea.input{resize:none;line-height:1.5}
 .heat-chg{color:rgba(255,255,255,.82);font-variant-numeric:tabular-nums}
 html[data-theme="light"] .heat-tile{color:#1b1d27}
 html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
+.nw-row{display:grid;grid-template-columns:66px minmax(0,1fr);gap:12px;padding:11px 8px;margin:0 -8px;border-radius:6px;cursor:pointer;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.06)}
+.nw-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
+.nw-chip{display:inline-flex;gap:5px;align-items:center;padding:2px 7px;border-radius:5px;background:var(--chip-bg);font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;border:0;cursor:default;font-family:var(--font)}
+.nw-chip.go{cursor:pointer}
+.nw-chip.go:hover{box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.2)}
 .wl-head,.wl-row{display:grid;grid-template-columns:1fr 78px 72px 22px;gap:12px;align-items:center;padding:0 16px;margin:0 -16px}
 .wl-head{padding-bottom:6px}
 .wl-row{padding:8px 16px}
@@ -323,6 +328,7 @@ const state = {
   ordersOpen: false,
   ticketDraft: null,   // a closed ticket's typed fields, until the same symbol and side open again
   watchMode: false,   // ⌘K opened from the Watchlist's plus: its rows add to the list instead of filtering
+  newsScope: (function () { try { return localStorage.getItem("bh2.news") || "all"; } catch (e) { return "all"; } })(),
   heat: (function () { try { return Object.assign({ universe: "holdings", size: "value" }, JSON.parse(localStorage.getItem("bh2.heatmap") || "{}")); } catch (e) { return { universe: "holdings", size: "value" }; } })(),
   ordersTab: "pending",
   orderEdit: null,
@@ -2370,9 +2376,23 @@ function heatmapCardHtml(mk) {
     [-3, -2, -1, -0.2, 0.2, 1, 2, 3].map((c) => '<span style="width:16px;height:9px;border-radius:2px;background:' + heatColor(c) + '"></span>').join("") + "<span>+3%</span></span></div>" +
     (tiles.length ? '<div id="heatBox" style="position:relative;width:100%;height:430px"></div>' : '<div class="muted empty" style="font-size:12px">' + empty + "</div>") + "</div>";
 }
-function newsCardHtml() {
-  return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;margin-bottom:6px"><h5>News</h5></div>' +
-    '<div class="muted" style="font-size:12px">No news.</div></div>';
+function newsWhen(iso) {
+  const t = Date.parse(iso); if (!isFinite(t)) return "—";
+  const d = new Date(t), now = new Date();
+  if (d.toDateString() === now.toDateString()) return (d.getHours() % 12 || 12) + ":" + String(d.getMinutes()).padStart(2, "0") + " " + (d.getHours() < 12 ? "AM" : "PM");
+  return MON[d.getMonth()] + " " + d.getDate() + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "");
+}
+function newsCardHtml(items) {
+  const scope = state.newsScope;
+  const rows = (items || []).filter((n) => scope === "all" || n.tags.some((t) => scope === "holdings" ? t.held : t.watched));
+  const chip = (t) => '<button class="nw-chip' + (t.positionId ? " go" : "") + '"' + (t.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: t.positionId }) + "'" : "") + ' style="color:' + (t.percentChange == null ? "var(--ink60)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + esc(t.symbol) + (t.percentChange == null ? "" : " " + signedPct(t.percentChange)) + "</button>";
+  const row = (n) => '<div class="nw-row" data-act="newsOpen" data-arg=\'' + attr({ url: n.url }) + "'>" +
+    '<div class="tab" style="font-size:11px;color:var(--ink55);padding-top:1px">' + esc(newsWhen(n.publishedAt)) + "</div>" +
+    '<div style="min-width:0;display:flex;flex-direction:column;gap:5px"><div style="font-size:13px;line-height:1.35">' + esc(n.headline) + "</div>" +
+    '<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink55);flex-wrap:wrap"><span>' + esc(n.source) + "</span>" + n.tags.map(chip).join("") + "</div></div></div>";
+  return '<div class="card elev-sm" style="padding:14px 16px 6px"><div style="display:flex;align-items:center;gap:14px;margin-bottom:6px"><h5>News</h5>' +
+    msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) + "</div>" +
+    (rows.length ? '<div class="scroll" style="max-height:436px">' + rows.map(row).join("") + "</div>" : '<div class="muted" style="font-size:12px;padding-bottom:8px">No news.</div>') + "</div>";
 }
 function watchlistCardHtml(rows) {
   const row = (w) => '<div class="wl-row' + (w.positionId ? " go" : "") + '"' + (w.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: w.positionId }) + "'" : "") + ">" +
@@ -2389,7 +2409,7 @@ function watchlistCardHtml(rows) {
 function marketsHtml(m) {
   const mk = m.markets || { holdings: [], watchlist: [] };
   return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px">' + heatmapCardHtml(mk) +
-    '<div style="display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px;align-items:start">' + newsCardHtml() + watchlistCardHtml(mk.watchlist || []) + "</div></div>";
+    '<div style="display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px;align-items:start">' + newsCardHtml(mk.news || []) + watchlistCardHtml(mk.watchlist || []) + "</div></div>";
 }
 function watchedKeys() { return new Set((((state.model || {}).markets || {}).watchlist || []).map((w) => w.symbol + "@" + String(w.exchange || "").toUpperCase())); }
 // ⌘K in watch mode: every symbol row carries one icon, add to the watchlist, lit when it is on it
@@ -2798,6 +2818,8 @@ function act(name, arg, ev) {
     case "watchRemove": api("POST", "/api/watchlist/remove", arg).then(() => loadModel()); break;
     case "heatUniverse": case "heatSize": Object.assign(state.heat, arg); try { localStorage.setItem("bh2.heatmap", JSON.stringify(state.heat)); } catch (e) {} render(); break;
     case "heatOpen": openHolding(arg.id); break;
+    case "newsScope": state.newsScope = arg.scope; try { localStorage.setItem("bh2.news", arg.scope); } catch (e) {} render(); break;
+    case "newsOpen": if (arg.url) window.open(arg.url, "_blank", "noopener"); break;
     case "chipEdit": state.picker = arg.key === "search" ? "fields" : arg.key; state.menuOpen = false; render(); break;
     case "chipRemove": clearField(arg.key); break;
     case "chartTf": setChartTf(arg.tf); render(); break;

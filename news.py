@@ -1,0 +1,152 @@
+"""News for the symbols the book holds and watches, from two public per-symbol sources:
+TMX Money's news for Canadian listings and Nasdaq's for US ones. Each item is tagged with
+the symbol it was read for; nothing is guessed from headlines."""
+from __future__ import annotations
+
+import html
+import json
+import re
+import sys
+import time
+from datetime import datetime, timedelta, timezone
+
+import market
+import store
+
+TMX_NEWS_QUERY = ("query getNewsForSymbol($symbol: String!, $page: Int!, $limit: Int!, $locale: String!) "
+                  "{ news: getNewsForSymbol(symbol: $symbol, page: $page, limit: $limit, locale: $locale) { headline datetime source newsid summary } }")
+TMX_NEWS_URL = "https://money.tmx.com/en/quote/%s/news/%s"
+NASDAQ_NEWS_URL = "https://api.nasdaq.com/api/news/topic/articlebysymbol?q=%s|STOCKS&offset=0&limit=%d"
+UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
+NASDAQ_HEADERS = {"User-Agent": UA, "Accept": "application/json, text/plain, */*", "Origin": "https://www.nasdaq.com", "Referer": "https://www.nasdaq.com/"}
+TMX_HEADERS = {"User-Agent": UA, "locale": "en", "Origin": "https://money.tmx.com", "Referer": "https://money.tmx.com/"}
+PER_SYMBOL = 12
+FRESH_MINUTES = 15
+KEEP = 400            # items kept in the database, newest first
+
+_last_call = {}
+
+
+def _pace(host, seconds=0.6):
+    wait = _last_call.get(host, 0) + seconds - time.time()
+    if wait > 0:
+        time.sleep(wait)
+    _last_call[host] = time.time()
+
+
+def _s(v):
+    return "" if v is None else str(v)
+
+
+def clean_text(t):
+    return re.sub(r"\s+", " ", html.unescape(_s(t))).strip()
+
+
+def parse_tmx_news(data, symbol):
+    """TMX's items for a symbol into news rows: the headline, its exact time, the wire it came on, and TMX's page for it."""
+    rows = []
+    for it in ((data or {}).get("data") or {}).get("news") or []:
+        if not isinstance(it, dict) or not it.get("newsid"):
+            continue
+        when = _s(it.get("datetime"))
+        try:
+            ts = datetime.fromisoformat(when).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            continue
+        rows.append({"id": "tmx:%s" % it["newsid"], "headline": clean_text(it.get("headline")), "source": clean_text(it.get("source")).replace(" via QuoteMedia", ""),
+                     "url": TMX_NEWS_URL % (market.tmx_symbol(symbol), it["newsid"]), "publishedAt": ts})
+    return rows
+
+
+_AGO = re.compile(r"(\d+)\s+(minute|hour|day)s?\s+ago", re.I)
+
+
+def nasdaq_when(row, now):
+    """Nasdaq gives a day and an age ('17 minutes ago'): the time is the age taken off now,
+    to the minute; older items keep the day alone at midnight UTC."""
+    m = _AGO.search(_s(row.get("ago")))
+    if m:
+        n, unit = int(m.group(1)), m.group(2).lower()
+        delta = timedelta(minutes=n) if unit == "minute" else timedelta(hours=n) if unit == "hour" else timedelta(days=n)
+        return (now - delta).strftime("%Y-%m-%dT%H:%M:00Z")
+    try:
+        return datetime.strptime(_s(row.get("created")), "%b %d, %Y").strftime("%Y-%m-%dT00:00:00Z")
+    except ValueError:
+        return ""
+
+
+def parse_nasdaq_news(data, now=None):
+    now = now or datetime.now(timezone.utc)
+    rows = []
+    for it in ((data or {}).get("data") or {}).get("rows") or []:
+        if not isinstance(it, dict) or not it.get("id") or not it.get("title"):
+            continue
+        when = nasdaq_when(it, now)
+        if not when:
+            continue
+        url = _s(it.get("url"))
+        rows.append({"id": "nasdaq:%s" % it["id"], "headline": clean_text(it.get("title")), "source": clean_text(it.get("publisher")),
+                     "url": url if url.startswith("http") else "https://www.nasdaq.com" + url, "publishedAt": when})
+    return rows
+
+
+def source_for(symbol, exchange, currency):
+    """Which wire answers for a listing: TMX for the Canadian venues it carries, Nasdaq for US ones."""
+    form = market.tmx_form(exchange, currency)
+    if form == ":US":
+        return "nasdaq"
+    if form is None:
+        return ""
+    return "tmx"
+
+
+def fetch_symbol(symbol, exchange, currency, ssl_context=None, now=None):
+    """The latest items for one listing from its wire, as rows; [] when the wire has none or fails."""
+    src = source_for(symbol, exchange, currency)
+    sym = market.tmx_symbol(symbol)
+    if not src or not sym:
+        return src, []
+    try:
+        if src == "tmx":
+            _pace("app-money.tmx.com")
+            data = market._post_json("https://app-money.tmx.com/graphql",
+                                     {"operationName": "getNewsForSymbol", "variables": {"symbol": sym, "page": 1, "limit": PER_SYMBOL, "locale": "en"}, "query": TMX_NEWS_QUERY},
+                                     ssl_context, TMX_HEADERS)
+            return src, parse_tmx_news(data, sym)
+        _pace("api.nasdaq.com")
+        text = market._get_text(NASDAQ_NEWS_URL % (sym, PER_SYMBOL), ssl_context, headers=NASDAQ_HEADERS)
+        return src, parse_nasdaq_news(json.loads(text), now)
+    except Exception as e:
+        sys.stderr.write("bagholder news: %s from %s failed: %s\n" % (sym, src, e))
+        return src, None
+
+
+def stale(listings, now=None, minutes=FRESH_MINUTES):
+    """The listings whose news is older than `minutes`, as (symbol, exchange, currency)."""
+    now = now or datetime.now(timezone.utc)
+    fetched = store.news_fetched_at()
+    out = []
+    for symbol, exchange, currency in listings:
+        key = store.news_key(symbol, exchange)
+        last = fetched.get(key) or ""
+        try:
+            age = now - datetime.fromisoformat(last.replace("Z", "+00:00")) if last else None
+        except ValueError:
+            age = None
+        if age is None or age > timedelta(minutes=minutes):
+            out.append((symbol, exchange, currency))
+    return out
+
+
+def refresh(listings, ssl_context=None, now=None):
+    """Read the wire for every stale listing; each answer replaces that listing's rows. Returns how many answered."""
+    done = 0
+    for symbol, exchange, currency in stale(listings, now=now):
+        src, rows = fetch_symbol(symbol, exchange, currency, ssl_context, now)
+        if rows is None:
+            continue
+        store.replace_news(symbol, exchange, src, rows, now=now)
+        done += 1
+    if done:
+        store.trim_news(KEEP)
+    return done

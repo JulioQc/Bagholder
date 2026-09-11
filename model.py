@@ -2056,6 +2056,7 @@ def build_base(snapshot, market, journal, today=None):
         "margin": [dict(m) for m in (snapshot.get("margin") or []) if isinstance(m, dict)],
         "exposures": dict(snapshot.get("exposures") or {}),
         "watchlist": [dict(w) for w in (snapshot.get("watchlist") or []) if isinstance(w, dict)],
+        "news": [dict(n) for n in (snapshot.get("news") or []) if isinstance(n, dict)],
         "cashCurrencies": securities.cash_currencies(),
         "activityCount": len(raw_acts),
     }
@@ -2299,11 +2300,36 @@ def heatmap_items(positions, exposures, cad):
     return out
 
 
+def news_rows(base, positions, watch):
+    """Every item kept, newest first, each tagged with the listings it was read for: the
+    symbol, whether the book holds it or watches it, and its day change. An item two
+    listings share (a wire's own id) is one row with two tags."""
+    held = {(p["symbol"], _s(p.get("exchange")).upper()): p for p in positions}
+    watched = {(w["symbol"], _s(w.get("exchange")).upper()): w for w in watch}
+    rows, by_id = [], {}
+    for n in base.get("news") or []:
+        key = (n["symbol"], _s(n.get("exchange")).upper())
+        p, w = held.get(key), watched.get(key)
+        tag = {"symbol": n["symbol"], "exchange": n.get("exchange") or "", "held": bool(p), "watched": bool(w),
+               "percentChange": p.get("percentChange") if p else (w.get("percentChange") if w else None), "positionId": p["id"] if p else None}
+        row = by_id.get(n["id"])
+        if row:
+            if not any(t["symbol"] == tag["symbol"] and t["exchange"] == tag["exchange"] for t in row["tags"]):
+                row["tags"].append(tag)
+            continue
+        row = {"id": n["id"], "headline": n.get("headline") or "", "source": n.get("wire") or "", "url": n.get("url") or "", "publishedAt": n.get("publishedAt") or "", "tags": [tag]}
+        by_id[n["id"]] = row
+        rows.append(row)
+    rows.sort(key=lambda r: r["publishedAt"], reverse=True)
+    return rows
+
+
 def markets_view(base, positions):
     fx = base["fx"]
     today = base["today"]
     cad = lambda amount, currency: to_cad(fx, amount, currency, today)
-    return {"holdings": heatmap_items(positions, base.get("exposures") or {}, cad), "watchlist": watch_rows(base, positions)}
+    watch = watch_rows(base, positions)
+    return {"holdings": heatmap_items(positions, base.get("exposures") or {}, cad), "watchlist": watch, "news": news_rows(base, positions, watch)}
 
 
 def portfolio_view(base, f, positions):

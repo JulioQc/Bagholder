@@ -38,6 +38,7 @@ from urllib.request import Request, urlopen
 import csvimport
 import exposure
 import market
+import news
 import model
 import store
 
@@ -5428,8 +5429,50 @@ def watch_remove(body):
     if not sym:
         return {"ok": False, "error": "symbol required"}
     store.remove_watch(sym, body.get("exchange"))
+    store.forget_news(sym, body.get("exchange"))
     model.invalidate()
     return {"ok": True, "watchlist": store.list_watchlist()}
+
+
+def news_listings():
+    """Every listing whose news is wanted: the shares and funds held, and the watched ones."""
+    base = model.base_model()
+    seen, out = set(), []
+    for p in base.get("positions") or []:
+        if p.get("kind") != "Shares":
+            continue
+        key = (p["symbol"], _s(p.get("exchange")).upper())
+        if key not in seen:
+            seen.add(key)
+            out.append((p["symbol"], p.get("exchange") or "", p.get("currency") or ""))
+    for w in base.get("watchlist") or []:
+        key = (w["symbol"], _s(w.get("exchange")).upper())
+        if key not in seen:
+            seen.add(key)
+            out.append((w["symbol"], w.get("exchange") or "", w.get("currency") or ""))
+    return out
+
+
+def refresh_news():
+    """The wires for every listing whose news is older than fifteen minutes. Never raises."""
+    try:
+        n = news.refresh(news_listings(), _ssl_context())
+        if n:
+            model.invalidate()
+        return n
+    except Exception as e:
+        sys.stderr.write("bagholder news: refresh failed: %s\n" % e)
+        return 0
+
+
+def news_loop():
+    """Half a minute after start, then every five minutes, each listing read once per fifteen."""
+    if _stop.wait(30):
+        return
+    while not _stop.is_set():
+        refresh_news()
+        if _stop.wait(300):
+            return
 
 
 def open_orders_count():
@@ -6418,6 +6461,7 @@ def main():
     threading.Thread(target=orders_loop, name="bagholder-orders-loop", daemon=True).start()
     threading.Thread(target=bracket_loop, name="bagholder-bracket-loop", daemon=True).start()
     threading.Thread(target=exposure_loop, name="bagholder-exposure-loop", daemon=True).start()
+    threading.Thread(target=news_loop, name="bagholder-news-loop", daemon=True).start()
     threading.Thread(target=market_loop, name="bagholder-market-loop", daemon=True).start()
     threading.Thread(target=archive_loop, name="bagholder-archive", daemon=True).start()
     threading.Thread(target=watch_loop, name="bagholder-watch", daemon=True).start()

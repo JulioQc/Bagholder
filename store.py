@@ -302,6 +302,20 @@ def _init_schema(conn):
             PRIMARY KEY (symbol, exchange)
         );
 
+        CREATE TABLE IF NOT EXISTS news (
+            id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            exchange TEXT NOT NULL DEFAULT '',
+            source TEXT,
+            headline TEXT,
+            wire TEXT,
+            url TEXT,
+            published_at TEXT,
+            fetched_at TEXT,
+            PRIMARY KEY (id, symbol, exchange)
+        );
+        CREATE INDEX IF NOT EXISTS news_published ON news (published_at);
+
         CREATE TABLE IF NOT EXISTS orders (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
@@ -2057,6 +2071,7 @@ def data_version():
                 "SELECT COUNT(*), MAX(fetched_at) FROM margin",
                 "SELECT COUNT(*), MAX(fetched_at) FROM exposures",
                 "SELECT COUNT(*), MAX(added_at) FROM watchlist",
+                "SELECT COUNT(*), MAX(fetched_at) FROM news",
                 "SELECT COUNT(*), SUM(COALESCE(net_liquidation_value, 0)) FROM accounts",
             ):
                 row = conn.execute(sql).fetchone()
@@ -2259,6 +2274,7 @@ def snapshot():
             "margin": margin,
             "exposures": {r["key"]: _exposure_from_row(r) for r in conn.execute("SELECT * FROM exposures").fetchall()},
                 "watchlist": [_watch_from_row(r) for r in conn.execute("SELECT * FROM watchlist ORDER BY added_at, symbol").fetchall()],
+                "news": [_news_from_row(r) for r in conn.execute("SELECT * FROM news ORDER BY published_at DESC, id").fetchall()],
                 "navHistory": nav,
                 "navByAccount": nav_by_account,
                 "syncedAt": synced,
@@ -2598,6 +2614,70 @@ def remove_watch(symbol, exchange=""):
             cur = conn.execute("DELETE FROM watchlist WHERE symbol = ? AND exchange = ?", (_s(symbol).strip().upper(), _s(exchange).strip().upper()))
             conn.commit()
             return cur.rowcount > 0
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# news: the items read for each symbol, newest first
+# ---------------------------------------------------------------------------
+def news_key(symbol, exchange):
+    return _s(symbol).strip().upper() + "@" + _s(exchange).strip().upper()
+
+
+def _news_from_row(r):
+    return {"id": r["id"], "symbol": r["symbol"], "exchange": r["exchange"] or "", "source": r["source"] or "", "headline": r["headline"] or "",
+            "wire": r["wire"] or "", "url": r["url"] or "", "publishedAt": r["published_at"] or "", "fetchedAt": r["fetched_at"] or ""}
+
+
+def replace_news(symbol, exchange, source, rows, now=None):
+    """The wire's latest items for one listing, in place of what it had."""
+    sym, ex = _s(symbol).strip().upper(), _s(exchange).strip().upper()
+    when = _s(now.strftime("%Y-%m-%dT%H:%M:%SZ") if hasattr(now, "strftime") else now) or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute("DELETE FROM news WHERE symbol = ? AND exchange = ?", (sym, ex))
+            conn.executemany("INSERT OR REPLACE INTO news (id, symbol, exchange, source, headline, wire, url, published_at, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                             [(_s(r.get("id")), sym, ex, _s(source), _s(r.get("headline")), _s(r.get("source")), _s(r.get("url")), _s(r.get("publishedAt")), when) for r in rows or [] if r.get("id")])
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("news_fetched:" + news_key(sym, ex), when))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def news_fetched_at():
+    """{symbol@venue: when its wire was last read}."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            return {r["key"][len("news_fetched:"):]: r["value"] for r in conn.execute("SELECT key, value FROM meta WHERE key LIKE 'news_fetched:%'").fetchall()}
+        finally:
+            conn.close()
+
+
+def forget_news(symbol, exchange):
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute("DELETE FROM news WHERE symbol = ? AND exchange = ?", (_s(symbol).strip().upper(), _s(exchange).strip().upper()))
+            conn.execute("DELETE FROM meta WHERE key = ?", ("news_fetched:" + news_key(symbol, exchange),))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def trim_news(keep):
+    """Keep the newest `keep` items over every symbol."""
+    with _lock:
+        conn = _connect()
+        try:
+            _init_schema(conn)
+            conn.execute("DELETE FROM news WHERE rowid NOT IN (SELECT rowid FROM news ORDER BY published_at DESC, id LIMIT ?)", (int(keep),))
+            conn.commit()
         finally:
             conn.close()
 
