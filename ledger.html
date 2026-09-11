@@ -2085,10 +2085,10 @@ function portfolioSlices(pf) {
 const _donuts = {};
 // a donut's two pieces: the ring with its centre, and the legend (swatch, name, share; mirrored when `side` is "r")
 // `size` sets the ring's width (a number in px, or a CSS width such as "100%" of its grid cell); without it the ring takes
-// what its card leaves beside the legend. A null `total` leaves
-// the centre to its label alone, and a hovered slice then shows its name and share
-function donutPieces(key, centreLabel, items, total, side, size) {
-  _donuts[key] = { items, total, centreLabel };
+// what its card leaves beside the legend. With a null `total` the centre reads `centreText` under its label (a count, say),
+// and a hovered slice shows its name and share
+function donutPieces(key, centreLabel, items, total, side, size, centreText) {
+  _donuts[key] = { items, total, centreLabel, centreText };
   const R = 44, W = 14, C = 60, SIZE = size || 264;
   let acc = 0;
   const arcs = items.map((x, i) => {
@@ -2101,7 +2101,7 @@ function donutPieces(key, centreLabel, items, total, side, size) {
   }).join("");
   const ring = '<div style="position:relative;flex:none;width:' + (typeof size === "string" ? size : size ? SIZE + "px" : "max(200px, min(" + SIZE + "px, 100% - 140px))") + ';aspect-ratio:1/1"><svg viewBox="0 0 120 120" style="width:100%;height:100%;display:block">' + arcs + "</svg>" +
     // the centre is inset to the ring's hole so a hovered name wraps inside it
-    '<div id="' + key + 'Centre" style="position:absolute;inset:21%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">' + esc(centreLabel) + "</div>" + (total == null ? "" : '<div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(total) + "</div>") + "</div></div>";
+    '<div id="' + key + 'Centre" style="position:absolute;inset:21%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none"><div class="lbl">' + esc(centreLabel) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + (total == null ? esc(centreText || "") : money0(total)) + "</div></div></div>";
   const swatch = (x) => '<span style="width:9px;height:9px;border-radius:2px;background:' + x.color + '"></span>';
   const name = (x) => '<span style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' + (side === "r" ? ";text-align:right" : "") + '">' + esc(x.label) + "</span>";
   const share = (x) => '<span class="tab" style="text-align:' + (side === "r" ? "left" : "right") + ';white-space:nowrap">' + pctPlain(x.share) + "</span>";
@@ -2132,14 +2132,16 @@ function exposureSlices(rows, cap) {
   return { total, items };
 }
 // one card the width of the row: the Sectors legend at the left edge, its donut, the Regions donut, its legend mirrored at
-// the right edge; the two donuts sit together at the centre, each reading its word until a slice is hovered
+// the right edge; the two donuts sit together at the centre, each reading how many sectors or regions the positions span
+// until a slice is hovered
 function exposureCardsHtml(pf) {
   const sec = exposureSlices(pf.sectors, 12).items, reg = exposureSlices(pf.regions).items;
+  const count = (rows) => String((rows || []).filter((x) => x.name !== "Not classified" && x.value > 0).length);
   const head = '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px"><h5>Sectors</h5><h5>Regions</h5></div>';
   if (!sec.length && !reg.length) return '<div class="card elev-sm" style="padding:16px 18px 12px">' + head + '<div class="muted empty" style="font-size:12px">No open positions in scope.</div></div>';
   // the legend columns keep their natural width and share what the donuts leave, so the pair stays centred; the donut
   // columns grow from 240px to 340px each as the card allows
-  const a = donutPieces("xsec", "Sector", sec, null, "l", "100%"), b = donutPieces("xreg", "Region", reg, null, "r", "100%");
+  const a = donutPieces("xsec", "Sectors", sec, null, "l", "100%", count(pf.sectors)), b = donutPieces("xreg", "Regions", reg, null, "r", "100%", count(pf.regions));
   return '<div class="card elev-sm" style="padding:16px 18px 12px">' + head +
     '<div style="display:grid;grid-template-columns:minmax(max-content,1fr) minmax(240px,340px) minmax(240px,340px) minmax(max-content,1fr);column-gap:40px;align-items:center">' +
     '<div id="xsecPlot" data-hover="xsec" style="display:contents">' + a.legend + a.ring + "</div>" +
@@ -2154,7 +2156,7 @@ function donutHover(e, key) {
   const x = i >= 0 ? d.items[i] : null;
   centre.innerHTML = x ? (d.total == null ? '<div class="lbl">' + esc(x.label) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + pctPlain(x.share) + "</div>"
       : '<div class="lbl">' + esc(x.label) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(x.v) + '</div><div class="muted" style="font-size:11px;margin-top:2px">' + pctPlain(x.share) + "</div>")
-    : '<div class="lbl">' + esc(d.centreLabel) + "</div>" + (d.total == null ? "" : '<div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + money0(d.total) + "</div>");
+    : '<div class="lbl">' + esc(d.centreLabel) + '</div><div class="tab" style="font-size:17px;font-weight:500;margin-top:2px">' + (d.total == null ? esc(d.centreText || "") : money0(d.total)) + "</div>";
 }
 function ppieHover(e) { donutHover(e, "ppie"); }
 function ppieLeave() { ppieHover({ target: document.body }); }
