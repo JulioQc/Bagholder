@@ -138,14 +138,14 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .status-err{color:var(--neg)}
 /* order ticket */
 .tk-scrim{position:fixed;inset:24px;border-radius:20px;background:rgba(16,18,32,.42);z-index:20}
-.tk{position:fixed;top:24px;right:24px;bottom:24px;width:400px;background:var(--surface);z-index:21;display:flex;flex-direction:column;border-radius:0 20px 20px 0;box-shadow:-1px 0 0 rgba(var(--ink-rgb),.12),-18px 0 40px rgba(0,0,0,.45);overflow:hidden}
+.tk{position:fixed;top:24px;right:24px;bottom:24px;width:400px;background:var(--bg);z-index:21;display:flex;flex-direction:column;border-radius:0 20px 20px 0;box-shadow:-1px 0 0 rgba(var(--ink-rgb),.12),-18px 0 40px rgba(0,0,0,.45);overflow:hidden}
 .tk .num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
 .tk-hd{display:flex;align-items:center;padding:18px 24px 0;flex:none}
 .tk-title{font-size:15px;font-weight:500}
 .tk-x{margin-left:auto;margin-right:-6px;width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:rgba(var(--ink-rgb),.62);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .tk-x:hover{background:rgba(var(--ink-rgb),.08)}
 .tk-body{flex:1;overflow-y:auto;padding:22px 24px 20px;display:flex;flex-direction:column;gap:22px}
-.tk-quote{padding:14px 16px;border-radius:8px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.08);display:flex;flex-direction:column;gap:10px}
+.tk-quote{padding:14px 16px;border-radius:8px;background:var(--surface);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),var(--outline));display:flex;flex-direction:column;gap:10px}
 .tk-seg{display:flex;padding:2px;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.10)}
 .tk-segopt{flex:1;padding:8px;border-radius:6px;border:0;background:transparent;color:var(--ink60);font:500 13px var(--font);cursor:pointer}
 .tk-segopt.on.buy{background:rgba(var(--pos-rgb),.16);color:var(--pos)}
@@ -200,7 +200,7 @@ tr.sel{box-shadow:inset 0 0 0 9999px rgba(var(--accent-rgb),.14)}
 .od-state{flex:none;color:var(--ink55)}
 .od-state.neg{color:var(--neg)}
 .od-leg-text{color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.od-card{padding:14px 16px 12px;border-radius:10px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.08);display:flex;flex-direction:column;gap:6px}
+.od-card{padding:14px 16px 12px;border-radius:10px;background:var(--surface);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),var(--outline));display:flex;flex-direction:column;gap:6px}
 .od-row1{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .od-title{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .od-pill{flex:none;font-size:12px;font-weight:500;padding:2px 9px;border-radius:999px;background:rgba(var(--ink-rgb),.10);color:var(--ink75)}
@@ -288,6 +288,7 @@ const state = {
   orders: null,
   ordersError: "",
   ordersOpen: false,
+  ticketDraft: null,   // a closed ticket's typed fields, until the same symbol and side open again
   ordersTab: "pending",
   orderEdit: null,
   bracketEdit: null,
@@ -1057,6 +1058,14 @@ function tkRememberedAccount(accounts) {
   try { const id = localStorage.getItem("bh2.ticketAccount"); if (id && accounts.some((a) => a.id === id)) return id; } catch (e) {}
   return "";
 }
+const TK_DRAFT_KEYS = ["accountId", "type", "tif", "qty", "limit", "stop", "sl", "tp", "text"];
+function tkSaveDraft(t) {
+  const d = { symbol: t.symbol, side: t.side }; TK_DRAFT_KEYS.forEach((k) => { d[k] = t[k]; });
+  state.ticketDraft = d;
+  try { localStorage.setItem("bh2.ticketDraft", JSON.stringify(d)); } catch (e) {}
+}
+function tkDropDraft() { state.ticketDraft = null; try { localStorage.removeItem("bh2.ticketDraft"); } catch (e) {} }
+function tkLoadDraft() { try { state.ticketDraft = JSON.parse(localStorage.getItem("bh2.ticketDraft") || "null"); } catch (e) { state.ticketDraft = null; } }
 function openTicket(symbol, side, listing) {
   delete _keptScroll["ticket-form"]; delete _keptScroll["ticket-review"];   // a ticket opens at its top
   const info = tkLookup(symbol);
@@ -1072,10 +1081,15 @@ function openTicket(symbol, side, listing) {
     sl: { on: true, kind: "stop", price: null, pct: null, priceUnit: "amt", trail: null, unit: "pct" }, tp: { on: true, price: null, pct: null, unit: "amt" },   // a fixed stop and the target open as prices, a trail as a percent
     heldQty: held ? held.qty : null, text: {}, data: null, error: "", busy: false, submitError: "",
   };
+  const d = state.ticketDraft;
+  if (d && d.symbol === symbol && d.side === state.ticket.side) TK_DRAFT_KEYS.forEach((k) => { if (d[k] != null) state.ticket[k] = d[k]; });   // what was typed before the ticket closed
   render();
   tkFetch();
 }
-function closeTicket() {
+// the cross, Escape and the scrim keep the draft; Cancel and a sent order discard it
+function closeTicket(discard) {
+  const t = state.ticket;
+  if (t) { if (discard) tkDropDraft(); else tkSaveDraft(t); }
   state.ticket = null; _tkSeq++;
   clearTimeout(_tkTimer);
   render();
@@ -1217,7 +1231,7 @@ function tkFormHtml(v) {
     '<div class="tk-grid">' + grid + "</div>" +
     (v.buy ? '<div class="tk-rule"></div>' + sec("Stop loss", t.sl.on, t.sl.on ? "tkSlOff" : "tkSlOn", slBody) + '<div class="tk-rule"></div>' + sec("Take profit", t.tp.on, t.tp.on ? "tkTpOff" : "tkTpOn", tpBody) : "") +
     "</div>" +
-    '<div class="tk-ft"><button class="tk-cancel" data-act="tkClose">Cancel</button><button class="tk-go" data-act="tkReview">Review</button></div>';
+    '<div class="tk-ft"><button class="tk-cancel" data-act="tkDiscard">Cancel</button><button class="tk-go" data-act="tkReview">Review</button></div>';
 }
 function tkReviewHtml(v) {
   const t = state.ticket, q = v.q;
@@ -1344,7 +1358,7 @@ function tkSubmit() {
     if (!r || !r.ok) { cur.submitError = (r && r.error) || "Could not submit the order."; renderTicket(); return; }
     state.notice = tkNotice(v, r.status === "sent"); state.noticeKind = "ok";
     setTimeout(() => { state.notice = ""; renderHeaderOnly(); }, 10000);   // longer than the other notices: it names the whole order
-    closeTicket();
+    closeTicket(true);
   });
 }
 
@@ -2622,6 +2636,7 @@ function act(name, arg, ev) {
     case "bracketEditSave": bracketEditSave(arg.id); break;
     case "bracketRemove": bracketRemove(arg.id, arg.leg); break;
     case "tkClose": closeTicket(); break;
+    case "tkDiscard": closeTicket(true); break;
     case "tkSide": if (state.ticket) { const t = state.ticket; t.side = arg.side === "SELL" ? "SELL" : "BUY"; t.sl.price = null; t.sl.pct = null; t.sl.trail = null; t.tp.price = null; t.tp.pct = null; t.limit = null; t.stop = null; renderTicket(); } break;
     case "tkSlOn": case "tkSlOff": if (state.ticket) { state.ticket.sl.on = name === "tkSlOn"; renderTicket(); } break;
     case "tkSlUnit": if (state.ticket) { const t = state.ticket, u = arg.unit === "amt" ? "amt" : "pct"; if (t.sl.kind === "trail") { t.sl.unit = u; t.sl.trail = null; t.text.sltrail = null; } else { t.sl.priceUnit = u; t.sl.price = null; t.sl.pct = null; t.text.slprice = null; } renderTicket(); } break;
@@ -2869,6 +2884,7 @@ function bind() {
 }
 function boot() {
   try { applyTheme(localStorage.getItem("bh2.theme") || "nocturne"); } catch (e) {}
+  tkLoadDraft();
   try { const s = JSON.parse(localStorage.getItem("bh2.sort") || "null"); if (s) Object.keys(state.sort).forEach((k) => { if (s[k] && s[k].key) state.sort[k] = s[k]; }); } catch (e) {}
   const h = hashState();
   state.page = h.page;
