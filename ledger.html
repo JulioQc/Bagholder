@@ -2230,17 +2230,16 @@ function portfolioTilesHtml(pf) {
   const n = pf.positionCount || 0;
   const positions = n + (n === 1 ? " position" : " positions");
   const unavailable = pf.availableMarginUnavailable || [];
-  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px">' +
-    tile("Market value", money0(pf.marketValue), "across " + n + (n === 1 ? " open position" : " open positions")) +
-    tile("Net asset value", pf.nav == null ? "—" : money0(pf.nav), pf.nav == null ? "—" : pf.navAccounts + (pf.navAccounts === 1 ? " account, " : " accounts, ") + positions) +
+  // Market value has no tile: the Allocation donut's centre carries it
+  const tiles = tile("Net asset value", pf.nav == null ? "—" : money0(pf.nav), pf.nav == null ? "—" : pf.navAccounts + (pf.navAccounts === 1 ? " account, " : " accounts, ") + positions) +
     tile("Cost basis", money0(pf.costBasis), "Total book value") +
     (pf.hasMargin
       ? tile("Margin used", money0(pf.marginUsed), pf.marginUsedPct == null ? "—" : pctPlain(pf.marginUsedPct) + " of market value") +
         tile("Available margin", pf.availableMargin == null ? "—" : money0(pf.availableMargin), unavailable.length ? "unavailable for " + esc(unavailable.join(", ")) : pf.availableMargin == null ? "—" : "buying power")
-      : tile("Cash", money0(pf.cash), pf.cashPct == null ? "—" : pctPlain(pf.cashPct) + " of net asset value") +
-        tile("Day change", pf.dayChange == null ? "—" : signedMoney(pf.dayChange, null, 2), pf.dayChangePct == null ? "—" : pct(pf.dayChangePct) + " today", pf.dayChange == null ? "" : cls(pf.dayChange))) +
-    tile("Unrealized P&amp;L", signedMoney(pf.unrealized, null, 2), pf.unrealizedPct == null ? "—" : pct(pf.unrealizedPct) + (pf.unrealized >= 0 ? " gain" : " loss"), cls(pf.unrealized)) +
-    "</div>";
+      : tile("Cash", money0(pf.cash), pf.cashPct == null ? "—" : pctPlain(pf.cashPct) + " of net asset value")) +
+    tile("1d change", pf.dayChange == null ? "—" : signedMoney(pf.dayChange, null, 2), pf.dayChangePct == null ? "—" : pct(pf.dayChangePct) + " in last 24h", pf.dayChange == null ? "" : cls(pf.dayChange)) +
+    tile("Unrealized P&amp;L", signedMoney(pf.unrealized, null, 2), pf.unrealizedPct == null ? "—" : pct(pf.unrealizedPct) + (pf.unrealized >= 0 ? " gain" : " loss"), cls(pf.unrealized));
+  return '<div style="display:grid;grid-template-columns:repeat(' + (pf.hasMargin ? 6 : 5) + ',minmax(0,1fr));gap:14px">' + tiles + "</div>";
 }
 function portfolioSlices(pf) {
   const all = pf.allocation || [];

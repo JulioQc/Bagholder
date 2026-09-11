@@ -194,17 +194,16 @@ Bars are cached in the database. Closed days are written once and never rewritte
 
 ### Portfolio
 
-Six tiles in the style of the dashboard tiles, CAD aggregates over the accounts in scope (every account when the filter names none). The two margin tiles show when an open account in scope is a margin account (its type contains `MARGIN`); otherwise Cash and Day change take their places, so the row is always six:
+Tiles in the style of the dashboard tiles, CAD aggregates over the accounts in scope (every account when the filter names none). There is no Market value tile: the Allocation donut's centre carries that figure. The two margin tiles show when an open account in scope is a margin account (its type contains `MARGIN`), six tiles in all; otherwise Cash takes their place and the row is five:
 
 | Tile | Value | Subtitle |
 |---|---|---|
-| Market value | Market value of the open positions in scope, converted at today's rate | `across N open positions` |
 | Net asset value | Sum of Wealthsimple's net liquidation value per account, as Wealthsimple states it; every open account counts, cash accounts included, so it differs from Market value by the cash; closed accounts never count | `N accounts, N positions`, or `—` when no account in scope reports one |
 | Cost basis | Book value of the open positions in scope | `Total book value` |
 | Margin used | The negative cash balances of the accounts in scope, one per currency, shown positive, converted to CAD | Its share of Market value |
 | Available margin | Sum of Wealthsimple's buying power over the open margin accounts in scope, the figure Wealthsimple labels Margin available. Only margin accounts are asked: every self-directed account answers the same query with the cash it could buy with, which is not margin | `buying power`; `unavailable for <account>` when Wealthsimple cannot price a security in it; `—` with no margin account in scope |
 | Cash (no margin account in scope) | The positive cash balances of the accounts in scope, one per currency, converted to CAD | Its share of Net asset value, or `—` without one |
-| Day change (no margin account in scope) | The day's change of every quoted open position in scope (quantity × the quote's price change, reversed on a short), converted to CAD, signed and coloured; `—` when nothing has a quote | That change over what those positions were worth at the previous close, `x% today` |
+| 1d change | The day's change of every quoted open position in scope (quantity × the quote's price change, reversed on a short), converted to CAD, signed and coloured; `—` when nothing has a quote | That change over what those positions were worth at the previous close, signed, `+x% in last 24h` |
 | Unrealized P&L | Unrealized P&L of the open positions in scope, converted at today's rate | Its percentage of Cost basis, `gain` or `loss` |
 
 Nothing on the tab is derived beyond these sums: Max buying power, Portfolio value and the interest panel of Wealthsimple's margin page have no source and are not shown.
