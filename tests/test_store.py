@@ -3045,7 +3045,10 @@ class OrdersPanelTest(_EngineBase):
         self.assertEqual(bagholder.open_orders_count(), 1)
         self.assertEqual(bagholder.status_payload()["openOrders"], 1)
         store.update_order(oid, {"status": "filled", "filledQty": 25})
-        self._tick()   # the stop is placed: an exit row, not counted
+        self._tick()   # the entry is gone and the bracket is armed: one card in the panel, one in the badge
+        self.assertEqual(store.get_bracket(b["id"])["status"], "armed")
+        self.assertEqual(bagholder.open_orders_count(), 1)
+        store.update_bracket(b["id"], {"status": "done"})
         self.assertEqual(bagholder.open_orders_count(), 0)
 
     def test_edit_sends_wealthsimples_modify_with_the_new_price_and_quantity(self):
