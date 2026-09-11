@@ -110,6 +110,17 @@ class ModelTest(unittest.TestCase):
         self.assertEqual([(r["id"], r["market"], [t["symbol"] for t in r["tags"]]) for r in rows], [("nasdaq:1", True, []), ("nasdaq:2", True, ["MU"])],
                          "a market item carries no tag; the same story read for a watched listing is one row, tagged, and still the market's")
 
+    def test_the_same_headline_under_other_ids_is_one_row(self):
+        base = {"news": [{"id": "tmx:1", "symbol": "ENB", "exchange": "TSX", "wire": "PR Newswire", "headline": "Enbridge Announces Retirement of Greg Ebel", "url": "u1", "publishedAt": "2026-09-08T12:00:00Z"},
+                         {"id": "tmx:2", "symbol": "ENB", "exchange": "TSX", "wire": "Canada Newswire", "headline": "Enbridge Announces Retirement of Greg Ebel", "url": "u2", "publishedAt": "2026-09-08T12:01:00Z"},
+                         {"id": "nasdaq:7", "symbol": "AAPL", "exchange": "NASDAQ", "wire": "Barchart", "headline": "Stocks Shake Off CPI Report", "url": "u7", "publishedAt": "2026-09-11T18:07:00Z"},
+                         {"id": "nasdaq:8", "symbol": "MSFT", "exchange": "NASDAQ", "wire": "Barchart", "headline": "Stocks Shake Off CPI Report", "url": "u8", "publishedAt": "2026-09-11T18:07:00Z"},
+                         {"id": "nasdaq:9", "symbol": "*", "exchange": "MARKET", "wire": "Barchart", "headline": "Stocks shake off CPI report.", "url": "u9", "publishedAt": "2026-09-11T18:07:00Z"}]}
+        rows = model.news_rows(base, [{"id": "p1", "symbol": "AAPL", "exchange": "NASDAQ"}, {"id": "p2", "symbol": "MSFT", "exchange": "NASDAQ"}], [{"symbol": "ENB", "exchange": "TSX"}])
+        self.assertEqual([(r["id"], r["market"], sorted(t["symbol"] for t in r["tags"]), r["publishedAt"]) for r in rows],
+                         [("nasdaq:7", True, ["AAPL", "MSFT"], "2026-09-11T18:07:00Z"), ("tmx:2", False, ["ENB"], "2026-09-08T12:01:00Z")],
+                         "a release on two wires is one row (the newest kept); a story per symbol feed and in the market feed is one row, tagged, the market's")
+
     def test_the_books_form_and_the_bare_ticker_are_one_listing(self):
         base = {"news": [{"id": "tmx:7", "symbol": "QNC.TO", "exchange": "TSX-V", "wire": "TMX Newsfile", "headline": "Seven", "url": "u7", "publishedAt": "2026-09-08T13:00:00Z"},
                          {"id": "tmx:7", "symbol": "QNC", "exchange": "TSX-V", "wire": "TMX Newsfile", "headline": "Seven", "url": "u7", "publishedAt": "2026-09-08T13:00:00Z"}]}

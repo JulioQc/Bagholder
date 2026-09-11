@@ -93,6 +93,7 @@ html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
 .gth.on{color:var(--ink)}
 .nw-head,.nw-row{display:grid;grid-template-columns:66px minmax(0,1fr) auto minmax(64px,auto);gap:12px;padding:0 16px;white-space:nowrap}
 .nw-head{padding-bottom:6px;margin:0 -16px}
+.nw-bare{grid-template-columns:66px minmax(0,1fr)}
 .nw-list{margin:0 -16px}
 .nw-row{padding:7px 16px;align-items:center;cursor:pointer;box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.06)}
 .nw-row > *{min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -2445,7 +2446,8 @@ function newsWhen(iso) {
 }
 const NEWS_COLS = [{ key: "when", label: "When" }, { key: "news", label: "News" }, { key: "symbol", label: "Symbol", align: "right" }, { key: "change", label: "Change", align: "right" }];
 function newsCardHtml(items) {
-  const scope = state.newsScope, s = state.sort.news, only = state.newsSymbol, q = state.newsQuery.trim().toUpperCase();
+  const scope = state.newsScope, only = state.newsSymbol, q = state.newsQuery.trim().toUpperCase();
+  let s = state.sort.news;
   const isOnly = (t) => only && bareSymbol(t.symbol) === only.symbol && String(t.exchange || "").toUpperCase() === only.exchange;
   // the box: a ticker first (a listing's symbol starting with the text); only when no listing matches, a word of the
   // headline or publisher starting with it, so `SH` is Shopify's news and not every headline with "shake" in it
@@ -2458,20 +2460,23 @@ function newsCardHtml(items) {
     rows = bySym.length ? bySym : rows.filter((n) => { const h = text(n); return tokens.every((t) => h.indexOf(t) >= 0); });
   }
   const first = (n) => n.tags[0] || {};
+  // the market's feed names no listing: no Symbol or Change column, and a sort on either reads newest first
+  const bare = scope === "all" && !only;
+  if (bare && s.key !== "when" && s.key !== "news") s = { key: "when", dir: "desc" };
   rows = sortRows(rows, s.key, s.dir, (n, k) => k === "when" ? n.publishedAt : k === "news" ? n.headline.toLowerCase() : k === "symbol" ? (first(n).symbol ? bareSymbol(first(n).symbol).toLowerCase() : null) : first(n).percentChange);
   const sym = (t) => '<button class="nw-sym go" data-act="newsSym" data-arg=\'' + attr({ symbol: bareSymbol(t.symbol), exchange: String(t.exchange || "").toUpperCase() }) + "'>" + esc(bareSymbol(t.symbol)) + "</button>";
   const chg = (t) => '<span class="tab" style="font-size:13px;color:' + (t.percentChange == null ? "var(--ink55)" : t.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(t.percentChange) + "</span>";
   // one line per row: the headline cut with an ellipsis, a story two listings share naming both on the line
-  const row = (n) => '<div class="nw-row" data-act="newsOpen" data-arg=\'' + attr({ url: n.url }) + "'>" +
+  const row = (n) => '<div class="nw-row' + (bare ? " nw-bare" : "") + '" data-act="newsOpen" data-arg=\'' + attr({ url: n.url }) + "'>" +
     '<div class="tab" style="font-size:11px;color:var(--ink55)">' + esc(newsWhen(n.publishedAt)) + "</div>" +
     '<div><div style="font-size:13px;overflow:hidden;text-overflow:ellipsis">' + esc(n.headline) + '</div><div style="font-size:11px;color:var(--ink55);overflow:hidden;text-overflow:ellipsis">' + esc(n.source) + "</div></div>" +
-    '<div style="text-align:right">' + n.tags.map(sym).join(" ") + "</div>" +
-    '<div style="text-align:right">' + n.tags.map(chg).join(" ") + "</div></div>";
+    (bare ? "" : '<div style="text-align:right">' + n.tags.map(sym).join(" ") + "</div>" +
+      '<div style="text-align:right">' + n.tags.map(chg).join(" ") + "</div>") + "</div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px"><div style="display:flex;align-items:center;gap:14px;min-height:28px;margin-bottom:8px"><h5>News</h5>' +
     msegHtml("newsScope", "scope", [["all", "All"], ["holdings", "Holdings"], ["watchlist", "Watchlist"]], scope) +
     (only ? '<span class="chip"><span class="cf">Symbol</span><span class="cv" style="cursor:default">' + esc(only.symbol) + '</span><button class="cx" aria-label="Show every listing" data-act="newsSymClear">×</button></span>' : "") +
     '<div style="margin-left:auto;display:flex;align-items:center;gap:7px;padding:4px 9px;width:200px;border-radius:6px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="newsQuery" value="' + esc(state.newsQuery) + '" placeholder="Search symbol or headline" aria-label="Search the news" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px var(--font);color:var(--ink)"></div></div>' +
-    (rows.length ? '<div class="nw-head">' + gridTh("news", NEWS_COLS) + '</div><div class="scroll nw-list" style="max-height:436px">' + rows.map(row).join("") + "</div>"
+    (rows.length ? '<div class="nw-head' + (bare ? " nw-bare" : "") + '">' + gridTh("news", bare ? NEWS_COLS.slice(0, 2) : NEWS_COLS) + '</div><div class="scroll nw-list" style="max-height:436px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">No news.</div>') + "</div>";
 }
 const WATCH_COLS = [{ key: "symbol", label: "Symbol" }, { key: "exchange", label: "Exchange", align: "right" }, { key: "last", label: "Last", align: "right" }, { key: "chg", label: "Chg", align: "right" }];
