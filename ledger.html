@@ -1807,9 +1807,9 @@ function kpiHtml(m) {
     tile("Realized P&amp;L", money(k.realized), k.count + (k.count === 1 ? " trade" : " trades"), cls(k.realized)) +
     tile("Win rate", k.winRate == null ? "—" : pctPlain(k.winRate), k.wins + " W · " + k.losses + " L" + (k.breakeven ? " · " + k.breakeven + " BE" : "")) +
     tile("Profit factor", pf, "W " + money0(k.grossWin) + " · L " + money0(k.grossLoss)) +
-    tile("Expectancy", k.expectancy == null ? "—" : money(k.expectancy), "avg W " + money0(k.avgWin) + " · L " + money0(k.avgLoss)) +
+    tile("Expectancy", k.expectancy == null ? "—" : money(k.expectancy), "Avg W " + money0(k.avgWin) + " · L " + money0(k.avgLoss)) +
     tile("Max drawdown", dd.pct == null ? "—" : "−" + Math.abs(dd.pct * 100).toFixed(1) + "%", dd.pct == null ? "No NAV history" : "−$" + Math.abs(Math.round(dd.abs)).toLocaleString("en-US") + (dd.at ? " · " + stamp(dd.at) : ""), dd.pct == null ? "" : "neg") +
-    tile("Avg annualized", ann.rate == null ? "—" : pct(ann.rate), ann.rate == null ? "No NAV history" : "over " + ann.count + (ann.count === 1 ? " year" : " years"), ann.rate == null ? "" : cls(ann.rate)) +
+    tile("Avg annualized", ann.rate == null ? "—" : pct(ann.rate), ann.rate == null ? "No NAV history" : "Over " + ann.count + (ann.count === 1 ? " year" : " years"), ann.rate == null ? "" : cls(ann.rate)) +
     "</div>";
 }
 function niceMax(peak) {
@@ -2235,7 +2235,7 @@ function portfolioTilesHtml(pf) {
     tile("Cost basis", money0(pf.costBasis), "Total book value") +
     (pf.hasMargin
       ? tile("Margin used", money0(pf.marginUsed), pf.marginUsedPct == null ? "—" : pctPlain(pf.marginUsedPct) + " of market value") +
-        tile("Available margin", pf.availableMargin == null ? "—" : money0(pf.availableMargin), unavailable.length ? "unavailable for " + esc(unavailable.join(", ")) : pf.availableMargin == null ? "—" : "buying power")
+        tile("Available margin", pf.availableMargin == null ? "—" : money0(pf.availableMargin), unavailable.length ? "Unavailable for " + esc(unavailable.join(", ")) : pf.availableMargin == null ? "—" : "Buying power")
       : tile("Cash", money0(pf.cash), pf.cashPct == null ? "—" : pctPlain(pf.cashPct) + " of net asset value")) +
     tile("1d change", pf.dayChange == null ? "—" : signedMoney(pf.dayChange, null, 2), pf.dayChangePct == null ? "—" : pct(pf.dayChangePct) + " today", pf.dayChange == null ? "" : cls(pf.dayChange)) +
     tile("Unrealized P&amp;L", signedMoney(pf.unrealized, null, 2), pf.unrealizedPct == null ? "—" : pct(pf.unrealizedPct) + (pf.unrealized >= 0 ? " gain" : " loss"), cls(pf.unrealized));
@@ -2538,7 +2538,7 @@ function cashflowHtml(m) {
   const tiles = c.tiles.map((t) => {
     if (t.label === "Margin used") return '<div class="card elev-sm kpi"><div class="lbl">Margin used</div><div class="tab v">' + money0(t.marginUsed) + '</div><div class="s">' + money0(t.interestPerMonth) + "/mo margin interest</div></div>";
     if (t.label === "Yield on cost") return '<div class="card elev-sm kpi"><div class="lbl">Yield on cost</div><div class="tab v" style="color:var(--accent-300)">' + (t.yield == null ? "—" : pctPlain(t.yield, 2)) + '</div><div class="s">' + money0(t.projected) + "/mo</div></div>";
-    return '<div class="card elev-sm kpi"><div class="lbl">' + esc(String(t.label).replace(/^\d{4} YTD$/, "YTD")) + '</div><div class="tab v">' + money0(t.total) + '</div><div class="s">' + (t.label === "All time" ? "total earned" : money0(t.perMonth) + "/mo avg") + "</div></div>";
+    return '<div class="card elev-sm kpi"><div class="lbl">' + esc(String(t.label).replace(/^\d{4} YTD$/, "YTD")) + '</div><div class="tab v">' + money0(t.total) + '</div><div class="s">' + (t.label === "All time" ? "Total earned" : money0(t.perMonth) + "/mo avg") + "</div></div>";
   }).join("");
   const skipped = c.skippedFilters || [];
   const note = skipped.length ? skipped.join(", ") + (skipped.length > 1 ? " filters do not" : " filter does not") + " apply to distributions — only account, date and symbol narrow this page." : "";
