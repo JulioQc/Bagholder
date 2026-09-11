@@ -121,6 +121,15 @@ class ModelTest(unittest.TestCase):
                          [("nasdaq:7", True, ["AAPL", "MSFT"], "2026-09-11T18:07:00Z"), ("tmx:2", False, ["ENB"], "2026-09-08T12:01:00Z")],
                          "a release on two wires is one row (the newest kept); a story per symbol feed and in the market feed is one row, tagged, the market's")
 
+    def test_a_french_release_beside_its_english_original_is_one_story(self):
+        base = {"news": [{"id": "tmx:1", "symbol": "CH", "exchange": "TSX-V", "wire": "TheNewsWire", "headline": "CHARBONE annonce la clôture du tirage de 1,5 M$ auprès de RiverFort pour accélérer sa croissance", "url": "u1", "publishedAt": "2026-09-08T12:05:00Z"},
+                         {"id": "tmx:2", "symbol": "CH", "exchange": "TSX-V", "wire": "TheNewsWire", "headline": "CHARBONE Announces Closing of $1.5M Drawdown with RiverFort to Accelerate Growth", "url": "u2", "publishedAt": "2026-09-08T12:00:00Z"},
+                         {"id": "tmx:3", "symbol": "CH", "exchange": "TSX-V", "wire": "TheNewsWire", "headline": "Charbone annonce un tirage de 1,5 M$ du prêt convertible de 10 M$, accélérant sa croissance", "url": "u3", "publishedAt": "2026-09-02T12:00:00Z"},
+                         {"id": "tmx:4", "symbol": "ENB", "exchange": "TSX", "wire": "Canada Newswire", "headline": "Enbridge annonce ses résultats du deuxième trimestre", "url": "u4", "publishedAt": "2026-08-01T12:00:00Z"}]}
+        rows = model.news_rows(base, [{"id": "p1", "symbol": "CH", "exchange": "TSX-V"}], [])
+        self.assertEqual([r["id"] for r in rows], ["tmx:2", "tmx:3", "tmx:4"],
+                         "the French twin of an English release goes; a French release with no English twin within three hours stays")
+
     def test_the_books_form_and_the_bare_ticker_are_one_listing(self):
         base = {"news": [{"id": "tmx:7", "symbol": "QNC.TO", "exchange": "TSX-V", "wire": "TMX Newsfile", "headline": "Seven", "url": "u7", "publishedAt": "2026-09-08T13:00:00Z"},
                          {"id": "tmx:7", "symbol": "QNC", "exchange": "TSX-V", "wire": "TMX Newsfile", "headline": "Seven", "url": "u7", "publishedAt": "2026-09-08T13:00:00Z"}]}

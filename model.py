@@ -2360,6 +2360,39 @@ def news_text_key(headline):
     return " ".join(re.sub(r"[^a-z0-9]+", " ", _s(headline).lower()).split())
 
 
+FRENCH_WORDS = re.compile(r"\b(annonce|annoncent|ses|du|des|une|pour|avec|sur|résultats|clôture|croissance|les|et|au|aux|dans|son|sa|le|la)\b")
+
+
+def looks_french(headline):
+    """A headline written in French: accented letters or French function words, two or more."""
+    t = _s(headline).lower()
+    return len(re.findall(r"[àâçéèêëîïôûùüÿœ]", t)) >= 2 or len(FRENCH_WORDS.findall(t)) >= 2
+
+
+def _when_minutes(iso):
+    try:
+        return datetime.fromisoformat(_s(iso).replace("Z", "+00:00")).timestamp() / 60.0
+    except ValueError:
+        return None
+
+
+def drop_translations(rows):
+    """A release posted in French beside its English original (the same wire, a listing in
+    common, within three hours) is one story: the English row stays, the French one goes."""
+    keys = lambda r: {(t["symbol"], _s(t["exchange"]).upper()) for t in r["tags"]}
+    out = []
+    for r in rows:
+        if looks_french(r["headline"]):
+            tr, kr = _when_minutes(r["publishedAt"]), keys(r)
+            twin = any(o is not r and not looks_french(o["headline"]) and o["source"] == r["source"] and (keys(o) & kr)
+                       and tr is not None and _when_minutes(o["publishedAt"]) is not None and abs(_when_minutes(o["publishedAt"]) - tr) <= 180
+                       for o in rows)
+            if twin:
+                continue
+        out.append(r)
+    return out
+
+
 def news_rows(base, positions, watch):
     """Every item kept, newest first, each tagged with the listings it was read for: the
     symbol, whether the book holds it or watches it, and its day change. An item two
@@ -2397,7 +2430,7 @@ def news_rows(base, positions, watch):
             by_text[text] = row
         rows.append(row)
     rows.sort(key=lambda r: r["publishedAt"], reverse=True)
-    return rows
+    return drop_translations(rows)
 
 
 def markets_view(base, positions):
