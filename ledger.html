@@ -656,7 +656,7 @@ function syncLine() {
   if (state.busy === "connecting") return '<span class="spin"></span>Waiting for Wealthsimple login… <button class="pill" data-act="cancelConnect" style="padding:1px 8px;font-size:11px;width:auto;margin-left:6px">Cancel</button>';
   if (state.busy === "refresh") return '<span class="spin"></span>Refreshing session…';
   if (s.syncing) return '<span class="spin"></span>' + esc(s.syncStep || "Syncing…");
-  if (s.error && !showingEmpty()) return '<span class="status-err" title="' + esc(s.error) + '">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
+  if (s.error && !showingEmpty()) return '<span class="status-err">' + esc(s.error.length > 60 ? s.error.slice(0, 57) + "…" : s.error) + "</span>";
   // nothing heard from the server yet (a page loaded while Bagholder starts): claim no state
   if (!s.protocol) return '<span class="spin"></span>';
   if (!s.connected) return "Not connected";
@@ -935,7 +935,7 @@ function tabsHtml() {
   const sel = (state.page === "trades" || state.page === "portfolio") && state.sel ? selById(state.sel) : null;
   return '<div style="display:flex;gap:22px;padding:0 20px;background:var(--bg);box-shadow:inset 0 -1px 0 rgba(var(--ink-rgb),.08)">' +
     t("dashboard", "Dashboard") + t("trades", "Trades") + t("portfolio", "Portfolio") + t("markets", "Markets") + t("cashflow", "Cashflow") +
-    (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span title="' + esc(symText(sel.symbol)) + '" style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(symText(sel.symbol)) + "</span></div>" : "") +
+    (sel ? '<div style="display:flex;align-items:center;gap:6px;flex:none;min-width:0;white-space:nowrap;margin-left:6px"><span style="font-size:13px;color:rgba(var(--ink-rgb),.4)">›</span><span style="font:500 13px Inter,system-ui;padding:11px 0;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--accent-300);box-shadow:inset 0 -2px 0 var(--accent)">' + esc(symText(sel.symbol)) + "</span></div>" : "") +
     '<div style="margin-left:auto;min-width:0;display:flex;align-items:center;gap:7px;padding:6px 0"><div style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;overflow-x:auto;padding-bottom:1px">' +
     chips().map((c) => '<span class="chip"><span class="cf">' + esc(c.field) + '</span><button class="cv" data-act="chipEdit" data-arg=\'' + attr({ key: c.key }) + "'>" + esc(c.value) + '</button><button class="cx" aria-label="Remove filter" data-act="chipRemove" data-arg=\'' + attr({ key: c.key }) + "'>×</button></span>").join("") +
     "</div></div></div>";
@@ -1994,7 +1994,7 @@ function dashboardHtml(m) {
 function gradeChip(t) {
   const g = t.grade || "";
   const k = g === "A" || g === "B" ? "g-ab" : g === "F" ? "g-f" : g === "C" ? "g-c" : "g-none";
-  return '<span class="grade ' + k + '" title="' + (g ? "Grade " + g : "Not graded") + '">' + (g || "—") + "</span>";
+  return '<span class="grade ' + k + '">' + (g || "—") + "</span>";
 }
 function tradeSortValue(t, key) {
   if (key === "tags") return t.tags && t.tags.length ? t.tags.slice().sort()[0] : "￿";
@@ -2015,12 +2015,12 @@ function tradesTableHtml(m) {
     '<div class="scroll-xy" data-keep-scroll="trades" style="flex:1;min-height:0"><table class="table" style="min-width:1150px;table-layout:fixed"><thead><tr>' + th("trades", cols) + "</tr></thead><tbody>" +
     rows.map((t) => '<tr class="tab" style="cursor:pointer" data-act="selectTrade" data-arg=\'' + attr({ id: t.id }) + "'>" +
       '<td class="dim" style="white-space:nowrap;padding-right:12px">' + esc(t.entryDate) + '</td><td class="dim" style="white-space:nowrap">' + esc(t.exitDate) + "</td>" +
-      '<td title="' + esc(symText(t.symbol)) + '" style="font-weight:500;font-variant-numeric:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(symText(t.symbol)) + "</td>" +
+      '<td style="font-weight:500;font-variant-numeric:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(symText(t.symbol)) + "</td>" +
       '<td class="dim" style="font-variant-numeric:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(t.exchange || "—") + "</td>" +
       '<td style="text-align:right">' + qty(t.qty) + '</td><td style="text-align:right">' + px(t.entry) + '</td><td style="text-align:right">' + px(t.exit) + '</td><td class="dim" style="font-variant-numeric:normal;text-align:center">' + esc(t.currency) + "</td>" +
       '<td style="text-align:right;font-weight:500;color:' + color(t.pnl) + '">' + money(t.pnl, t.currency) + '</td><td style="text-align:right;color:' + color(t.pnl) + '">' + pct(t.pnlPct) + "</td>" +
       '<td style="text-align:right" class="dim">' + hold(t.holdDays) + '</td><td style="white-space:nowrap;padding-left:50px">' + gradeChip(t) + "</td>" +
-      '<td style="font-variant-numeric:normal">' + (t.tags && t.tags.length ? '<span class="tagchip" title="' + esc(t.tags[0]) + '">' + esc(t.tags[0]) + "</span>" + (t.tags.length > 1 ? '<span class="muted" style="font-size:10.5px;margin-left:4px">+' + (t.tags.length - 1) + "</span>" : "") : '<span style="color:rgba(var(--ink-rgb),.5)">—</span>') + "</td></tr>").join("") +
+      '<td style="font-variant-numeric:normal">' + (t.tags && t.tags.length ? '<span class="tagchip">' + esc(t.tags[0]) + "</span>" + (t.tags.length > 1 ? '<span class="muted" style="font-size:10.5px;margin-left:4px">+' + (t.tags.length - 1) + "</span>" : "") : '<span style="color:rgba(var(--ink-rgb),.5)">—</span>') + "</td></tr>").join("") +
     "</tbody></table>" + (rows.length ? "" : '<div class="muted" style="padding:26px 4px;font-size:12px">No trades match these filters. <a href="#" data-act="clearAll">Reset all</a></div>') + "</div></div>";
 }
 // The trade chart: real daily bars for the trade's span with every execution
@@ -2188,7 +2188,7 @@ function tradeDetailHtml(t, m) {
     '<div class="card elev-sm" style="padding:16px 18px;display:flex;flex-direction:column;min-height:0"><div class="lbl" style="margin:0 0 6px">Thesis / notes</div>' +
     '<textarea class="input" id="thesis" data-id="' + esc(t.id) + '" placeholder="Why did you take this trade?" style="flex:1;min-height:96px;height:auto;font-size:13px">' + esc(t.thesis || "") + "</textarea>" +
     '<div style="display:flex;gap:10px;margin-top:16px;align-items:center"><div style="flex:1"><div class="lbl" style="margin-bottom:5px">Grade</div><div class="seg">' +
-    ["A", "B", "C", "F"].map((g) => '<label class="seg-opt' + (t.grade === g ? " on" : "") + '" data-act="grade" data-arg=\'' + attr({ id: t.id, grade: g }) + "' title=\"" + (t.grade === g ? "Click again to clear the grade" : "Grade " + g) + '">' + g + "</label>").join("") + "</div></div></div>" +
+    ["A", "B", "C", "F"].map((g) => '<label class="seg-opt' + (t.grade === g ? " on" : "") + '" data-act="grade" data-arg=\'' + attr({ id: t.id, grade: g }) + "'">' + g + "</label>").join("") + "</div></div></div>" +
     '<div style="margin-top:14px;position:relative"><div class="lbl" style="margin-bottom:6px">Tags</div>' +
     '<div class="input" data-act="focusTag" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px;height:auto;padding:6px 8px;cursor:text">' +
     (t.tags || []).map((tg) => '<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:3px 5px 3px 9px;border-radius:6px;background:var(--chip-bg);color:var(--chip-fg)">' + esc(tg) + '<button data-act="removeTag" data-arg=\'' + attr({ id: t.id, tag: tg }) + "' aria-label=\"Remove tag\" style=\"display:grid;place-items:center;width:15px;height:15px;padding:0;border:0;border-radius:4px;background:rgba(var(--ink-rgb),.1);color:var(--chip-fg);cursor:pointer;font-size:11px;line-height:1\">×</button></span>").join("") +
@@ -2531,7 +2531,7 @@ function portfolioHtml(m) {
     '<div class="card elev-sm" style="padding:14px 16px 8px;display:flex;flex-direction:column;min-height:0"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><h5>Holdings</h5></div>' +
     '<div class="scroll-xy" data-keep-scroll="positions" style="flex:1;min-height:0;max-height:362px"><table class="table" style="min-width:640px"><thead><tr>' + th("positions", cols) + "</tr></thead><tbody>" +
     rows.map((r) => '<tr class="tab" style="cursor:pointer" data-act="openHolding" data-arg=\'' + attr({ id: r.id }) + "'>" +
-      '<td title="' + esc(symText(r.symbol)) + ' · ' + esc(r.account) + '" style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">' + esc(symText(r.symbol)) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
+      '<td style="font-weight:500;font-variant-numeric:normal;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">' + esc(symText(r.symbol)) + (r.short ? ' <span class="muted" style="font-size:10px">SHORT</span>' : "") + "</td>" +
       '<td style="text-align:right">' + px(r.avg) + '</td><td style="text-align:right">' + px(r.last) + "</td>" +
       '<td style="text-align:right">' + money0(r.cost, r.currency) + '</td><td style="text-align:right">' + money0(r.mv, r.currency) + "</td>" +
       '<td style="text-align:right;white-space:nowrap;color:' + (r.dayChange == null ? "var(--ink55)" : color(r.dayChange)) + '">' + (r.dayChange == null ? "—" : signedMoney(r.dayChange, r.currency)) + "</td>" +
