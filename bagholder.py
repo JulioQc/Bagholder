@@ -713,7 +713,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-11.3"
+PROTOCOL = "2026-09-11.4"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -6012,6 +6012,10 @@ def history_payload(query):
             "reason": "" if bars or pending else market.chart_reason(inst, tf)}
 
 
+def _query_param(query, name):
+    return ((parse_qs(query or "").get(name) or [""])[0] or "").strip() or None
+
+
 def _model_filters(query):
     raw = (parse_qs(query or "").get("filters") or [""])[0]
     if not raw:
@@ -6199,13 +6203,31 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             try:
-                payload = model.view(_model_filters(query))
+                payload = model.view(_model_filters(query), _query_param(query, "trade"))
             except Exception as e:
                 sys.stderr.write("model failed: %r\n" % (e,))
                 self._send(500, {"ok": False, "error": "model failed: %s" % type(e).__name__})
                 return
             payload["status"] = status_payload()
             self._send(200, payload)
+            return
+        if path == "/api/trade":
+            # the legs and fills of one trade or holding, fetched when its page opens
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            try:
+                detail = model.trade_detail(_query_param(query, "id"))
+            except Exception as e:
+                sys.stderr.write("model failed: %r\n" % (e,))
+                self._send(500, {"ok": False, "error": "model failed: %s" % type(e).__name__})
+                return
+            if detail is None:
+                self._send(404, {"ok": False, "error": "no such trade"})
+                return
+            detail["ok"] = True
+            self._send(200, detail)
             return
         if path in ("/favicon.png", "/favicon.ico"):
             if not self._gate():

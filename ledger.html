@@ -367,7 +367,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-11.3"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-11.4"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -536,7 +536,9 @@ function loadModel() {
   state.loading = true;
   if (!state.model) render();
   const q = encodeURIComponent(JSON.stringify(Object.assign({}, state.filters, { benchmark: benchmarkPref() })));
-  return fetch("/api/model?filters=" + q, { headers: { "X-Bagholder": "1" } })
+  // legs and fills travel only for the open trade: the lists never read them
+  const detail = state.sel ? "&trade=" + encodeURIComponent(state.sel) : "";
+  return fetch("/api/model?filters=" + q + detail, { headers: { "X-Bagholder": "1" } })
     .then((r) => r.json())
     .then((m) => {
       if (seq !== _loadSeq) return;
@@ -549,6 +551,22 @@ function loadModel() {
       render();
     })
     .catch((e) => { if (seq !== _loadSeq) return; state.loading = false; state.loadError = String(e); render(); });
+}
+// A trade opened from a list has no legs or fills yet: fetch them once and
+// put them on the row, so the chart and the executions draw from the same
+// object the lists hold.
+const _detailPending = {};
+function loadTradeDetail(id) {
+  if (_detailPending[id]) return;
+  _detailPending[id] = true;
+  api("GET", "/api/trade?id=" + encodeURIComponent(id)).then((d) => {
+    delete _detailPending[id];
+    const row = tradeById(id) || positionById(id);
+    if (!row || row.fills !== undefined) return;
+    row.legs = (d && d.ok) ? d.legs || [] : [];
+    row.fills = (d && d.ok) ? d.fills || [] : [];
+    if (state.sel === id) render();
+  });
 }
 function setFilters(patch) {
   Object.assign(state.filters, patch);
@@ -2048,7 +2066,7 @@ function mountTradeChart() {
   const seq = ++_mountSeq;
   if (!host || !window.LightweightCharts) { if (_chart) { _chart.remove(); _chart = null; } return; }
   const t = state.sel ? selById(state.sel) : null;
-  if (!t) return;
+  if (!t || t.fills === undefined) return;   // the trade's fills are still on their way
   const c = chartColors();
   const LW = window.LightweightCharts;
   const wanted = chartTfFor(t);
@@ -2058,6 +2076,8 @@ function mountTradeChart() {
     // the wanted timeframe may not be offered for this instrument
     const tf = chartTfFor(t, available);
     if (tf && tf !== wanted) { loadHistory(t, tf).then(() => { if (state.sel === t.id) mountTradeChartWith(t, tf); }); return; }
+    // the same trade, timeframe, fills and colours already on screen: nothing to draw
+    if (!h.pending && _chart && _chartSig === chartSig(t, tf, c) && host.contains(_chart.chartElement())) return;
     if (h.pending) {
       // the minute data is still being fetched: show the daily chart meanwhile and
       // ask again shortly; the timeframe switches by itself once the bars are stored
@@ -2072,9 +2092,12 @@ function mountTradeChart() {
   });
 }
 let _chartFor = "";
+let _chartSig = "";
+function chartSig(t, tf, c) { return JSON.stringify([t.id, tf, c, (t.fills || []).map((f) => [f.when, f.side, f.qty, f.price])]); }
 function drawTradeChart(host, t, h, tf, c, LW, provisional) {
   if (_chart) { _chart.remove(); _chart = null; }
   _chartFor = t.id;
+  _chartSig = provisional ? "" : chartSig(t, tf, c);
   {
     const pills = document.getElementById("chartTf");
     if (pills) pills.innerHTML = tfPillsHtml(h, tf, t);
@@ -2147,7 +2170,7 @@ function tradeDetailHtml(t, m) {
       ? fact("Qty", qty(t.qty)) + fact("Avg", px(t.avg)) + fact("Book", money0(t.cost, t.currency)) + fact("Market", money0(t.mv, t.currency))
       : fact("Open", esc(t.entryDate)) + fact("Close", esc(t.exitDate)) + fact("Entry", px(t.entry)) + fact("Exit", px(t.exit))) +
     fact("Hold", hold(t.holdDays)) + fact("Account", esc(t.account)) + "</div>" +
-    '<div style="display:flex;align-items:baseline;gap:8px;margin:14px 0 6px"><span class="lbl">Executions (' + execs.length + ')</span></div>' +
+    '<div style="display:flex;align-items:baseline;gap:8px;margin:14px 0 6px"><span class="lbl">Executions' + (t.fills ? " (" + execs.length + ")" : "") + '</span></div>' +
     '<div class="scroll" style="flex:1;min-height:0"><table class="table" style="font-size:12.5px;width:100%"><thead><tr>' + th("execs", ecols) + "</tr></thead><tbody>" +
     execs.map((e) => '<tr class="tab"><td style="padding-left:0;color:var(--ink75);white-space:nowrap">' + esc(e.date) + ' <span class="dim">' + esc(e.time) + '</span></td><td style="padding-inline:6px;font-size:11.5px;letter-spacing:.03em;color:var(--ink60)">' + esc(e.sub || e.side) + '</td><td style="text-align:right;padding-inline:6px">' + qty(e.qty) + '</td><td class="dim" style="text-align:center;padding:7px 18px;font-variant-numeric:normal">' + esc(e.currency) + '</td><td style="text-align:right;padding-inline:6px;color:var(--ink75)">' + px(e.price) + '</td><td style="text-align:right;padding-right:0;color:rgba(var(--ink-rgb),.85)">' + money(e.amount, e.currency) + "</td></tr>").join("") +
     "</tbody></table></div></div>" +
@@ -2670,6 +2693,10 @@ function render() {
   const boxes = [...root.querySelectorAll(".scroll, .scroll-xy")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }));
   const focusId = document.activeElement ? document.activeElement.id : "";
   const rowHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pop-row"));
+  // The open trade's chart is not drawn again for a redraw that keeps the trade:
+  // its host and timeframe pills are carried over and put back in the new page.
+  const keepChart = _chart && state.sel && _chartFor === state.sel ? document.getElementById("tradeChart") : null;
+  const keepPills = keepChart ? document.getElementById("chartTf") : null;
   root.innerHTML = headerHtml() + tabsHtml() + '<div id="page">' + pageHtml() + "</div>" + (state.confirmOpen ? confirmDialogHtml() : "") + (state.loginView ? loginViewHtml() : "") + (state.modal === "trade" ? tradeModalHtml() : state.modal === "import" ? importModalHtml() : state.modal === "folder" ? folderModalHtml() : "") + (state.ordersOpen ? ordersPanelHtml() : "") + (state.ticket ? ticketHtml() : "");
   if (state.loginView) loginFrameLoop();   // a redraw makes a new image element: reattach the stream
   if (state.ordersOpen && !_ordersTimer) ordersPoll(); else if (!state.ordersOpen && _ordersTimer) { clearTimeout(_ordersTimer); _ordersTimer = 0; }
@@ -2682,6 +2709,12 @@ function render() {
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
   const menu = document.getElementById("tagMenu");
   if (menu) menu.innerHTML = tagMenuHtml();
+  if (keepChart) {
+    const host = document.getElementById("tradeChart");
+    const pills = document.getElementById("chartTf");
+    if (host && pills && keepPills) { host.replaceWith(keepChart); pills.replaceWith(keepPills); }
+  }
+  if (state.sel) { const open = selById(state.sel); if (open && open.fills === undefined) loadTradeDetail(open.id); }
   mountTradeChart();
   mountHeatmap();
   spaceAxisLabels();

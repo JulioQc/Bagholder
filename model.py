@@ -2002,26 +2002,35 @@ def migrate_legacy_notes(closed, saved_groups, notes):
     return journal
 
 
-def build_base(snapshot, market, journal, today=None):
+def build_book(snapshot, today):
+    """The matched book: every activity normalized (delivered shares and expiries
+    added), the FIFO match, the securities. It depends on the activity rows, the
+    securities and the day only, so a quote tick can reuse it."""
+    raw_acts = snapshot.get("activities") or []
+    acts = normalize_activities(raw_acts)
+    securities = Securities(snapshot.get("securities") or [])
+    delivered = synthesize_assignment_shares(acts, securities)
+    if delivered:
+        acts = acts + delivered
+    fifo = match_fifo(acts)
+    synthetic = synthesize_expiries(acts, fifo["open"], today)
+    if synthetic:
+        acts = acts + synthetic
+        fifo = match_fifo(acts)
+    return {"activities": acts, "actsById": {_s(a.get("id")): a for a in acts}, "securities": securities, "fifo": fifo, "rawCount": len(raw_acts)}
+
+
+def build_base(snapshot, market, journal, today=None, book=None):
     today = today or today_local()
     fx = market.get("fx") or {}
     bench = market.get("benchmark") or {}
     benchmarks = dict(market.get("benchmarks") or {})
     benchmarks.setdefault("SP500", bench)
-    raw_acts = snapshot.get("activities") or []
-    acts = normalize_activities(raw_acts)
-    acts_by_id = {_s(a.get("id")): a for a in acts}
-    securities = Securities(snapshot.get("securities") or [])
-    delivered = synthesize_assignment_shares(acts, securities)
-    if delivered:
-        acts = acts + delivered
-        acts_by_id = {_s(a.get("id")): a for a in acts}
-    fifo = match_fifo(acts)
-    synthetic = synthesize_expiries(acts, fifo["open"], today)
-    if synthetic:
-        acts = acts + synthetic
-        acts_by_id = {_s(a.get("id")): a for a in acts}
-        fifo = match_fifo(acts)
+    book = book or build_book(snapshot, today)
+    acts = book["activities"]
+    acts_by_id = book["actsById"]
+    securities = book["securities"]
+    fifo = book["fifo"]
     apply_fx(fifo["closed"], fx)
     saved = snapshot.get("tradeGroups") or []
     trades = build_trades(fifo["closed"], fifo["open"], saved, acts_by_id, securities, journal)
@@ -2076,7 +2085,7 @@ def build_base(snapshot, market, journal, today=None):
         "news": [dict(n) for n in (snapshot.get("news") or []) if isinstance(n, dict)],
         "universes": {k: [dict(r) for r in v] for k, v in (snapshot.get("universes") or {}).items()},
         "cashCurrencies": securities.cash_currencies(),
-        "activityCount": len(raw_acts),
+        "activityCount": book["rawCount"],
     }
 
 
@@ -2917,34 +2926,74 @@ def build_view(base, filters=None):
 
 _cache_lock = threading.Lock()
 _cache = {"version": None, "base": None}
+# The matched book outlives the base: a quote tick changes the data version every
+# minute, but the FIFO match only changes with the activity rows, the securities
+# or the day, so it is kept across ticks and the activity rows are not re-read.
+_book = {"key": None, "book": None}
 
 
 def base_model(force=False):
     # today's date is part of the key: YTD tiles, the current year's return and
     # anything else measured "to today" must roll over at midnight even when
     # nothing in the database has changed
-    version = store.data_version() + "|" + today_local()
+    today = today_local()
+    version = store.data_version() + "|" + today
     with _cache_lock:
         if not force and _cache["base"] is not None and _cache["version"] == version:
             return _cache["base"]
-    snapshot = store.snapshot()
+    book_key = store.book_version() + "|" + today
+    with _cache_lock:
+        book = _book["book"] if not force and _book["key"] == book_key else None
+    snapshot = store.snapshot(activities=book is None)
     market = store.market_data()
     journal = store.journal()
+    if book is None:
+        book = build_book(snapshot, today)
     if not journal and snapshot.get("notes"):
-        probe = build_base(snapshot, market, {}, None)
+        probe = build_base(snapshot, market, {}, today, book=book)
         migrated = migrate_legacy_notes(probe["closed"], snapshot.get("tradeGroups"), snapshot.get("notes"))
         if migrated:
             journal = store.save_journal(migrated)
-            version = store.data_version() + "|" + today_local()
-    base = build_base(snapshot, market, journal, None)
+            version = store.data_version() + "|" + today
+    base = build_base(snapshot, market, journal, today, book=book)
     with _cache_lock:
         _cache["version"] = version
         _cache["base"] = base
+        _book["key"] = book_key
+        _book["book"] = book
     return base
 
 
-def view(filters=None):
-    return build_view(base_model(), filters)
+# What a trade or holding row carries only when it is the one open on the page:
+# every leg and every fill of every trade is most of the model's bytes, and the
+# lists never read them.
+DETAIL_KEYS = ("legs", "fills")
+
+
+def _without_detail(row):
+    return {k: v for k, v in row.items() if k not in DETAIL_KEYS}
+
+
+def slim(view, detail=None):
+    """The view for the page: legs and fills only on the trade or holding `detail` names."""
+    out = dict(view)
+    for key in ("trades", "positions"):
+        out[key] = [r if detail and r.get("id") == detail else _without_detail(r) for r in view.get(key) or []]
+    return out
+
+
+def trade_detail(trade_id, base=None):
+    """The legs and fills of one trade or holding, by id; None when there is none."""
+    base = base or base_model()
+    for key in ("trades", "positions"):
+        for r in base[key]:
+            if r.get("id") == trade_id:
+                return {"id": trade_id, "legs": list(r.get("legs") or []), "fills": list(r.get("fills") or [])}
+    return None
+
+
+def view(filters=None, detail=None):
+    return slim(build_view(base_model(), filters), detail)
 
 
 def held_symbols(base=None):
@@ -3024,3 +3073,5 @@ def invalidate():
     with _cache_lock:
         _cache["version"] = None
         _cache["base"] = None
+        _book["key"] = None
+        _book["book"] = None
