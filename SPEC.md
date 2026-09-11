@@ -133,6 +133,7 @@ Every instrument Wealthsimple offers has a live price source. TMX Money carries 
 | Hold | Whole days with `d` | `207d` |
 | Dates | ISO `YYYY-MM-DD` in tables; `Jun '26` on chart axes; `18 Jun '26` in chart hovers | |
 | Missing | Em dash | `—` |
+| Subtitles and other secondary lines | Sentence case: a capital first letter unless the line starts with a figure or a symbol | `Total book value`, `Buying power`, `16 accounts, 12 positions`, `+1.1% today` |
 
 Positive amounts use the theme's green, negative its red, both on the P&L figure and its percentage.
 
@@ -201,7 +202,7 @@ Tiles in the style of the dashboard tiles, CAD aggregates over the accounts in s
 | Net asset value | Sum of Wealthsimple's net liquidation value per account, as Wealthsimple states it; every open account counts, cash accounts included, so it differs from Market value by the cash; closed accounts never count | `N accounts, N positions`, or `—` when no account in scope reports one |
 | Cost basis | Book value of the open positions in scope | `Total book value` |
 | Margin used | The negative cash balances of the accounts in scope, one per currency, shown positive, converted to CAD | Its share of Market value |
-| Available margin | Sum of Wealthsimple's buying power over the open margin accounts in scope, the figure Wealthsimple labels Margin available. Only margin accounts are asked: every self-directed account answers the same query with the cash it could buy with, which is not margin | `buying power`; `unavailable for <account>` when Wealthsimple cannot price a security in it; `—` with no margin account in scope |
+| Available margin | Sum of Wealthsimple's buying power over the open margin accounts in scope, the figure Wealthsimple labels Margin available. Only margin accounts are asked: every self-directed account answers the same query with the cash it could buy with, which is not margin | `Buying power`; `Unavailable for <account>` when Wealthsimple cannot price a security in it; `—` with no margin account in scope |
 | Cash (no margin account in scope) | The positive cash balances of the accounts in scope, one per currency, converted to CAD | Its share of Net asset value, or `—` without one |
 | 1d change | The day's change of every quoted open position in scope (quantity × the quote's price change, reversed on a short), converted to CAD, signed and coloured; `—` when nothing has a quote | That change over what those positions were worth at the previous close, signed, `+x% today` |
 | Unrealized P&L | Unrealized P&L of the open positions in scope, converted at today's rate | Its percentage of Cost basis, `gain` or `loss` |
@@ -236,7 +237,7 @@ Six tiles in the style of the dashboard tiles, CAD, dividends in scope. The Marg
 |---|---|---|
 | Two years ago, last year, by calendar year, rolling over on January 1 | Sum received that year | Average per paying month |
 | YTD | Sum received this year | Average per paying month |
-| All time | Sum received | `total earned` |
+| All time | Sum received | `Total earned` |
 | Margin used | The Portfolio tab's Margin used over the accounts in scope | Average margin interest per charged month: the Interest charge rows in scope, summed in CAD, ÷ the number of months carrying one, as `$x/mo margin interest` |
 | Last 12 months (no margin account in scope) | Sum received in the trailing twelve months, to today | Average per paying month in that window |
 | Yield on cost | Annual income of all rated holdings ÷ their book cost | Projected monthly income, that annual income ÷ 12, as `$x/mo` |
