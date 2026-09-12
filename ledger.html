@@ -2583,6 +2583,8 @@ function watchAddRowHtml() {
 }
 function watchlistCardHtml(rows) {
   const s = state.sort.watchlist;
+  // a listing just added shows the price its match showed, until the server's own quote lands
+  rows = rows.map((w) => { const c = w.last == null && typeof _sugQuotes !== "undefined" ? _sugQuotes[bareSymbol(w.symbol) + "@" + String(w.exchange || "").toUpperCase()] : null; return c ? Object.assign({}, w, c) : w; });
   rows = sortRows(rows.map((w, i) => Object.assign({ added: i }, w)), s.key, s.dir, (w, k) => k === "symbol" ? bareSymbol(w.symbol).toLowerCase() : k === "exchange" ? String(w.exchange || "").toLowerCase() : k === "last" ? w.last : k === "chg" ? w.percentChange : w.added);
   const row = (w) => '<div class="wl-row' + (w.positionId ? " go" : "") + (state.watchNew && state.watchNew === bareSymbol(w.symbol) + "@" + String(w.exchange || "").toUpperCase() ? " wl-new" : "") + '"' + (w.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: w.positionId }) + "'" : "") + ">" +
     '<div><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis">' + esc(bareSymbol(w.symbol)) + '</div><div style="font-size:11px;color:var(--ink55);overflow:hidden;text-overflow:ellipsis">' + esc(w.name || "") + "</div></div>" +
@@ -3091,8 +3093,9 @@ function act(name, arg, ev) {
       const key = bareSymbol(arg.symbol) + "@" + String(arg.exchange || "").toUpperCase();
       state.watchQuery = ""; state.watchNew = key; render();
       api("POST", "/api/watchlist/add", { symbol: arg.symbol, exchange: arg.exchange, name: arg.name, currency: arg.currency }).then(() => loadModel()).then(() => {
-        // the tint runs from the moment the row is in the list
+        // the tint runs from the moment the row is in the list; the server's own quote lands a moment later
         clearTimeout(_watchNewTimer); _watchNewTimer = setTimeout(() => { state.watchNew = null; render(); }, 1400);
+        [3000, 9000].forEach((ms) => setTimeout(() => { if (!state.sel) loadModel(); }, ms));
       });
       { const q = document.getElementById("watchQuery"); if (q) q.focus(); }
       break;
