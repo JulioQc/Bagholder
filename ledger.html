@@ -132,6 +132,28 @@ html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
 .chip .cx:hover{background:rgba(var(--neg-rgb),.3)}
 .pop{position:absolute;top:42px;right:0;z-index:30;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
 .pop.pop-wl{top:32px}   /* the watchlist's box sits under its card's header row, over the column head */
+/* the Markets tab's tile row: the page's tiles, dragged to reorder, a plus cell, a picker under it */
+.mt-cell{position:relative;min-width:0}
+.mt-tile{cursor:grab;user-select:none;touch-action:none;position:relative}
+.mt-tile:hover{box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.22),var(--shadow-sm)}
+.mt-tile.mt-drag{cursor:grabbing;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.22),0 8px 20px rgba(0,0,0,.45);z-index:3;transition:none}
+.mt-x{position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:6px;border:0;background:transparent;color:rgba(var(--ink-rgb),.6);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .12s}
+.mt-tile:hover .mt-x{opacity:1}
+.mt-x:hover{color:var(--neg);box-shadow:inset 0 0 0 1px rgba(var(--neg-rgb),.45);background:rgba(var(--neg-rgb),.12)}
+.mt-plus{height:87px;border-radius:8px;border:0;width:100%;background:transparent;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12);color:rgba(var(--ink-rgb),.45);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.mt-plus:hover{color:var(--accent-300);background:rgba(var(--ink-rgb),.04);box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.45)}
+.mt-plus.on{color:var(--accent-300);background:rgba(var(--accent-rgb),.1);box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.55)}
+.mt-more{display:flex;justify-content:center;margin-top:8px}
+.mt-more button{border:0;background:transparent;cursor:pointer;font:500 11px var(--font);color:var(--ink55);padding:4px 10px;border-radius:6px;display:inline-flex;align-items:center;gap:5px}
+.mt-more button:hover{color:var(--accent-300);background:rgba(var(--ink-rgb),.06)}
+.mt-more svg{transition:transform .15s}
+.mt-more.open svg{transform:rotate(180deg)}
+.mt-scrim{position:fixed;inset:0;z-index:29}
+.mt-row.on{background:rgba(var(--accent-rgb),.14);box-shadow:inset 3px 0 0 var(--accent)}
+.mt-row.on .mt-sym{color:var(--accent-300)}
+.mt-row.on .mt-bm{color:var(--accent)}
+.mt-row.off{color:rgba(var(--ink-rgb),.4);cursor:default}
+.mt-bm{color:rgba(var(--ink-rgb),.3);display:inline-flex}
 .pop-row{cursor:pointer;border:0;display:flex;align-items:center;gap:8px;text-align:left;font:400 12.5px Inter,system-ui,sans-serif;padding:6px 7px 6px 10px;border-radius:5px;background:transparent;color:rgba(var(--ink-rgb),.85);width:100%}
 .pop-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
 .pop-row.on{background:var(--accent-900);color:var(--accent-300);box-shadow:inset 3px 0 0 var(--chip-fg)}
@@ -343,6 +365,11 @@ const state = {
   watchMode: false,   // ⌘K opened from the Watchlist's plus: its rows add to the list instead of filtering
   newsSymbol: null,   // {symbol, exchange}: the one listing the News card is scoped to, from a click on its symbol
   newsQuery: "",   // what is typed in the News card's box: a ticker or words, matched as it is typed
+  tilesOpen: (function () { try { return localStorage.getItem("bh2.tilesOpen") === "1"; } catch (e) { return false; } })(),   // the tile row's second row shown
+  tileAdd: false,     // the tile row's picker is open under its plus cell
+  tileQuery: "",      // what is typed in that picker
+  tileDrag: null,     // the tile under the pointer during a reorder
+  tileOrder: null,    // the row's order while a reorder or a save is in flight
   newsScope: (function () { try { return localStorage.getItem("bh2.news") || "all"; } catch (e) { return "all"; } })(),
   heat: (function () { try { return Object.assign({ universe: "holdings", size: "value" }, JSON.parse(localStorage.getItem("bh2.heatmap") || "{}")); } catch (e) { return { universe: "holdings", size: "value" }; } })(),
   ordersTab: "pending",
@@ -369,7 +396,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-11.7"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-11.8"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -676,7 +703,7 @@ function headerHtml() {
     '<div style="position:relative" data-pop="filter">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Filters" data-act="openFields"><svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M230.6 49.5A15.8 15.8 0 0 0 216 40H40a16 16 0 0 0-12.6 25.9l68.6 81.1v55a16 16 0 0 0 25.6 13.3l32-21.3a16 16 0 0 0 7.4-13.3v-33.7l68.6-81.1a15.8 15.8 0 0 0 1-15.4Z"/></svg></button>' +
     (filtersActive() ? '<span style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);pointer-events:none"></span>' : "") +
-    (state.picker && !state.watchMode ? filterPopHtml() : "") +
+    (state.picker && !state.watchMode ? filterPopHtml() : state.tileAdd ? tilePickerHtml(tileOrder()) : "") +
     "</div>" +
     '<div style="position:relative" data-pop="menu">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Menu" data-act="menu"><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></button>' +
@@ -687,6 +714,7 @@ const ICONS = {
   plus: "M224 128a8 8 0 0 1-8 8h-80v80a8 8 0 0 1-16 0v-80H40a8 8 0 0 1 0-16h80V40a8 8 0 0 1 16 0v80h80a8 8 0 0 1 8 8Z",
   minus: "M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8Z",
   bookmark: "M184 32H72a16 16 0 0 0-16 16v176a8 8 0 0 0 12.24 6.78L128 193.43l59.77 37.35A8 8 0 0 0 200 224V48a16 16 0 0 0-16-16Zm0 177.57-51.77-32.35a8 8 0 0 0-8.48 0L72 209.57V48h112Z",
+  search: "M229.66 218.34l-50.07-50.06a88.11 88.11 0 1 0-11.31 11.31l50.06 50.07a8 8 0 0 0 11.32-11.32ZM40 112a72 72 0 1 1 72 72 72.08 72.08 0 0 1-72-72Z",
   bookmarkFill: "M184 32H72a16 16 0 0 0-16 16v176a8 8 0 0 0 12.24 6.78L128 193.43l59.77 37.35A8 8 0 0 0 200 224V48a16 16 0 0 0-16-16Z",
   x: "M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z",
   caretDown: "M213.66 101.66l-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32Z",
@@ -2502,8 +2530,99 @@ function watchlistCardHtml(rows) {
 }
 function marketsHtml(m) {
   const mk = m.markets || { holdings: [], watchlist: [] };
-  return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px">' + heatmapCardHtml(mk) +
+  return '<div style="padding:20px;display:flex;flex-direction:column;gap:14px">' + marketTilesHtml() + heatmapCardHtml(mk) +
     '<div style="display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px;align-items:start">' + newsCardHtml(mk.news || []) + watchlistCardHtml(mk.watchlist || []) + "</div></div>";
+}
+// ---------------------------------------------------------------------------
+// Markets: the tile row
+// ---------------------------------------------------------------------------
+const TILES_MAX = 12, TILES_ROW = 6;
+function tileOrder() { return state.tileOrder || (((state.model || {}).markets || {}).tiles || []); }
+function tileChangeHtml(t) {
+  if (t.change == null || t.percentChange == null) return '<div class="s">—</div>';
+  const c = t.change < 0 ? "neg" : "pos";
+  return '<div class="s ' + c + '" style="color:var(--' + c + ')">' + (t.change < 0 ? "−" : "+") + n2(Math.abs(t.change), t.decimals) + " (" + signedPct(t.percentChange) + ")</div>";
+}
+function tileHtml(t) {
+  const arg = attr({ symbol: t.symbol, exchange: t.exchange });
+  return '<div class="mt-cell" data-sym="' + esc(t.symbol) + '"><div class="card elev-sm kpi mt-tile' + (state.tileDrag === t.symbol ? " mt-drag" : "") + '" data-sym="' + esc(t.symbol) + '" data-ex="' + esc(t.exchange) + '">' +
+    '<div class="lbl">' + esc(t.label) + '</div><div class="v">' + (t.last == null ? "—" : n2(t.last, t.decimals)) + "</div>" + tileChangeHtml(t) +
+    '<button class="mt-x" data-act="tileRemove" data-arg=\'' + arg + '\' aria-label="Remove ' + esc(t.label) + '">' + tkIconSvg(ICONS.x) + "</button></div></div>";
+}
+function tilePickerHtml(tiles) {
+  const mk = (state.model || {}).markets || {};
+  const on = new Set(tiles.map((t) => t.symbol));
+  const q = state.tileQuery.trim().toUpperCase();
+  const hit = (r) => !q || r.symbol.indexOf(q) >= 0 || r.label.indexOf(q) >= 0 || r.name.toUpperCase().indexOf(q) >= 0 || (r.aliases || []).some((a) => a.toUpperCase().indexOf(q) >= 0);
+  const rows = (mk.instruments || []).filter(hit);
+  const full = tiles.length >= TILES_MAX;
+  const row = (r) => '<div class="pop-row mt-row' + (on.has(r.symbol) ? " on" : full ? " off" : "") + '" role="button" tabindex="-1" data-act="tileToggle" data-arg=\'' + attr({ symbol: r.symbol, exchange: r.exchange }) + "'>" +
+    '<span style="min-width:0"><span class="mt-sym" style="display:block;font-weight:500">' + esc(r.symbol) + '</span><span style="display:block;font-size:11px;color:rgba(var(--ink-rgb),.45);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.name) + "</span></span>" +
+    '<span style="margin-left:auto;font-size:11px;color:rgba(var(--ink-rgb),.4);white-space:nowrap">' + esc(r.exchange) + '</span><span class="mt-bm">' + tkIconSvg(on.has(r.symbol) ? ICONS.bookmarkFill : ICONS.bookmark) + "</span></div>";
+  return '<div class="mt-scrim" data-act="tileBoxClose"></div><div class="pop elev-md">' +
+    '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;margin-bottom:8px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)">' + tkIconSvg(ICONS.search) +
+    '<input id="tileQuery" value="' + esc(state.tileQuery) + '" placeholder="Index, commodity, rate or pair" aria-label="Search instruments" style="flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:400 12.5px var(--font);outline:none">' +
+    '<span style="font-size:10px;color:rgba(var(--ink-rgb),.4)">ESC</span></div>' +
+    '<div class="lbl" style="padding:2px 7px 7px">' + (q ? "Matches" : "Market instruments") + "</div>" +
+    (rows.length ? '<div class="scroll" style="max-height:264px;display:flex;flex-direction:column;gap:1px">' + rows.map(row).join("") + "</div>" : '<div class="muted" style="padding:2px 7px 8px;font-size:12px">No match.</div>') +
+    '<div style="font-size:11px;color:rgba(var(--ink-rgb),.4);padding:8px 7px 0">' + tiles.length + " of " + TILES_MAX + " tiles used</div></div>";
+}
+function marketTilesHtml() {
+  const tiles = tileOrder();
+  const open = state.tilesOpen;
+  const shown = open ? tiles : tiles.slice(0, TILES_ROW);
+  const room = open ? TILES_MAX : TILES_ROW;
+  const plus = shown.length < room;
+  if (!plus && state.tileAdd) state.tileAdd = false;   // the plus cell is gone: its box goes with it
+  const beyond = tiles.length - TILES_ROW;
+  const more = tiles.length >= TILES_ROW && !(open && tiles.length >= TILES_MAX)
+    ? '<div class="mt-more' + (open ? " open" : "") + '"><button data-act="tilesMore">' + (open ? "Show fewer" : beyond > 0 ? "Show " + beyond + " more" : "Show more") + tkIconSvg(ICONS.caretDown) + "</button></div>" : "";
+  return '<div id="mtRow"><div id="mtGrid" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px">' + shown.map(tileHtml).join("") +
+    (plus ? '<div class="mt-cell"><button class="mt-plus' + (state.tileAdd ? " on" : "") + '" data-act="tileAddOpen" aria-label="Add a tile">' + tkIconSvg(ICONS.plus) + "</button></div>" : "") +
+    "</div>" + more + "</div>";
+}
+function renderTilesRow() { const row = document.getElementById("mtRow"); if (row) { const tmp = document.createElement("div"); tmp.innerHTML = marketTilesHtml(); row.replaceWith(tmp.firstChild); } }
+let _tilesTimers = [];
+function postTiles(tiles) {
+  // the row shows the change at once; the save follows
+  state.tileOrder = tiles.slice();
+  render();
+  api("POST", "/api/tiles/set", { tiles: tiles.map((t) => ({ symbol: t.symbol, exchange: t.exchange })) }).then((r) => {
+    if (r && r.ok && state.model && state.model.markets) { state.model.markets.tiles = r.tiles; }
+    state.tileOrder = null;
+    render();
+    // a new instrument's quote lands a moment later: fetch the model again for it
+    _tilesTimers.forEach(clearTimeout); _tilesTimers = [3000, 9000].map((ms) => setTimeout(() => { if (!state.sel) loadModel(); }, ms));
+  });
+}
+// reordering: pointer events, the pressed tile follows the pointer and the others shift as it crosses them
+let _td = null;
+function tileDragBind() {
+  document.addEventListener("pointerdown", (e) => {
+    const tile = e.target.closest && e.target.closest(".mt-tile");
+    if (!tile || e.button !== 0 || e.target.closest(".mt-x")) return;
+    const r = tile.getBoundingClientRect();
+    _td = { sym: tile.dataset.sym, x: e.clientX, y: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, on: false, order: null };
+  });
+  document.addEventListener("pointermove", (e) => {
+    if (!_td) return;
+    if (!_td.on) { if (Math.hypot(e.clientX - _td.x, e.clientY - _td.y) < 4) return; _td.on = true; _td.order = tileOrder().slice(); state.tileDrag = _td.sym; state.tileOrder = _td.order.slice(); renderTilesRow(); }
+    const cells = [...document.querySelectorAll("#mtGrid .mt-cell[data-sym]")];
+    const over = cells.findIndex((c) => { const b = c.getBoundingClientRect(); return e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom; });
+    const from = _td.order.findIndex((t) => t.symbol === _td.sym);
+    if (over >= 0 && over !== from) { const [m] = _td.order.splice(from, 1); _td.order.splice(over, 0, m); state.tileOrder = _td.order.slice(); renderTilesRow(); }
+    const el = document.querySelector('#mtGrid .mt-tile[data-sym="' + _td.sym + '"]');
+    if (el) { el.style.transform = ""; const b = el.getBoundingClientRect(); el.classList.add("mt-drag"); el.style.transform = "translate(" + (e.clientX - _td.ox - b.left) + "px," + (e.clientY - _td.oy - b.top) + "px) scale(1.015)"; }
+  });
+  const end = () => {
+    if (!_td) return;
+    const d = _td; _td = null;
+    if (!d.on) return;
+    state.tileDrag = null;   // the tile settles into its cell on release, before the save
+    postTiles(d.order);
+  };
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
 }
 function watchedKeys() { return new Set((((state.model || {}).markets || {}).watchlist || []).map((w) => bareSymbol(w.symbol) + "@" + String(w.exchange || "").toUpperCase())); }
 // ⌘K in watch mode: every symbol row carries one icon, add to the watchlist, lit when it is on it
@@ -2719,7 +2838,7 @@ function render() {
   document.documentElement.classList.toggle("panel-open", !!(state.ticket || state.ordersOpen));   // the wheel over a panel must not move the page behind it
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
-  if (focusId === "valueQuery" || focusId === "searchInput" || focusId === "newsQuery") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
+  if (focusId === "valueQuery" || focusId === "searchInput" || focusId === "newsQuery" || focusId === "tileQuery") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
   else if (rowHadFocus) { const row = document.querySelector("#popMatches .pop-row.hi, #popValues .pop-row.hi"); if (row) row.focus(); }
   root.querySelectorAll(".scroll, .scroll-xy").forEach((el, i) => { const b = boxes[i]; if (b && !el.dataset.keepScroll) { el.scrollTop = b.top; el.scrollLeft = b.left; } });
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
@@ -2920,6 +3039,19 @@ function act(name, arg, ev) {
       break;
     }
     case "watchRemove": api("POST", "/api/watchlist/remove", arg).then(() => loadModel()); break;
+    case "tileRemove": postTiles(tileOrder().filter((t) => t.symbol !== arg.symbol)); break;
+    case "tileAddOpen": state.tileAdd = !state.tileAdd; state.tileQuery = ""; render(); { const q = document.getElementById("tileQuery"); if (q) q.focus(); } break;
+    case "tileBoxClose": state.tileAdd = false; render(); break;
+    case "tileToggle": {
+      const cur = tileOrder(); const has = cur.some((t) => t.symbol === arg.symbol);
+      if (!has && cur.length >= TILES_MAX) break;
+      const inst = (((state.model || {}).markets || {}).instruments || []).find((r) => r.symbol === arg.symbol);
+      const next = has ? cur.filter((t) => t.symbol !== arg.symbol) : cur.concat([{ symbol: arg.symbol, exchange: arg.exchange, label: inst ? inst.label : arg.symbol, name: inst ? inst.name : "", kind: inst ? inst.kind : "", last: null, change: null, percentChange: null, decimals: 2 }]);
+      if (!has && next.length > TILES_ROW && !state.tilesOpen) { state.tilesOpen = true; try { localStorage.setItem("bh2.tilesOpen", "1"); } catch (e) {} }
+      if (next.length >= TILES_MAX) state.tileAdd = false;
+      postTiles(next); break;
+    }
+    case "tilesMore": state.tilesOpen = !state.tilesOpen; if (!state.tilesOpen) state.tileAdd = false; try { localStorage.setItem("bh2.tilesOpen", state.tilesOpen ? "1" : "0"); } catch (e) {} render(); break;
     case "heatUniverse": case "heatSize": {
       Object.assign(state.heat, arg); try { localStorage.setItem("bh2.heatmap", JSON.stringify(state.heat)); } catch (e) {}
       // a market universe never read: ask for it now rather than at the next half hour
@@ -3029,6 +3161,7 @@ function commitTag() {
 }
 let _rangeTimer = 0, _thesisTimer = 0, _tagPick = false;
 function bind() {
+  tileDragBind();
   document.addEventListener("click", (e) => {
     const el = e.target.closest("[data-act]");
     if (el) {
@@ -3100,7 +3233,7 @@ function bind() {
       if (j >= 0 && j < pages.length) { e.preventDefault(); go(pages[j]); }
       return;
     }
-    if (e.key === "Escape") { if (state.confirmOpen) { state.confirmOpen = ""; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); }
+    if (e.key === "Escape") { if (state.tileAdd) { state.tileAdd = false; render(); return; } if (state.confirmOpen) { state.confirmOpen = ""; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); }
       // nothing open, nothing being typed: Escape clears the filters
       else if (filtersActive() && !(document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA"))) { act("clearAll"); }
       return; }
@@ -3170,6 +3303,7 @@ function bind() {
     const t = e.target;
     if (/^tk-/.test(t.id || "")) { tkInputEvent(t); return; }
     if (t.id === "newsQuery") { state.newsQuery = t.value; render(); return; }
+    if (t.id === "tileQuery") { state.tileQuery = t.value; render(); return; }
     if (t.id === "tagInput") { state.tagDraft = t.value; state.tagHi = 0; document.getElementById("tagMenu").innerHTML = tagMenuHtml(); return; }
     if (t.id === "thesis" || t.id === "posThesis") { clearTimeout(_thesisTimer); const id = t.dataset.id, v = t.value; _thesisTimer = setTimeout(() => { const o = tradeById(id) || positionById(id); if (o && o.thesis !== v) saveJournal(id, { thesis: v }, true); }, 600); return; }
     if (t.id === "rangeInput") { clearTimeout(_rangeTimer); const key = t.dataset.key, v = t.value.trim(); _rangeTimer = setTimeout(() => { state.filters.ranges[key].v = v === "" ? null : Number(v.replace(/[$,]/g, "")); if (v !== "" && isNaN(state.filters.ranges[key].v)) state.filters.ranges[key].v = null; loadModel(); }, 500); return; }

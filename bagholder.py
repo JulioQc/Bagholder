@@ -713,7 +713,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-11.7"
+PROTOCOL = "2026-09-11.8"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -5418,7 +5418,7 @@ def watch_add(body):
     def fetch():
         # its quote and its sector, from the same public sources a holding uses; shown as they land
         try:
-            market.refresh_quotes(model.watch_symbols(), _ssl_context())
+            market.refresh_quotes(model.quote_symbols(), _ssl_context())
             model.invalidate()
         except Exception as e:
             sys.stderr.write("bagholder watchlist: quote for %s failed: %s\n" % (sym, e))
@@ -5443,6 +5443,29 @@ def watch_remove(body):
     store.forget_news(sym, body.get("exchange"))
     model.invalidate()
     return {"ok": True, "watchlist": store.list_watchlist()}
+
+
+def tiles_set(body):
+    """The Markets tab's tile row, in order, from the page: only instruments the directory knows, twelve at most."""
+    body = body if isinstance(body, dict) else {}
+    rows, seen = [], set()
+    for r in body.get("tiles") if isinstance(body.get("tiles"), list) else []:
+        inst = instruments.find((r or {}).get("symbol"), (r or {}).get("exchange")) if isinstance(r, dict) else None
+        if inst and inst["symbol"] not in seen:
+            seen.add(inst["symbol"])
+            rows.append({"symbol": inst["symbol"], "exchange": inst["exchange"]})
+    if len(rows) > model.TILES_MAX:
+        return {"ok": False, "error": "at most %d tiles" % model.TILES_MAX}
+    store.save_tiles(rows)
+    model.invalidate()
+    def fetch():
+        try:
+            market.refresh_quotes(model.quote_symbols(), _ssl_context())
+            model.invalidate()
+        except Exception as e:
+            sys.stderr.write("bagholder tiles: quotes failed: %s\n" % e)
+    threading.Thread(target=fetch, name="tiles-fetch", daemon=True).start()
+    return {"ok": True, "tiles": model.tile_rows(model.base_model())}
 
 
 def news_listings():
@@ -5588,7 +5611,7 @@ def refresh_quotes():
     """Prices for held positions and watched listings, at most every QUOTE_REFRESH_MINUTES. Never raises."""
     try:
         base = model.base_model()
-        n = market.refresh_quotes(model.held_symbols(base) + model.watch_symbols(base), _ssl_context())
+        n = market.refresh_quotes(model.held_symbols(base) + model.quote_symbols(base), _ssl_context())
         if n:
             model.invalidate()
         return n
@@ -6202,7 +6225,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if market.is_stale(symbols=_payer_symbols()):
                     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
-                elif market.quote_symbols_needing_refresh(model.held_symbols()):
+                elif market.quote_symbols_needing_refresh(model.held_symbols() + model.quote_symbols()):   # the watchlist's and the tile row's quotes too
                     threading.Thread(target=refresh_quotes, name="bagholder-quotes", daemon=True).start()
             except Exception:
                 pass
@@ -6367,6 +6390,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/watchlist/remove":
             self._send(200, watch_remove(self._read_json()))
+            return
+        if path == "/api/tiles/set":
+            self._send(200, tiles_set(self._read_json()))
             return
         if path == "/api/journal":
             body = self._read_json()

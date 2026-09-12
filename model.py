@@ -2099,6 +2099,7 @@ def build_base(snapshot, market, journal, today=None, book=None):
         "margin": [dict(m) for m in (snapshot.get("margin") or []) if isinstance(m, dict)],
         "exposures": dict(snapshot.get("exposures") or {}),
         "watchlist": [dict(w) for w in (snapshot.get("watchlist") or []) if isinstance(w, dict)],
+        "tiles": snapshot.get("tiles"),
         "news": [dict(n) for n in (snapshot.get("news") or []) if isinstance(n, dict)],
         "universes": {k: [dict(r) for r in v] for k, v in (snapshot.get("universes") or {}).items()},
         "cashCurrencies": securities.cash_currencies(),
@@ -2274,6 +2275,49 @@ def watch_quote_key(symbol, exchange):
     return _s(symbol).strip().upper() + "@" + _s(exchange).strip().upper()
 
 
+# the Markets tab's tile row when the user has never changed it
+DEFAULT_TILES = [("SPX", "INDEX"), ("NDX", "INDEX"), ("DJI", "INDEX"), ("VIX", "INDEX"), ("GC", "COMEX"), ("BTCUSD", "FX")]
+TILES_MAX = 12
+
+
+def tile_list(base):
+    """The tile row's instruments in order: the saved set, else the default; only what the directory knows, twelve at most."""
+    saved = base.get("tiles")
+    rows = [(r["symbol"], r["exchange"]) for r in saved] if saved is not None else list(DEFAULT_TILES)
+    out, seen = [], set()
+    for sym, ex in rows:
+        inst = instruments.find(sym, ex)
+        if inst and inst["symbol"] not in seen:
+            seen.add(inst["symbol"])
+            out.append(inst)
+    return out[:TILES_MAX]
+
+
+def tile_symbols(base):
+    """The tile row's instruments, with what the quote source needs, keyed as a watched instrument is."""
+    return [{"symbol": i["symbol"], "exchange": i["exchange"], "currency": i["currency"], "kind": "Instrument",
+             "quoteKey": watch_quote_key(i["symbol"], i["exchange"]), "yahoo": i["yahoo"]} for i in tile_list(base)]
+
+
+def tile_decimals(inst):
+    """The instrument's own price scale: two for an index or a commodity, three for a rate, four for a pair, none for Bitcoin."""
+    if inst["symbol"] == "BTCUSD":
+        return 0
+    return {"Rate": 3, "Currency": 4}.get(inst["kind"], 2)
+
+
+def tile_rows(base):
+    """The Markets tab's tiles: label, last, the day's change in points and percent, and the decimals to show them with."""
+    quotes = base.get("quotes") or {}
+    out = []
+    for inst in tile_list(base):
+        q = quotes.get(watch_quote_key(inst["symbol"], inst["exchange"])) or {}
+        out.append({"symbol": inst["symbol"], "exchange": inst["exchange"], "label": instruments.label(inst["symbol"]), "name": inst["name"], "kind": inst["kind"],
+                    "last": _num(q.get("price"), None), "change": _num(q.get("priceChange"), None), "percentChange": _num(q.get("percentChange"), None),
+                    "decimals": tile_decimals(inst)})
+    return out
+
+
 def watch_symbols(base=None):
     """Every watched listing, with what a quote source needs to price it."""
     base = base or base_model()
@@ -2286,6 +2330,18 @@ def watch_symbols(base=None):
         if inst:
             rec["yahoo"] = inst["yahoo"]
         out.append(rec)
+    return out
+
+
+def quote_symbols(base=None):
+    """Everything quoted beside the book: the watched listings, then the tile row's instruments not already among them."""
+    base = base or base_model()
+    out = watch_symbols(base)
+    keys = {r["quoteKey"] for r in out}
+    for rec in tile_symbols(base):
+        if rec["quoteKey"] not in keys:
+            keys.add(rec["quoteKey"])
+            out.append(rec)
     return out
 
 
@@ -2440,7 +2496,9 @@ def markets_view(base, positions):
     watch = watch_rows(base, positions)
     universes = {k: [{"id": None, "symbol": r["symbol"], "name": r.get("name") or "", "value": r.get("value") or 0.0, "percentChange": r.get("percentChange"), "sector": r.get("sector") or UNCLASSIFIED, "country": r.get("country") or ""}
                      for r in rows] for k, rows in (base.get("universes") or {}).items()}
-    return {"holdings": heatmap_items(positions, base.get("exposures") or {}, cad), "watchlist": watch, "news": news_rows(base, positions, watch), "universes": universes}
+    directory = [{"symbol": r["symbol"], "label": instruments.label(r["symbol"]), "name": r["name"], "exchange": r["exchange"], "kind": r["kind"], "aliases": list(r["aliases"])} for r in instruments._rows()]
+    return {"holdings": heatmap_items(positions, base.get("exposures") or {}, cad), "watchlist": watch, "news": news_rows(base, positions, watch), "universes": universes,
+            "tiles": tile_rows(base), "instruments": directory}
 
 
 def portfolio_view(base, f, positions):

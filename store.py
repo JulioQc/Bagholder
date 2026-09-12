@@ -2081,6 +2081,35 @@ def book_version():
             conn.close()
 
 
+TILES_META = "market_tiles"
+
+
+def _tiles_from(raw):
+    """The market tiles row as saved: [{symbol, exchange}] in order, or None when never saved."""
+    if not raw:
+        return None
+    try:
+        rows = json.loads(raw)
+    except ValueError:
+        return None
+    out = []
+    for r in rows if isinstance(rows, list) else []:
+        if isinstance(r, dict) and _s(r.get("symbol")).strip():
+            out.append({"symbol": _s(r.get("symbol")).strip().upper(), "exchange": _s(r.get("exchange")).strip().upper()})
+    return out
+
+
+def tiles():
+    return _tiles_from(get_meta(TILES_META))
+
+
+def save_tiles(rows):
+    """The market tiles row, in order; saving it is what the Markets tab's plus, cross and drag do."""
+    clean = _tiles_from(json.dumps(list(rows or []))) or []
+    set_meta(TILES_META, json.dumps(clean))
+    return clean
+
+
 def data_version():
     """Cheap fingerprint of everything the derived model depends on."""
     with _lock:
@@ -2107,7 +2136,7 @@ def data_version():
             ):
                 row = conn.execute(sql).fetchone()
                 parts.append("%s:%s" % (row[0], row[1]))
-            for key in ("synced_at", "trade_groups", "trade_notes", JOURNAL_META):
+            for key in ("synced_at", "trade_groups", "trade_notes", JOURNAL_META, TILES_META):
                 row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
                 val = (row["value"] if row else "") or ""
                 parts.append("%s:%s:%s" % (key, len(val), hash(val)))
@@ -2312,6 +2341,7 @@ def snapshot(activities=True):
                 "syncedAt": synced,
                 "tradeGroups": groups,
                 "notes": notes,
+                "tiles": _tiles_from(get_meta(TILES_META)),
                 "securities": securities,
             }
         finally:

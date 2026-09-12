@@ -3378,6 +3378,57 @@ class StopExpiryTest(_EngineBase):
         self.assertEqual(store.get_bracket(b["id"])["status"], "done")
 
 
+class TilesTest(unittest.TestCase):
+    """The Markets tab's tile row: saved whole, in order, as instruments the directory knows."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["BAGHOLDER_HOME"] = self.tmp.name
+        store.set_home(self.tmp.name)
+        bagholder.set_home(self.tmp.name)
+        store.ensure()
+        model.invalidate()
+
+    def tearDown(self):
+        model.invalidate()
+        self.tmp.cleanup()
+        os.environ.pop("BAGHOLDER_HOME", None)
+
+    def test_the_row_is_the_default_until_saved_and_then_what_was_saved(self):
+        self.assertIsNone(store.tiles(), "never saved")
+        base = model.base_model()
+        self.assertEqual([(t["symbol"], t["label"], t["decimals"]) for t in model.tile_rows(base)],
+                         [("SPX", "SPX", 2), ("NDX", "NDX", 2), ("DJI", "DJI", 2), ("VIX", "VIX", 2), ("GC", "GOLD", 2), ("BTCUSD", "BITCOIN", 0)])
+        before = store.data_version()
+        saved = store.save_tiles([{"symbol": "tnx", "exchange": "index"}, {"symbol": "usdcad", "exchange": "fx"}, {"symbol": "", "exchange": "x"}, "junk"])
+        self.assertEqual(saved, [{"symbol": "TNX", "exchange": "INDEX"}, {"symbol": "USDCAD", "exchange": "FX"}])
+        self.assertNotEqual(store.data_version(), before, "the row is part of the data version")
+        model.invalidate()
+        rows = model.tile_rows(model.base_model())
+        self.assertEqual([(t["symbol"], t["label"], t["kind"], t["decimals"]) for t in rows], [("TNX", "10Y", "Rate", 3), ("USDCAD", "USD/CAD", "Currency", 4)])
+        self.assertEqual([t["last"] for t in rows], [None, None], "no quote yet: a dash, never a zero")
+        store.save_tiles([])
+        model.invalidate()
+        self.assertEqual(model.tile_rows(model.base_model()), [], "an emptied row stays empty")
+
+    def test_the_row_reads_its_quotes_where_a_watched_instrument_would(self):
+        store.save_tiles([{"symbol": "SPX", "exchange": "Index"}])
+        model.invalidate()
+        base = model.base_model()
+        self.assertEqual([(r["quoteKey"], r["yahoo"], r["kind"]) for r in model.quote_symbols(base)], [("SPX@INDEX", "^GSPC", "Instrument")], "quoted through the watch path")
+        row = model.tile_rows(dict(base, quotes={"SPX@INDEX": {"price": 6742.18, "priceChange": 42.18, "percentChange": 0.63}}))[0]
+        self.assertEqual((row["last"], row["change"], row["percentChange"]), (6742.18, 42.18, 0.63))
+
+    def test_the_set_route_keeps_only_directory_instruments_in_order_and_caps_at_twelve(self):
+        with mock.patch.object(market, "refresh_quotes", return_value=0):
+            r = bagholder.tiles_set({"tiles": [{"symbol": "VIX", "exchange": "Index"}, {"symbol": "SHOP", "exchange": "TSX"}, {"symbol": "GC", "exchange": "COMEX"}, {"symbol": "VIX", "exchange": "Index"}]})
+            self.assertTrue(r["ok"])
+            self.assertEqual([t["symbol"] for t in r["tiles"]], ["VIX", "GC"], "a listing is not a tile; a repeat is one tile")
+            too_many = [{"symbol": s, "exchange": "Index"} for s in ("SPX", "NDX", "IXIC", "DJI", "RUT", "VIX", "TSX", "FTSE", "DAX", "N225", "HSI", "STOXX50E", "DXY")]
+            self.assertFalse(bagholder.tiles_set({"tiles": too_many})["ok"])
+            self.assertEqual([t["symbol"] for t in model.tile_rows(model.base_model())], ["VIX", "GC"], "a refused save changes nothing")
+
+
 class WatchlistTest(unittest.TestCase):
     """Listings followed without being held: kept in the store, quoted under their own key, classified like a share."""
 
@@ -3417,7 +3468,8 @@ class WatchlistTest(unittest.TestCase):
                     break
                 time.sleep(0.05)
             recs = rq.call_args[0][0]
-            self.assertEqual([(x["symbol"], x["exchange"], x["quoteKey"]) for x in recs], [("SHOP", "TSX", "SHOP@TSX")], "quoted under symbol@venue")
+            self.assertEqual([(x["symbol"], x["exchange"], x["quoteKey"]) for x in recs][:1], [("SHOP", "TSX", "SHOP@TSX")], "quoted under symbol@venue")
+            self.assertEqual([x["symbol"] for x in recs[1:]], ["SPX", "NDX", "DJI", "VIX", "GC", "BTCUSD"], "then the Markets tab's tile row, quoted in the same read")
             self.assertEqual(se.call_args[0], ("SHOP", "TSX", "CAD"))
         self.assertEqual(bagholder.watch_add({})["ok"], False)
         r = bagholder.watch_remove({"symbol": "SHOP", "exchange": "TSX"})
