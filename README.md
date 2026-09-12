@@ -14,6 +14,12 @@ A local-first trading journal for Wealthsimple users. It runs on your own comput
 
 ![Bagholder on the desktop](docs/screenshots/desktop-tour.gif)
 
+## Narrated tour
+
+A minute and a half through every tab, with sound.
+
+https://github.com/user-attachments/assets/7902d464-1cbc-4634-b21c-5f311263567b
+
 ## Screenshots
 
 ![Dashboard](docs/screenshots/desktop-dashboard.png)
