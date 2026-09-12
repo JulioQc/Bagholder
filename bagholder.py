@@ -5635,19 +5635,23 @@ def archive_intraday_bars():
     instruments per call so the sources are never hammered. Never raises."""
     try:
         recs = model.intraday_archive_symbols()
-        return market.archive_daily(recs, _ssl_context()) + market.archive_intraday(recs, _ssl_context())
+        # A Raspberry Pi remains usable while the archive catches up: one source
+        # response can be expensive to parse, so deliberately yield between
+        # small batches instead of occupying a core for the whole backlog.
+        limit = 3
+        return market.archive_daily(recs, _ssl_context(), limit=limit) + market.archive_intraday(recs, _ssl_context(), limit=limit)
     except Exception:
         return []
 
 
 def archive_loop():
     """Sweeps the archive until every instrument is kept, then tops up once a day
-    per instrument. While there is a backlog the next pass follows at once; when a
-    pass finds nothing to do the loop rests five minutes."""
+    per instrument. Backfill waits between batches so it does not starve the UI;
+    when a pass finds nothing to do the loop rests five minutes."""
     delay = 20
     while not _stop.wait(delay):
         worked = archive_intraday_bars()
-        delay = 5 if len(worked) >= market.ARCHIVE_BATCH else 5 * 60
+        delay = 60 if worked else 5 * 60
 
 
 def quote_loop():
