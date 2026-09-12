@@ -149,7 +149,6 @@ html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
 .mt-more svg{transition:transform .15s}
 .mt-more.open svg{transform:rotate(180deg)}
 .mt-scrim{position:fixed;inset:0;z-index:29}
-.pop.pop-mt{top:calc(100% + 8px);left:0;right:auto}
 .mt-row.on{background:rgba(var(--accent-rgb),.14);box-shadow:inset 3px 0 0 var(--accent)}
 .mt-row.on .mt-sym{color:var(--accent-300)}
 .mt-row.on .mt-bm{color:var(--accent)}
@@ -704,7 +703,7 @@ function headerHtml() {
     '<div style="position:relative" data-pop="filter">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Filters" data-act="openFields"><svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M230.6 49.5A15.8 15.8 0 0 0 216 40H40a16 16 0 0 0-12.6 25.9l68.6 81.1v55a16 16 0 0 0 25.6 13.3l32-21.3a16 16 0 0 0 7.4-13.3v-33.7l68.6-81.1a15.8 15.8 0 0 0 1-15.4Z"/></svg></button>' +
     (filtersActive() ? '<span style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);pointer-events:none"></span>' : "") +
-    (state.picker && !state.watchMode ? filterPopHtml() : "") +
+    (state.picker && !state.watchMode ? filterPopHtml() : state.tileAdd ? tilePickerHtml(tileOrder()) : "") +
     "</div>" +
     '<div style="position:relative" data-pop="menu">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Menu" data-act="menu"><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></button>' +
@@ -2560,7 +2559,7 @@ function tilePickerHtml(tiles) {
   const row = (r) => '<div class="pop-row mt-row' + (on.has(r.symbol) ? " on" : full ? " off" : "") + '" role="button" tabindex="-1" data-act="tileToggle" data-arg=\'' + attr({ symbol: r.symbol, exchange: r.exchange }) + "'>" +
     '<span style="min-width:0"><span class="mt-sym" style="display:block;font-weight:500">' + esc(r.symbol) + '</span><span style="display:block;font-size:11px;color:rgba(var(--ink-rgb),.45);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.name) + "</span></span>" +
     '<span style="margin-left:auto;font-size:11px;color:rgba(var(--ink-rgb),.4);white-space:nowrap">' + esc(r.exchange) + '</span><span class="mt-bm">' + tkIconSvg(on.has(r.symbol) ? ICONS.bookmarkFill : ICONS.bookmark) + "</span></div>";
-  return '<div class="mt-scrim" data-act="tileBoxClose"></div><div class="pop elev-md pop-mt">' +
+  return '<div class="mt-scrim" data-act="tileBoxClose"></div><div class="pop elev-md">' +
     '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;margin-bottom:8px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)">' + tkIconSvg(ICONS.search) +
     '<input id="tileQuery" value="' + esc(state.tileQuery) + '" placeholder="Index, commodity, rate or pair" aria-label="Search instruments" style="flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:400 12.5px var(--font);outline:none">' +
     '<span style="font-size:10px;color:rgba(var(--ink-rgb),.4)">ESC</span></div>' +
@@ -2579,7 +2578,7 @@ function marketTilesHtml() {
   const more = tiles.length >= TILES_ROW && !(open && tiles.length >= TILES_MAX)
     ? '<div class="mt-more' + (open ? " open" : "") + '"><button data-act="tilesMore">' + (open ? "Show fewer" : beyond > 0 ? "Show " + beyond + " more" : "Show more") + tkIconSvg(ICONS.caretDown) + "</button></div>" : "";
   return '<div id="mtRow"><div id="mtGrid" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px">' + shown.map(tileHtml).join("") +
-    (plus ? '<div class="mt-cell"><button class="mt-plus' + (state.tileAdd ? " on" : "") + '" data-act="tileAddOpen" aria-label="Add a tile">' + tkIconSvg(ICONS.plus) + "</button>" + (state.tileAdd ? tilePickerHtml(tiles) : "") + "</div>" : "") +
+    (plus ? '<div class="mt-cell"><button class="mt-plus' + (state.tileAdd ? " on" : "") + '" data-act="tileAddOpen" aria-label="Add a tile">' + tkIconSvg(ICONS.plus) + "</button></div>" : "") +
     "</div>" + more + "</div>";
 }
 function renderTilesRow() { const row = document.getElementById("mtRow"); if (row) { const tmp = document.createElement("div"); tmp.innerHTML = marketTilesHtml(); row.replaceWith(tmp.firstChild); } }
