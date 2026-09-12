@@ -6225,7 +6225,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if market.is_stale(symbols=_payer_symbols()):
                     threading.Thread(target=refresh_market_data, name="bagholder-market", daemon=True).start()
-                elif market.quote_symbols_needing_refresh(model.held_symbols()):
+                elif market.quote_symbols_needing_refresh(model.held_symbols() + model.quote_symbols()):   # the watchlist's and the tile row's quotes too
                     threading.Thread(target=refresh_quotes, name="bagholder-quotes", daemon=True).start()
             except Exception:
                 pass
