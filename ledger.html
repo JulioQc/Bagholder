@@ -2584,7 +2584,9 @@ function marketTilesHtml() {
 function renderTilesRow() { const row = document.getElementById("mtRow"); if (row) { const tmp = document.createElement("div"); tmp.innerHTML = marketTilesHtml(); row.replaceWith(tmp.firstChild); } }
 let _tilesTimers = [];
 function postTiles(tiles) {
+  // the row shows the change at once; the save follows
   state.tileOrder = tiles.slice();
+  render();
   api("POST", "/api/tiles/set", { tiles: tiles.map((t) => ({ symbol: t.symbol, exchange: t.exchange })) }).then((r) => {
     if (r && r.ok && state.model && state.model.markets) { state.model.markets.tiles = r.tiles; }
     state.tileOrder = null;
@@ -2616,7 +2618,7 @@ function tileDragBind() {
     if (!_td) return;
     const d = _td; _td = null;
     if (!d.on) return;
-    state.tileDrag = null;
+    state.tileDrag = null;   // the tile settles into its cell on release, before the save
     postTiles(d.order);
   };
   document.addEventListener("pointerup", end);
