@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import time
 from urllib.parse import quote
 import os
 import re
@@ -749,6 +750,51 @@ def quote_symbols_needing_refresh(symbols, now=None, max_age_minutes=QUOTE_REFRE
     return out
 
 
+def fetch_for(source, key, ssl_context=None, now=None, chains=None):
+    """One quote from the named source; chains shares an option root's chain across calls."""
+    if source == "tmx":
+        return fetch_tmx_quote(key, ssl_context)
+    if source == "cboe_ca":
+        return fetch_cboe_ca_quote(key, ssl_context)
+    if source == "coinbase":
+        return fetch_coinbase_spot(key, ssl_context, now)
+    if source == "yahoo_quote":
+        return fetch_yahoo_quote(key, ssl_context)
+    if source == "cboe_options":
+        chains = chains if chains is not None else {}
+        root = occ_root(key)
+        if root not in chains:
+            chains[root] = fetch_cboe_option_chain(root, ssl_context)
+        return option_mark(chains[root].get(key))
+    return None
+
+
+_peek = {}          # quote key -> (read at, quote): a glance at a listing not yet followed
+PEEK_SECONDS = 60
+
+
+def peek_quote(rec, ssl_context=None, now=None):
+    """A listing's price and day change for a glance (the watchlist's add row): the same
+    source a watched listing uses, not stored, remembered for a minute. None when no
+    public source covers it or it did not answer."""
+    src = quote_source(rec)
+    if not src:
+        return None
+    key = str(rec.get("symbol") or "").strip().upper() + "@" + str(rec.get("exchange") or "").strip().upper()
+    hit = _peek.get(key)
+    if hit and time.time() - hit[0] < PEEK_SECONDS:
+        return hit[1]
+    try:
+        q = fetch_for(src[0], src[1], ssl_context, now)
+    except Exception:
+        q = None
+    if not q or q.get("price") is None:
+        return None
+    out = {"price": q.get("price"), "priceChange": q.get("priceChange"), "percentChange": q.get("percentChange")}
+    _peek[key] = (time.time(), out)
+    return out
+
+
 def refresh_quotes(symbols, ssl_context=None, now=None):
     """Live-ish prices for held positions, at most every QUOTE_REFRESH_MINUTES.
     Shares and ETFs from TMX Money or Cboe Canada, crypto from Coinbase in the
@@ -756,20 +802,7 @@ def refresh_quotes(symbols, ssl_context=None, now=None):
     done = 0
     chains = {}
     for sym, source, key in quote_symbols_needing_refresh(symbols, now=now):
-        rec = None
-        if source == "tmx":
-            rec = fetch_tmx_quote(key, ssl_context)
-        elif source == "cboe_ca":
-            rec = fetch_cboe_ca_quote(key, ssl_context)
-        elif source == "coinbase":
-            rec = fetch_coinbase_spot(key, ssl_context, now)
-        elif source == "yahoo_quote":
-            rec = fetch_yahoo_quote(key, ssl_context)
-        elif source == "cboe_options":
-            root = occ_root(key)
-            if root not in chains:
-                chains[root] = fetch_cboe_option_chain(root, ssl_context)
-            rec = option_mark(chains[root].get(key))
+        rec = fetch_for(source, key, ssl_context, now, chains)
         if rec and rec.get("price") is not None:
             rec = dict(rec, source=source)
             store.upsert_quote(sym, rec, source=source)
