@@ -101,17 +101,30 @@ html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
 .nw-sym{font-size:13px;font-weight:500;border:0;background:transparent;padding:0;color:var(--ink);font-family:var(--font)}
 .nw-sym.go{cursor:pointer}
 .nw-sym.go:hover{color:var(--accent-300)}
-.wl-head,.wl-row{display:grid;grid-template-columns:minmax(0,1fr) 62px 78px 58px 22px;gap:8px;align-items:center;padding:0 16px;white-space:nowrap}
+.wl-head,.wl-row{display:grid;grid-template-columns:minmax(0,1fr) 58px 70px 66px 22px;gap:10px;align-items:center;padding:0 16px;white-space:nowrap}
 .wl-row > *{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .wl-head{padding-bottom:6px;margin:0 -16px}
-.wl-list{margin:0 -16px}
-.wl-row{padding:8px 16px}
+.wl-list{margin:0 -16px;padding-right:10px}   /* the overlay scrollbar never paints on the Chg values */
+.wl-row{padding:8px 6px 8px 16px}
 .wl-row.go{cursor:pointer}
 .wl-row:hover{background:rgba(var(--ink-rgb),var(--hover))}
-.wl-row .tk-rowbtn{opacity:.35;align-self:start;margin-top:-2px}
-.wl-row:hover .tk-rowbtn{opacity:1}
+.wl-row.wl-new{background:rgba(var(--accent-rgb),.12)}
+.wl-trash svg{width:14px;height:14px}
+.wl-trash{width:22px;height:22px;border-radius:6px;border:0;background:transparent;color:var(--ink60);opacity:.45;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:opacity .12s}
+.wl-row:hover .wl-trash{opacity:1}
+.wl-trash:hover{color:var(--neg);background:rgba(var(--neg-rgb),.14)}
 .wl-add{width:24px;height:24px;border-radius:6px;border:0;background:transparent;color:var(--ink60);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14)}
 .wl-add:hover{color:var(--accent-300);background:rgba(var(--ink-rgb),.06)}
+.wl-add svg{transition:transform .12s}
+.wl-add.on{color:var(--accent-300);background:rgba(var(--accent-rgb),.1);box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.5)}
+.wl-add.on svg{transform:rotate(45deg)}
+.wl-field{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.4);margin-bottom:8px;color:rgba(var(--ink-rgb),.45)}
+.wl-field input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:400 13px var(--font);outline:none}
+.wl-field .esc{font-size:10px;color:rgba(var(--ink-rgb),.4)}
+.wl-sug{border-radius:6px;cursor:pointer}
+.wl-sug:hover{background:rgba(var(--ink-rgb),.09)}
+.wl-sug.hi{background:rgba(var(--accent-rgb),.14)}
+.wl-rule{height:1px;background:rgba(var(--ink-rgb),.08);margin:6px -16px 8px}
 .tk-rowbtn.watch:hover{background:rgba(var(--accent-rgb),.16);color:var(--accent-300)}
 .tk-rowbtn.watch.on{color:var(--accent)}
 .seg{display:flex;gap:0;padding:0;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.14);overflow:hidden}
@@ -131,7 +144,6 @@ html[data-theme="light"] .heat-chg{color:rgba(27,29,39,.78)}
 .chip .cx{cursor:pointer;border:0;font:400 12px Inter,system-ui,sans-serif;padding:3px 7px;background:transparent;color:var(--ink60);line-height:1.4}
 .chip .cx:hover{background:rgba(var(--neg-rgb),.3)}
 .pop{position:absolute;top:42px;right:0;z-index:30;width:300px;background:var(--surface);border-radius:8px;padding:9px;text-align:left;box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.12),var(--shadow-md)}
-.pop.pop-wl{top:32px}   /* the watchlist's box sits under its card's header row, over the column head */
 /* the Markets tab's tile row: the page's tiles, dragged to reorder, a plus cell, a picker under it */
 .mt-cell{position:relative;min-width:0}
 .mt-tile{cursor:grab;user-select:none;touch-action:none;position:relative}
@@ -355,14 +367,16 @@ const state = {
     yoc: { key: "ttm", dir: "desc" },
     cash: { key: "date", dir: "desc" },
     orders: { key: "placed", dir: "desc" },
-    watchlist: { key: "added", dir: "asc" },
+    watchlist: { key: "added", dir: "desc" },   // newest first: a listing just added lands at the top
     news: { key: "when", dir: "desc" },
   },
   orders: null,
   ordersError: "",
   ordersOpen: false,
   ticketDraft: null,   // a closed ticket's typed fields, until the same symbol and side open again
-  watchMode: false,   // ⌘K opened from the Watchlist's plus: its rows add to the list instead of filtering
+  watchAdding: false,  // the Watchlist card's add row is open (its plus lit)
+  watchQuery: "",      // what is typed in that row
+  watchNew: null,      // the listing just added, tinted for a moment
   newsSymbol: null,   // {symbol, exchange}: the one listing the News card is scoped to, from a click on its symbol
   newsQuery: "",   // what is typed in the News card's box: a ticker or words, matched as it is typed
   tilesOpen: (function () { try { return localStorage.getItem("bh2.tilesOpen") === "1"; } catch (e) { return false; } })(),   // the tile row's second row shown
@@ -703,7 +717,7 @@ function headerHtml() {
     '<div style="position:relative" data-pop="filter">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Filters" data-act="openFields"><svg width="15" height="15" viewBox="0 0 256 256" fill="currentColor"><path d="M230.6 49.5A15.8 15.8 0 0 0 216 40H40a16 16 0 0 0-12.6 25.9l68.6 81.1v55a16 16 0 0 0 25.6 13.3l32-21.3a16 16 0 0 0 7.4-13.3v-33.7l68.6-81.1a15.8 15.8 0 0 0 1-15.4Z"/></svg></button>' +
     (filtersActive() ? '<span style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg);pointer-events:none"></span>' : "") +
-    (state.picker && !state.watchMode ? filterPopHtml() : state.tileAdd ? tilePickerHtml(tileOrder()) : "") +
+    (state.picker ? filterPopHtml() : state.tileAdd ? tilePickerHtml(tileOrder()) : "") +
     "</div>" +
     '<div style="position:relative" data-pop="menu">' +
     '<button class="btn btn-icon btn-secondary" aria-label="Menu" data-act="menu"><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></button>' +
@@ -1042,6 +1056,7 @@ function extSchedule(q) {
       if (state.picker === "fields" && (state.fieldQuery || "").trim().toUpperCase() === key) {
         const body = document.getElementById("popFieldsBody"); if (body) body.innerHTML = popFieldsBodyHtml();
       }
+      if (state.watchAdding && state.watchQuery.trim().toUpperCase() === key) render();
     });
   }, 300);
 }
@@ -1090,7 +1105,6 @@ function symbolRows(q) {
 function popFieldsBodyHtml() {
   const f = state.filters;
   const q = state.fieldQuery == null ? f.search : state.fieldQuery;
-  if (state.watchMode) return watchBodyHtml(q);
   const syms = q ? symbolRows(q) : [];
   const others = fieldMatches(q).filter((m) => m.key !== "symbol");
   if (q && (syms.length || others.length)) {
@@ -1114,7 +1128,7 @@ function filterPopHtml() {
   let body = "";
   if (!active) {
     const q = state.fieldQuery == null ? f.search : state.fieldQuery;
-    body = '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;margin-bottom:8px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="searchInput" value="' + esc(q) + '" placeholder="' + (state.watchMode ? "Search symbol…" : "Search symbol, account, tag…") + '" aria-label="Search" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px Inter,system-ui;color:var(--ink)"></div>' +
+    body = '<div style="display:flex;align-items:center;gap:7px;padding:5px 7px;margin-bottom:8px;border-radius:6px;background:var(--n900);box-shadow:inset 0 0 0 1px rgba(var(--ink-rgb),.1)"><input id="searchInput" value="' + esc(q) + '" placeholder="Search symbol, account, tag…" aria-label="Search" autocomplete="off" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12.5px Inter,system-ui;color:var(--ink)"></div>' +
       '<div id="popFieldsBody">' + popFieldsBodyHtml() + "</div>";
   } else {
     const hasValue = active.kind === "date" ? dateLabel() !== "All time" : active.kind === "list" ? f.lists[active.key].length > 0 : f.ranges[active.key].v != null && f.ranges[active.key].v !== "";
@@ -1137,7 +1151,7 @@ function filterPopHtml() {
     }
   }
   return '<div class="pop elev-md">' + body +
-    '<div class="rule-t" style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px">' + (state.watchMode ? "" : '<button class="btn btn-secondary" data-act="clearAll" style="font-size:12px;padding:4px 10px">Clear all</button>') + '<button class="btn btn-primary" data-act="closeFilter" style="font-size:12px;padding:4px 10px;margin-left:auto">Done</button></div></div>';
+    '<div class="rule-t" style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px">' + '<button class="btn btn-secondary" data-act="clearAll" style="font-size:12px;padding:4px 10px">Clear all</button>' + '<button class="btn btn-primary" data-act="closeFilter" style="font-size:12px;padding:4px 10px;margin-left:auto">Done</button></div></div>';
 }
 
 // ---------------------------------------------------------------------------
@@ -2511,21 +2525,61 @@ function newsCardHtml(items) {
     (rows.length ? '<div class="nw-head' + (bare ? " nw-bare" : "") + '">' + gridTh("news", bare ? NEWS_COLS.slice(0, 2) : NEWS_COLS) + '</div><div class="scroll nw-list" style="max-height:436px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">No news.</div>') + "</div>";
 }
-const WATCH_COLS = [{ key: "symbol", label: "Symbol" }, { key: "exchange", label: "Exchange", align: "right" }, { key: "last", label: "Last", align: "right" }, { key: "chg", label: "Chg", align: "right" }];
+const WATCH_COLS = [{ key: "symbol", label: "Symbol" }, { key: "exchange", label: "Exch", align: "right" }, { key: "last", label: "Last", align: "right" }, { key: "chg", label: "Chg", align: "right" }];
+let _watchNewTimer = 0;
+// what the add row offers: with nothing typed, the holdings not yet followed; typed, the directory's matches, the followed ones left out
+function watchSuggestions(q) {
+  const m = state.model || {}, watched = watchedKeys();
+  const key = (sym, ex) => bareSymbol(sym) + "@" + String(ex || "").toUpperCase();
+  const fromHoldings = () => {
+    const out = [], seen = new Set();
+    (m.positions || []).forEach((p) => {
+      if (p.kind === "Options" || OPTION_RE.test(p.symbol)) return;
+      const k = key(p.symbol, p.exchange);
+      if (watched.has(k) || seen.has(k)) return;
+      seen.add(k);
+      out.push({ symbol: bareSymbol(p.symbol), exchange: p.exchange || "", name: p.name || "", currency: p.currency || "", last: p.last, percentChange: p.percentChange });
+    });
+    return out;
+  };
+  if (!q) return fromHoldings().slice(0, 4);
+  const out = [];
+  symbolRows(q).forEach((r) => {
+    if (OPTION_RE.test(r.sym) || r.kind) return;   // contracts and instruments are not listings
+    const k = key(r.sym, r.exchange);
+    if (watched.has(k) || out.some((x) => key(x.symbol, x.exchange) === k)) return;
+    const p = r.book ? (m.positions || []).find((x) => x.symbol === r.sym) : null;
+    out.push({ symbol: bareSymbol(r.sym), exchange: r.exchange || "", name: r.name || "", currency: r.currency || (p ? p.currency : ""), last: p ? p.last : null, percentChange: p ? p.percentChange : null });
+  });
+  return out.slice(0, 4);
+}
+function watchAddRowHtml() {
+  const q = state.watchQuery.trim();
+  const rows = watchSuggestions(q);
+  const cells = (w) => '<div><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis">' + esc(w.symbol) + '</div><div style="font-size:11px;color:rgba(var(--ink-rgb),.45);overflow:hidden;text-overflow:ellipsis">' + esc(w.name || "") + "</div></div>" +
+    '<div style="font-size:11px;color:rgba(var(--ink-rgb),.45);text-align:right">' + esc(w.exchange || "") + "</div>" +
+    '<div class="tab" style="text-align:right;font-size:13px">' + (w.last == null ? "—" : px(w.last)) + "</div>" +
+    '<div class="tab" style="text-align:right;font-size:13px;color:' + (w.percentChange == null ? "rgba(var(--ink-rgb),.45)" : w.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(w.percentChange) + "</div>";
+  const sug = (w, i) => '<div class="wl-row wl-sug' + (q && i === 0 ? " hi" : "") + '" role="button" tabindex="-1" data-act="watchPick" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange, name: w.name, currency: w.currency }) + "'>" + cells(w) + "<div></div></div>";
+  return '<div class="wl-field">' + tkIconSvg(ICONS.search) + '<input id="watchQuery" value="' + esc(state.watchQuery) + '" placeholder="Search symbol..." aria-label="Search symbol"><span class="esc">ESC</span></div>' +
+    '<div class="lbl" style="padding:0 0 6px">' + (q ? "Matches" : "From Holdings") + "</div>" +
+    (rows.length ? '<div class="wl-list">' + rows.map(sug).join("") + "</div>" : '<div class="muted" style="font-size:12px;padding:2px 0 6px">' + (q ? "No listing by that name." : "Every holding is followed.") + "</div>") +
+    '<div class="wl-rule"></div>';
+}
 function watchlistCardHtml(rows) {
   const s = state.sort.watchlist;
   rows = sortRows(rows.map((w, i) => Object.assign({ added: i }, w)), s.key, s.dir, (w, k) => k === "symbol" ? bareSymbol(w.symbol).toLowerCase() : k === "exchange" ? String(w.exchange || "").toLowerCase() : k === "last" ? w.last : k === "chg" ? w.percentChange : w.added);
-  const row = (w) => '<div class="wl-row' + (w.positionId ? " go" : "") + '"' + (w.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: w.positionId }) + "'" : "") + ">" +
+  const row = (w) => '<div class="wl-row' + (w.positionId ? " go" : "") + (state.watchNew && state.watchNew === bareSymbol(w.symbol) + "@" + String(w.exchange || "").toUpperCase() ? " wl-new" : "") + '"' + (w.positionId ? ' data-act="heatOpen" data-arg=\'' + attr({ id: w.positionId }) + "'" : "") + ">" +
     '<div><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis">' + esc(bareSymbol(w.symbol)) + '</div><div style="font-size:11px;color:var(--ink55);overflow:hidden;text-overflow:ellipsis">' + esc(w.name || "") + "</div></div>" +
     '<div style="font-size:12px;color:var(--ink55);text-align:right">' + esc(w.exchange || "") + "</div>" +
     '<div class="tab" style="text-align:right;font-size:13px">' + (w.last == null ? "—" : px(w.last)) + "</div>" +
     '<div class="tab" style="text-align:right;font-size:13px;color:' + (w.percentChange == null ? "var(--ink55)" : w.percentChange >= 0 ? "var(--pos)" : "var(--neg)") + '">' + signedPct(w.percentChange) + "</div>" +
-    '<button class="tk-rowbtn sell" aria-label="Remove ' + esc(symText(w.symbol)) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.x) + "</button></div>";
+    '<button class="wl-trash" aria-label="Remove ' + esc(symText(w.symbol)) + ' from the watchlist" data-act="watchRemove" data-arg=\'' + attr({ symbol: w.symbol, exchange: w.exchange }) + "'>" + tkIconSvg(ICONS.trash) + "</button></div>";
   return '<div class="card elev-sm" style="padding:14px 16px 12px">' +
-    '<div style="display:flex;align-items:center;min-height:28px;margin-bottom:8px;position:relative"><h5>Watchlist</h5><button class="wl-add" style="margin-left:auto" aria-label="Add to the watchlist" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button>" +
-    (state.picker && state.watchMode ? filterPopHtml().replace('class="pop elev-md"', 'class="pop elev-md pop-wl"') : "") + "</div>" +
+    '<div style="display:flex;align-items:center;min-height:28px;margin-bottom:8px"><h5>Watchlist</h5><button class="wl-add' + (state.watchAdding ? " on" : "") + '" style="margin-left:auto" aria-label="' + (state.watchAdding ? "Close" : "Add to the watchlist") + '" data-act="watchAdd">' + tkIconSvg(ICONS.plus) + "</button></div>" +
+    (state.watchAdding ? watchAddRowHtml() : "") +
     (rows.length ? '<div class="wl-head">' + gridTh("watchlist", WATCH_COLS) + "<div></div></div>" +
-      '<div class="scroll wl-list" style="max-height:398px">' + rows.map(row).join("") + "</div>"
+      '<div class="scroll wl-list" style="max-height:396px">' + rows.map(row).join("") + "</div>"
       : '<div class="muted" style="font-size:12px">Nothing watched.</div>') + "</div>";
 }
 function marketsHtml(m) {
@@ -2625,19 +2679,6 @@ function tileDragBind() {
   document.addEventListener("pointercancel", end);
 }
 function watchedKeys() { return new Set((((state.model || {}).markets || {}).watchlist || []).map((w) => bareSymbol(w.symbol) + "@" + String(w.exchange || "").toUpperCase())); }
-// ⌘K in watch mode: every symbol row carries one icon, add to the watchlist, lit when it is on it
-function watchRowHtml(r, cls) {
-  const on = watchedKeys().has(bareSymbol(r.sym) + "@" + String(r.exchange || "").toUpperCase());
-  const icon = '<span class="tk-rowbtns"><span class="tk-rowbtn watch' + (on ? " on" : "") + '" aria-hidden="true">' + tkIconSvg(on ? ICONS.bookmarkFill : ICONS.bookmark) + "</span></span>";
-  return symbolRowHtml(bareSymbol(r.sym), r.name, r.exchange, icon, cls, "watchToggle", { symbol: bareSymbol(r.sym), exchange: r.exchange || "", name: r.name || "", currency: r.currency || "" });
-}
-function watchBodyHtml(q) {
-  const syms = q ? symbolRows(q).filter((r) => !OPTION_RE.test(r.sym)) : (((state.model || {}).markets || {}).watchlist || []).map((w) => ({ sym: w.symbol, name: w.name, exchange: w.exchange, currency: w.currency }));
-  const hi = Math.min(state.valueHi || 0, Math.max(0, syms.length - 1));
-  if (!syms.length) return q ? '<div class="muted" style="padding:2px 7px 8px;font-size:12px">No match.</div>' : '<div class="muted" style="padding:2px 7px 8px;font-size:12px">Nothing watched.</div>';
-  return (q ? "" : '<div class="lbl" style="padding:2px 7px 7px">Watchlist</div>') +
-    '<div id="popMatches" class="scroll" style="max-height:300px;display:flex;flex-direction:column;gap:1px">' + syms.map((r, i) => watchRowHtml(r, i === hi ? " hi" : "")).join("") + "</div>";
-}
 function portfolioHtml(m) {
   const p = state.sel ? positionById(state.sel) : null;
   if (p) return '<div style="padding:20px;min-height:380px;display:flex;flex-direction:column;gap:14px">' + tradeDetailHtml(holdingAsTrade(p), m) + "</div>";
@@ -2821,7 +2862,6 @@ const _keptScroll = {};
 function render() {
   const root = document.getElementById("app");
   const scrollY = window.scrollY;
-  if (state.picker !== "fields") state.watchMode = false;
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { _keptScroll[el.dataset.keepScroll] = { top: el.scrollTop, left: el.scrollLeft }; });
   // Every other scrolling box (tables, lists, the filter popover) keeps its place
   // across a redraw too, matched by position in the page.
@@ -2838,7 +2878,7 @@ function render() {
   document.documentElement.classList.toggle("panel-open", !!(state.ticket || state.ordersOpen));   // the wheel over a panel must not move the page behind it
   window.scrollTo(0, scrollY);
   // the filter popover's search box keeps focus across a redraw (a toggled value reloads the model)
-  if (focusId === "valueQuery" || focusId === "searchInput" || focusId === "newsQuery" || focusId === "tileQuery") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
+  if (focusId === "valueQuery" || focusId === "searchInput" || focusId === "newsQuery" || focusId === "tileQuery" || focusId === "watchQuery") { const vq = document.getElementById(focusId); if (vq) { vq.focus(); vq.setSelectionRange(vq.value.length, vq.value.length); } }
   else if (rowHadFocus) { const row = document.querySelector("#popMatches .pop-row.hi, #popValues .pop-row.hi"); if (row) row.focus(); }
   root.querySelectorAll(".scroll, .scroll-xy").forEach((el, i) => { const b = boxes[i]; if (b && !el.dataset.keepScroll) { el.scrollTop = b.top; el.scrollLeft = b.left; } });
   root.querySelectorAll("[data-keep-scroll]").forEach((el) => { const k = _keptScroll[el.dataset.keepScroll]; if (k) { el.scrollTop = k.top; el.scrollLeft = k.left; } });
@@ -3030,12 +3070,16 @@ function act(name, arg, ev) {
     case "openFields": state.picker = state.picker === "fields" ? null : "fields"; state.fieldQuery = null; state.valueHi = 0; state.menuOpen = false; render(); if (state.picker) { const si = document.getElementById("searchInput"); if (si) si.focus(); } break;
     case "pickField": state.picker = arg.key; state.valueQuery = ""; state.valueHi = 0; render(); { const vq = document.getElementById("valueQuery"); if (vq) vq.focus(); } break;
     case "closeFilter": state.picker = null; render(); break;
-    case "watchAdd": state.picker = "fields"; state.watchMode = true; state.fieldQuery = ""; state.valueHi = 0; state.menuOpen = false; render(); { const si = document.getElementById("searchInput"); if (si) si.focus(); } break;
-    case "watchToggle": {
-      const on = watchedKeys().has(bareSymbol(arg.symbol) + "@" + String(arg.exchange || "").toUpperCase());
-      api("POST", on ? "/api/watchlist/remove" : "/api/watchlist/add", arg).then(() => loadModel()).then(() => {
-        const body = document.getElementById("popFieldsBody"); if (body && state.watchMode) body.innerHTML = popFieldsBodyHtml();
+    case "watchAdd": state.watchAdding = !state.watchAdding; state.watchQuery = ""; render(); { const q = document.getElementById("watchQuery"); if (q) q.focus(); } break;
+    case "watchPick": {
+      // the listing lands at the top with a moment's tint; the row stays open for the next
+      const key = bareSymbol(arg.symbol) + "@" + String(arg.exchange || "").toUpperCase();
+      state.watchQuery = ""; state.watchNew = key; render();
+      api("POST", "/api/watchlist/add", { symbol: arg.symbol, exchange: arg.exchange, name: arg.name, currency: arg.currency }).then(() => loadModel()).then(() => {
+        // the tint runs from the moment the row is in the list
+        clearTimeout(_watchNewTimer); _watchNewTimer = setTimeout(() => { state.watchNew = null; render(); }, 1400);
       });
+      { const q = document.getElementById("watchQuery"); if (q) q.focus(); }
       break;
     }
     case "watchRemove": api("POST", "/api/watchlist/remove", arg).then(() => loadModel()); break;
@@ -3233,7 +3277,7 @@ function bind() {
       if (j >= 0 && j < pages.length) { e.preventDefault(); go(pages[j]); }
       return;
     }
-    if (e.key === "Escape") { if (state.tileAdd) { state.tileAdd = false; render(); return; } if (state.confirmOpen) { state.confirmOpen = ""; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); }
+    if (e.key === "Escape") { if (state.watchAdding) { state.watchAdding = false; state.watchQuery = ""; render(); return; } if (state.tileAdd) { state.tileAdd = false; render(); return; } if (state.confirmOpen) { state.confirmOpen = ""; render(); return; } if (state.modal) { state.modal = null; render(); return; } if (state.picker || state.menuOpen) { state.picker = null; state.menuOpen = false; render(); } else if (state.sel && state.page === "trades" && document.activeElement && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.id !== "tagInput") { history.back(); }
       // nothing open, nothing being typed: Escape clears the filters
       else if (filtersActive() && !(document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA"))) { act("clearAll"); }
       return; }
@@ -3249,6 +3293,7 @@ function bind() {
       return;
     }
     if (e.target && e.target.id === "rangeInput" && e.key === "Enter") { e.target.blur(); }
+    if (e.target && e.target.id === "watchQuery" && e.key === "Enter") { e.preventDefault(); const hit = document.querySelector(".wl-sug.hi") || document.querySelector(".wl-sug"); if (hit) { let arg = {}; try { arg = JSON.parse(hit.dataset.arg); } catch (err) {} act("watchPick", arg); } return; }
     if (e.target && e.target.classList && e.target.classList.contains("pop-row") && e.target.dataset.act === "toggleList") { popoverRowKeys(e); return; }
     // the popover's footer: Tab runs box → Done → Clear all → box, and Shift+Tab runs it backwards
     if (e.key === "Tab" && e.target && e.target.closest && e.target.closest('[data-pop="filter"]') && (e.target.dataset.act === "closeFilter" || e.target.dataset.act === "clearAll")) {
@@ -3259,7 +3304,7 @@ function bind() {
       return;
     }
     if (e.target && e.target.id === "searchInput") {
-      const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList], #popMatches [data-act=tkOpenExt], #popMatches [data-act=watchToggle]")];
+      const rows = [...document.querySelectorAll("#popMatches [data-act=toggleList], #popMatches [data-act=tkOpenExt]")];
       if (popoverBoxKeys(e, rows)) return;
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && rows.length) {
         e.preventDefault();
@@ -3275,7 +3320,7 @@ function bind() {
           // a value: toggled in its field, the box cleared for the next one
           let arg = {}; try { arg = JSON.parse(row.dataset.arg); } catch (err) {}
           clearTimeout(_rangeTimer);
-          act(row.dataset.act === "tkOpenExt" || row.dataset.act === "watchToggle" ? row.dataset.act : "toggleList", arg);
+          act(row.dataset.act === "tkOpenExt" ? row.dataset.act : "toggleList", arg);
         } else {
           // no value matches: the text is the free-text search, applied now
           clearTimeout(_rangeTimer); state.filters.search = e.target.value.trim(); state.fieldQuery = null; state.sel = null; loadModel();
@@ -3304,6 +3349,7 @@ function bind() {
     if (/^tk-/.test(t.id || "")) { tkInputEvent(t); return; }
     if (t.id === "newsQuery") { state.newsQuery = t.value; render(); return; }
     if (t.id === "tileQuery") { state.tileQuery = t.value; render(); return; }
+    if (t.id === "watchQuery") { state.watchQuery = t.value; extSchedule(t.value); render(); return; }
     if (t.id === "tagInput") { state.tagDraft = t.value; state.tagHi = 0; document.getElementById("tagMenu").innerHTML = tagMenuHtml(); return; }
     if (t.id === "thesis" || t.id === "posThesis") { clearTimeout(_thesisTimer); const id = t.dataset.id, v = t.value; _thesisTimer = setTimeout(() => { const o = tradeById(id) || positionById(id); if (o && o.thesis !== v) saveJournal(id, { thesis: v }, true); }, 600); return; }
     if (t.id === "rangeInput") { clearTimeout(_rangeTimer); const key = t.dataset.key, v = t.value.trim(); _rangeTimer = setTimeout(() => { state.filters.ranges[key].v = v === "" ? null : Number(v.replace(/[$,]/g, "")); if (v !== "" && isNaN(state.filters.ranges[key].v)) state.filters.ranges[key].v = null; loadModel(); }, 500); return; }
