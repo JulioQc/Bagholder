@@ -713,7 +713,7 @@ LOGIN_VIEW_SIZE = (960, 1000)
 
 # Bumped whenever the page and the server change together. The page compares it
 # with what /api/status reports and tells the user to restart when they differ.
-PROTOCOL = "2026-09-11.8"
+PROTOCOL = "2026-09-11.9"
 STARTED_AT = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 Q_FETCH_ACCOUNT_MARGIN_BUYING_POWER = """
@@ -6171,6 +6171,16 @@ class Handler(BaseHTTPRequestHandler):
                 return
             qs = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             self._send(200, symbol_search((qs.get("q") or [""])[0]))
+            return
+        if path == "/api/symbols/quote":
+            # a glance at a listing the watchlist's add row offers: its price and day change, not stored
+            if not self._gate():
+                self._send(403, {"ok": False})
+                return
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            rec = {"symbol": _query_param(query, "symbol") or "", "exchange": _query_param(query, "exchange") or "", "currency": _query_param(query, "currency") or "", "kind": "Shares"}
+            q = market.peek_quote(rec, _ssl_context()) if rec["symbol"] else None
+            self._send(200, dict({"ok": True, "price": None, "priceChange": None, "percentChange": None}, **(q or {})))
             return
         if path == "/api/orders":
             if not self._gate():

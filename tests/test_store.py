@@ -3378,6 +3378,27 @@ class StopExpiryTest(_EngineBase):
         self.assertEqual(store.get_bracket(b["id"])["status"], "done")
 
 
+class PeekQuoteTest(unittest.TestCase):
+    """The watchlist's add row glances at a listing's price through the watched listings' sources, without storing it."""
+
+    def test_a_glance_reads_the_listings_source_once_a_minute_and_stores_nothing(self):
+        market._peek.clear()
+        calls = []
+        def fake(source, key, ssl_context=None, now=None, chains=None):
+            calls.append((source, key))
+            return {"price": 47.9, "priceChange": -1.29, "percentChange": -2.62, "currency": "USD"}
+        with mock.patch.object(market, "fetch_for", side_effect=fake):
+            q = market.peek_quote({"symbol": "RKLB", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"})
+            again = market.peek_quote({"symbol": "RKLB", "exchange": "NASDAQ", "currency": "USD", "kind": "Shares"})
+        self.assertEqual(q, {"price": 47.9, "priceChange": -1.29, "percentChange": -2.62})
+        self.assertEqual(again, q)
+        self.assertEqual(calls, [("tmx", "RKLB:US")], "one read, remembered for the second glance")
+        self.assertEqual(store.quote_fetched_at(), {}, "nothing stored")
+        with mock.patch.object(market, "fetch_for", side_effect=RuntimeError("down")):
+            self.assertIsNone(market.peek_quote({"symbol": "ZZZ", "exchange": "NYSE", "currency": "USD", "kind": "Shares"}), "a source that fails gives nothing, never raises")
+        market._peek.clear()
+
+
 class TilesTest(unittest.TestCase):
     """The Markets tab's tile row: saved whole, in order, as instruments the directory knows."""
 

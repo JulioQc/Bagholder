@@ -410,7 +410,7 @@ const state = {
   theme: "nocturne",
 };
 const THEMES = [["nocturne", "Nocturne", "#161826"], ["midnight", "Midnight", "#0b0d12"], ["light", "Light", "#eef0f5"]];
-const PROTOCOL = "2026-09-11.8"; // must match bagholder.PROTOCOL
+const PROTOCOL = "2026-09-11.9"; // must match bagholder.PROTOCOL
 const TIMEFRAMES = [["1h", "1H"], ["4h", "4H"], ["1d", "1D"], ["1w", "1W"], ["1M", "1M"]];
 // The default timeframe follows the trade's length so the whole trade fits the
 // view; a timeframe the user picks is kept for that trade while the page is open.
@@ -2553,9 +2553,24 @@ function watchSuggestions(q) {
   });
   return out.slice(0, 4);
 }
+// a match's price and day change, read for the glance and remembered while the page lives
+const _sugQuotes = {}, _sugPending = {};
+function sugKey(w) { return bareSymbol(w.symbol) + "@" + String(w.exchange || "").toUpperCase(); }
+function sugQuoteSchedule(rows) {
+  rows.forEach((w) => {
+    const k = sugKey(w);
+    if (w.last != null || _sugQuotes[k] || _sugPending[k]) return;
+    _sugPending[k] = true;
+    api("GET", "/api/symbols/quote?symbol=" + encodeURIComponent(w.symbol) + "&exchange=" + encodeURIComponent(w.exchange || "") + "&currency=" + encodeURIComponent(w.currency || "")).then((r) => {
+      delete _sugPending[k];
+      if (r && r.ok && r.price != null) { _sugQuotes[k] = { last: r.price, percentChange: r.percentChange }; if (state.watchAdding) render(); }
+    });
+  });
+}
 function watchAddRowHtml() {
   const q = state.watchQuery.trim();
-  const rows = watchSuggestions(q);
+  const rows = watchSuggestions(q).map((w) => { const c = _sugQuotes[sugKey(w)]; return w.last == null && c ? Object.assign({}, w, c) : w; });
+  if (q) sugQuoteSchedule(rows);
   const cells = (w) => '<div><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis">' + esc(w.symbol) + '</div><div style="font-size:11px;color:rgba(var(--ink-rgb),.45);overflow:hidden;text-overflow:ellipsis">' + esc(w.name || "") + "</div></div>" +
     '<div style="font-size:11px;color:rgba(var(--ink-rgb),.45);text-align:right">' + esc(w.exchange || "") + "</div>" +
     '<div class="tab" style="text-align:right;font-size:13px">' + (w.last == null ? "—" : px(w.last)) + "</div>" +
