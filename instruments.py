@@ -39,6 +39,16 @@ INSTRUMENTS = [
 ]
 
 
+# what a market tile calls the instrument: the symbol unless people know it by a name
+LABELS = {"CL": "WTI", "BZ": "BRENT", "NG": "NATGAS", "GC": "GOLD", "SI": "SILVER", "HG": "COPPER", "PL": "PLATINUM", "ZC": "CORN", "ZW": "WHEAT",
+          "TNX": "10Y", "USDCAD": "USD/CAD", "EURUSD": "EUR/USD", "GBPUSD": "GBP/USD", "USDJPY": "USD/JPY", "BTCUSD": "BITCOIN"}
+
+
+def label(symbol):
+    sym = str(symbol or "").strip().upper()
+    return LABELS.get(sym, sym)
+
+
 def _rows():
     return [{"symbol": s, "name": n, "kind": k, "exchange": v, "currency": c, "yahoo": y, "aliases": a} for s, n, k, v, c, y, a in INSTRUMENTS]
 

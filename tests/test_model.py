@@ -1546,6 +1546,7 @@ class SourceHealthTest(unittest.TestCase):
             os.environ["BAGHOLDER_HOME"] = tmp
             store.set_home(tmp)
             store.ensure()
+            store.save_tiles([])   # the tile row asks Yahoo too; this test counts the chart's own requests
             try:
                 rec = {"symbol": "CH", "exchange": "TSX-V", "currency": "CAD", "kind": "Shares"}
                 # TMX unreachable, Yahoo throttled: the chart's reason names both, the menu shows both
@@ -2362,6 +2363,7 @@ class ServerTest(unittest.TestCase):
         bagholder.set_home(self.tmp.name)
         store.ensure()
         model.invalidate()
+        store.save_tiles([])   # an empty tile row: a model request must not start a quote read over the network
         store.upsert_fx_rates({"2099-01-01": 1.0})
         store.upsert_benchmark_prices({"2099-01-01": 1.0})
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), bagholder.Handler)
